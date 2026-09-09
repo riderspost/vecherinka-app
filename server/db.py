@@ -1,0 +1,36 @@
+import os
+import sqlite3
+
+from flask import g
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATABASE_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "vecherinka.db"))
+SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
+
+
+def get_db():
+    if "db" not in g:
+        g.db = sqlite3.connect(DATABASE_PATH, timeout=10)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db.execute("PRAGMA busy_timeout = 10000")
+    return g.db
+
+
+def close_db(_exception=None):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    db = sqlite3.connect(DATABASE_PATH)
+    db.row_factory = sqlite3.Row
+    with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+        db.executescript(f.read())
+    db.commit()
+    db.close()
+
+
+def register_app(app):
+    app.teardown_appcontext(close_db)
