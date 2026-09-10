@@ -162,6 +162,62 @@ def admin_activate_prompt(prompt_id):
     return jsonify({"ok": True})
 
 
+def _parse_ids(raw):
+    if not isinstance(raw, list):
+        return []
+    ids = []
+    for v in raw:
+        try:
+            ids.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+@admin_bp.route("/api/prompts/bulk-activate", methods=["POST"])
+@admin_required
+def admin_bulk_activate():
+    data = request.get_json(force=True, silent=True) or {}
+    ids = _parse_ids(data.get("ids"))
+    if not ids:
+        return jsonify({"error": "Не выбрано ни одного вопроса"}), 400
+
+    db = get_db()
+    placeholders = ",".join("?" * len(ids))
+    cur = db.execute(
+        f"UPDATE prompts SET status = 'active' WHERE id IN ({placeholders})", ids
+    )
+    db.commit()
+    return jsonify({"activated": cur.rowcount})
+
+
+@admin_bp.route("/api/prompts/bulk-delete", methods=["POST"])
+@admin_required
+def admin_bulk_delete():
+    data = request.get_json(force=True, silent=True) or {}
+    ids = _parse_ids(data.get("ids"))
+    if not ids:
+        return jsonify({"error": "Не выбрано ни одного вопроса"}), 400
+
+    db = get_db()
+    placeholders = ",".join("?" * len(ids))
+    used_ids = {
+        row["prompt_id"]
+        for row in db.execute(
+            f"SELECT DISTINCT prompt_id FROM round_prompts WHERE prompt_id IN ({placeholders})", ids
+        ).fetchall()
+    }
+    deletable = [i for i in ids if i not in used_ids]
+    deleted = 0
+    if deletable:
+        placeholders2 = ",".join("?" * len(deletable))
+        cur = db.execute(f"DELETE FROM prompts WHERE id IN ({placeholders2})", deletable)
+        db.commit()
+        deleted = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+    return jsonify({"deleted": deleted, "blocked": len(used_ids)})
+
+
 @admin_bp.route("/")
 @admin_bp.route("/<path:path>")
 def admin_static(path="index.html"):

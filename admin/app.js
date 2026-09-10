@@ -200,6 +200,7 @@ async function refreshPrompts() {
       .map(
         (p) => `
         <tr data-id="${p.id}">
+          <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
           <td>${escapeHtml(p.text)}</td>
           <td>
             <div class="row-actions">
@@ -212,13 +213,78 @@ async function refreshPrompts() {
       )
       .join("");
     pendingHost.innerHTML = `
+      <div class="row-actions" style="margin-bottom:10px">
+        <button class="btn secondary" id="bulk-activate-btn" disabled>Активировать выбранные (0)</button>
+        <button class="btn danger" id="bulk-delete-btn" disabled>Удалить выбранные (0)</button>
+      </div>
       <div class="table-scroll">
         <table>
-          <thead><tr><th>Фраза</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="select-all-pending" /></th>
+              <th>Фраза</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
     `;
+
+    const selectAll = document.getElementById("select-all-pending");
+    const activateBulkBtn = document.getElementById("bulk-activate-btn");
+    const deleteBulkBtn = document.getElementById("bulk-delete-btn");
+    const checkboxes = () => Array.from(pendingHost.querySelectorAll(".pending-check"));
+
+    function updateToolbar() {
+      const checked = checkboxes().filter((c) => c.checked);
+      const count = checked.length;
+      activateBulkBtn.disabled = count === 0;
+      deleteBulkBtn.disabled = count === 0;
+      activateBulkBtn.textContent = `Активировать выбранные (${count})`;
+      deleteBulkBtn.textContent = `Удалить выбранные (${count})`;
+      selectAll.checked = count > 0 && count === checkboxes().length;
+      selectAll.indeterminate = count > 0 && count < checkboxes().length;
+    }
+
+    selectAll.addEventListener("change", () => {
+      checkboxes().forEach((c) => (c.checked = selectAll.checked));
+      updateToolbar();
+    });
+    checkboxes().forEach((c) => c.addEventListener("change", updateToolbar));
+
+    activateBulkBtn.addEventListener("click", async () => {
+      const ids = checkboxes()
+        .filter((c) => c.checked)
+        .map((c) => parseInt(c.dataset.id, 10));
+      activateBulkBtn.disabled = true;
+      try {
+        await api("/prompts/bulk-activate", { method: "POST", body: JSON.stringify({ ids }) });
+        await refreshPrompts();
+      } catch (err) {
+        alert(err.message);
+        activateBulkBtn.disabled = false;
+      }
+    });
+
+    deleteBulkBtn.addEventListener("click", async () => {
+      const ids = checkboxes()
+        .filter((c) => c.checked)
+        .map((c) => parseInt(c.dataset.id, 10));
+      if (!confirm(`Удалить выбранные фразы (${ids.length})?`)) return;
+      deleteBulkBtn.disabled = true;
+      try {
+        const res = await api("/prompts/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) });
+        if (res.blocked > 0) {
+          alert(`Удалено ${res.deleted}, но ${res.blocked} уже использовались в игре и не были удалены.`);
+        }
+        await refreshPrompts();
+      } catch (err) {
+        alert(err.message);
+        deleteBulkBtn.disabled = false;
+      }
+    });
+
     pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         btn.disabled = true;
