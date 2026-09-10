@@ -4,7 +4,7 @@ import os
 import requests
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "deepseek/deepseek-chat"
+DEFAULT_MODEL = "openrouter/free"
 REQUEST_TIMEOUT = 60
 MAX_EXISTING_SAMPLE = 80
 
