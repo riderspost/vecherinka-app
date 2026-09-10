@@ -79,6 +79,8 @@ def generate_prompts(count, theme, existing_texts):
     except (KeyError, IndexError, ValueError):
         raise AIGenerationError("Не удалось разобрать ответ OpenRouter")
 
+    actual_model = data.get("model") or model
+
     try:
         parsed = json.loads(content)
         prompts = parsed["prompts"]
@@ -96,4 +98,4 @@ def generate_prompts(count, theme, existing_texts):
         seen_lower.add(p.lower())
         cleaned.append(p)
 
-    return cleaned
+    return cleaned, actual_model

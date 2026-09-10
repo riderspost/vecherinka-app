@@ -55,7 +55,7 @@ def _pick_prompts(db, room_id, count):
             "SELECT prompt_id FROM round_prompts WHERE room_id = ?", (room_id,)
         ).fetchall()
     }
-    all_prompts = db.execute("SELECT id FROM prompts").fetchall()
+    all_prompts = db.execute("SELECT id FROM prompts WHERE status = 'active'").fetchall()
     all_ids = [row["id"] for row in all_prompts]
     available = [pid for pid in all_ids if pid not in used_ids]
     random.shuffle(available)

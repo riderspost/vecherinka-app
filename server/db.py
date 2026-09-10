@@ -23,11 +23,18 @@ def close_db(_exception=None):
         db.close()
 
 
+def _ensure_column(db, table, column, ddl):
+    existing = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in existing:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
 def init_db():
     db = sqlite3.connect(DATABASE_PATH)
     db.row_factory = sqlite3.Row
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         db.executescript(f.read())
+    _ensure_column(db, "prompts", "status", "status TEXT NOT NULL DEFAULT 'active'")
     db.commit()
     db.close()
 

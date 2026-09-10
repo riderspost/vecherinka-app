@@ -67,12 +67,14 @@ def admin_session():
 def admin_list_prompts():
     db = get_db()
     rows = db.execute(
-        """SELECT p.id, p.text,
+        """SELECT p.id, p.text, p.status,
                   (SELECT COUNT(*) FROM round_prompts rp WHERE rp.prompt_id = p.id) AS uses
            FROM prompts p
            ORDER BY p.id DESC"""
     ).fetchall()
-    return jsonify([{"id": r["id"], "text": r["text"], "uses": r["uses"]} for r in rows])
+    return jsonify(
+        [{"id": r["id"], "text": r["text"], "status": r["status"], "uses": r["uses"]} for r in rows]
+    )
 
 
 @admin_bp.route("/api/prompts", methods=["POST"])
@@ -89,9 +91,9 @@ def admin_add_prompt():
     if db.execute("SELECT 1 FROM prompts WHERE text = ?", (text,)).fetchone():
         return jsonify({"error": "Такой вопрос уже есть в списке"}), 400
 
-    cur = db.execute("INSERT INTO prompts (text) VALUES (?)", (text,))
+    cur = db.execute("INSERT INTO prompts (text, status) VALUES (?, 'active')", (text,))
     db.commit()
-    return jsonify({"id": cur.lastrowid, "text": text, "uses": 0})
+    return jsonify({"id": cur.lastrowid, "text": text, "status": "active", "uses": 0})
 
 
 @admin_bp.route("/api/prompts/<int:prompt_id>", methods=["DELETE"])
@@ -126,19 +128,38 @@ def admin_generate_prompts():
     existing_texts = [r["text"] for r in db.execute("SELECT text FROM prompts").fetchall()]
 
     try:
-        generated = ai_prompts.generate_prompts(count, theme, existing_texts)
+        generated, model_used = ai_prompts.generate_prompts(count, theme, existing_texts)
     except ai_prompts.AIGenerationError as e:
         return jsonify({"error": str(e)}), 502
 
     added = 0
     if generated:
         cur = db.executemany(
-            "INSERT OR IGNORE INTO prompts (text) VALUES (?)", [(t,) for t in generated]
+            "INSERT OR IGNORE INTO prompts (text, status) VALUES (?, 'pending')",
+            [(t,) for t in generated],
         )
         db.commit()
         added = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
 
-    return jsonify({"requested": count, "generated": len(generated), "added": added, "prompts": generated})
+    return jsonify({
+        "requested": count,
+        "generated": len(generated),
+        "added": added,
+        "prompts": generated,
+        "model": model_used,
+    })
+
+
+@admin_bp.route("/api/prompts/<int:prompt_id>/activate", methods=["POST"])
+@admin_required
+def admin_activate_prompt(prompt_id):
+    db = get_db()
+    row = db.execute("SELECT status FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Вопрос не найден"}), 404
+    db.execute("UPDATE prompts SET status = 'active' WHERE id = ?", (prompt_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @admin_bp.route("/")

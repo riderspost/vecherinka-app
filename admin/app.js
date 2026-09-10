@@ -101,8 +101,14 @@ async function renderDashboard() {
       <div class="success-box" id="gen-success"></div>
     </div>
 
+    <div class="card" id="pending-card" style="display:none">
+      <h2 style="margin-top:0">На проверке (сгенерировано AI)</h2>
+      <p class="hint">Эти фразы ещё не используются в игре, пока их не активируют.</p>
+      <div id="pending-table"></div>
+    </div>
+
     <div class="card">
-      <h2 style="margin-top:0">Список вопросов</h2>
+      <h2 style="margin-top:0">Активные вопросы</h2>
       <div class="prompt-count" id="prompt-count"></div>
       <div id="prompts-table"></div>
     </div>
@@ -147,8 +153,10 @@ async function renderDashboard() {
       });
       const skipped = res.generated - res.added;
       successEl.textContent =
-        `Добавлено ${res.added} из ${res.generated} сгенерированных` +
-        (skipped > 0 ? ` (${skipped} оказались дубликатами и пропущены)` : "");
+        `Добавлено на проверку ${res.added} из ${res.generated} сгенерированных` +
+        (skipped > 0 ? ` (${skipped} оказались дубликатами и пропущены)` : "") +
+        (res.model ? ` — модель: ${res.model}` : "") +
+        ". Проверьте текст и активируйте нужные ниже.";
       await refreshPrompts();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -161,17 +169,77 @@ async function renderDashboard() {
   await refreshPrompts();
 }
 
-async function refreshPrompts() {
-  const prompts = await api("/prompts");
-  document.getElementById("prompt-count").textContent = `Всего: ${prompts.length}`;
+function wireDeleteButtons(host) {
+  host.querySelectorAll("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Удалить эту фразу?")) return;
+      btn.disabled = true;
+      try {
+        await api(`/prompts/${btn.dataset.delete}`, { method: "DELETE" });
+        await refreshPrompts();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
 
+async function refreshPrompts() {
+  const all = await api("/prompts");
+  const pending = all.filter((p) => p.status === "pending");
+  const active = all.filter((p) => p.status !== "pending");
+
+  const pendingCard = document.getElementById("pending-card");
+  const pendingHost = document.getElementById("pending-table");
+  if (pending.length === 0) {
+    pendingCard.style.display = "none";
+  } else {
+    pendingCard.style.display = "";
+    const rows = pending
+      .map(
+        (p) => `
+        <tr data-id="${p.id}">
+          <td>${escapeHtml(p.text)}</td>
+          <td>
+            <button class="btn" data-activate="${p.id}">Активировать</button>
+            <button class="btn danger" data-delete="${p.id}">Удалить</button>
+          </td>
+        </tr>
+      `
+      )
+      .join("");
+    pendingHost.innerHTML = `
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Фраза</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await api(`/prompts/${btn.dataset.activate}/activate`, { method: "POST" });
+          await refreshPrompts();
+        } catch (err) {
+          alert(err.message);
+          btn.disabled = false;
+        }
+      });
+    });
+    wireDeleteButtons(pendingHost);
+  }
+
+  document.getElementById("prompt-count").textContent = `Всего: ${active.length}`;
   const tableHost = document.getElementById("prompts-table");
-  if (prompts.length === 0) {
-    tableHost.innerHTML = `<p class="hint">Пока нет ни одной фразы.</p>`;
+  if (active.length === 0) {
+    tableHost.innerHTML = `<p class="hint">Пока нет ни одной активной фразы.</p>`;
     return;
   }
 
-  const rows = prompts
+  const rows = active
     .map(
       (p) => `
       <tr data-id="${p.id}">
@@ -192,19 +260,7 @@ async function refreshPrompts() {
     </div>
   `;
 
-  tableHost.querySelectorAll("[data-delete]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Удалить эту фразу?")) return;
-      btn.disabled = true;
-      try {
-        await api(`/prompts/${btn.dataset.delete}`, { method: "DELETE" });
-        await refreshPrompts();
-      } catch (err) {
-        alert(err.message);
-        btn.disabled = false;
-      }
-    });
-  });
+  wireDeleteButtons(tableHost);
 }
 
 main();
