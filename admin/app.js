@@ -202,8 +202,10 @@ async function refreshPrompts() {
         <tr data-id="${p.id}">
           <td>${escapeHtml(p.text)}</td>
           <td>
-            <button class="btn" data-activate="${p.id}">Активировать</button>
-            <button class="btn danger" data-delete="${p.id}">Удалить</button>
+            <div class="row-actions">
+              <button class="btn" data-activate="${p.id}">Активировать</button>
+              <button class="btn danger" data-delete="${p.id}">Удалить</button>
+            </div>
           </td>
         </tr>
       `

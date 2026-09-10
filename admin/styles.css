@@ -101,6 +101,13 @@ textarea { resize: vertical; min-height: 60px; }
 
 .btn.danger:hover { background: #ff8a8a; color: #1b1420; }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .login-wrap {
   max-width: 360px;
   margin: 80px auto;
