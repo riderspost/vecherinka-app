@@ -8,6 +8,7 @@ from werkzeug.utils import secure_filename
 from . import game
 from .db import get_db, close_db, init_db, register_app
 from .seed_data import seed_prompts
+from .admin import admin_bp
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
@@ -20,6 +21,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder=None)
 register_app(app)
+app.register_blueprint(admin_bp)
 
 
 def _load_secret_key():
@@ -37,6 +39,10 @@ def _load_secret_key():
 
 
 app.secret_key = _load_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 with app.app_context():
     init_db()
