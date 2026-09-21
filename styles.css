@@ -132,6 +132,45 @@ body {
   font-size: 15px;
 }
 
+.game-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.game-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  cursor: pointer;
+  text-align: center;
+  color: var(--text);
+}
+
+.game-card:active {
+  border-color: var(--primary);
+}
+
+.game-card-emoji {
+  font-size: 40px;
+}
+
+.game-card-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.game-card-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -155,6 +194,42 @@ body {
 .tab.active {
   background: var(--primary);
   color: white;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 4px 0 -6px;
+}
+
+.radio-group,
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.radio-option,
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.radio-option input,
+.checkbox-option input {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
 }
 
 .text-input,
@@ -215,8 +290,35 @@ body {
   background: var(--primary-dark);
 }
 
+.btn.danger {
+  background: rgba(255, 138, 138, 0.12);
+  color: #ff8a8a;
+  border: 1px solid #ff8a8a;
+}
+
+.btn.danger:active:not(:disabled) {
+  background: #ff8a8a;
+  color: #1a1035;
+}
+
+.row-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.row-actions .btn {
+  flex: 1;
+}
+
 .error-msg {
   color: #ff8a8a;
+  font-size: 14px;
+  text-align: center;
+  min-height: 18px;
+}
+
+.success-msg {
+  color: #7ee787;
   font-size: 14px;
   text-align: center;
   min-height: 18px;
@@ -537,4 +639,85 @@ body {
 
 h2, h3 {
   text-align: center;
+}
+
+/* Фанты */
+
+.bottle-circle {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1 / 1;
+  margin: 10px auto;
+}
+
+.circle-seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  text-align: center;
+  max-width: 70px;
+}
+
+.circle-seat-picked .avatar-emoji,
+.circle-seat-picked .avatar-img {
+  outline: 3px solid var(--accent);
+  border-radius: 50%;
+}
+
+.circle-seat-partner .avatar-emoji,
+.circle-seat-partner .avatar-img {
+  outline: 3px solid var(--primary);
+  border-radius: 50%;
+}
+
+.bottle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  transform-origin: center;
+}
+
+.fanty-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.card-inline {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.fanty-summary-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.summary-photo {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
 }

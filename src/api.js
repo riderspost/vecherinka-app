@@ -42,3 +42,24 @@ export const api = {
     return request("POST", "/api/upload-avatar", form);
   },
 };
+
+export const fantyApi = {
+  createRoom: (payload) => request("POST", "/api/fanty/rooms", payload),
+  addLocalPlayer: (code, token, name, avatarType, avatarValue) =>
+    request("POST", `/api/fanty/rooms/${code}/local-players`, { token, name, avatarType, avatarValue }),
+  start: (code, token) => request("POST", `/api/fanty/rooms/${code}/start`, { token }),
+  getState: (code, token) =>
+    request("GET", `/api/fanty/rooms/${code}/state?token=${encodeURIComponent(token)}`),
+  spin: (code, token) => request("POST", `/api/fanty/rooms/${code}/spin`, { token }),
+  choose: (code, token, choice) => request("POST", `/api/fanty/rooms/${code}/choose`, { token, choice }),
+  spinPartner: (code, token) => request("POST", `/api/fanty/rooms/${code}/spin-partner`, { token }),
+  resolve: (code, token, counted, photoFilenames) =>
+    request("POST", `/api/fanty/rooms/${code}/resolve`, { token, counted, photoFilenames }),
+  uploadPhoto: (code, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request("POST", `/api/fanty/rooms/${code}/upload-photo`, form);
+  },
+  end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
+  submit: (payload) => request("POST", "/api/fanty/submit", payload),
+};

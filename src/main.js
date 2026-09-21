@@ -1,17 +1,31 @@
 import { parseRoute } from "./router.js";
+import { renderGamePicker } from "./pages/gamePicker.js";
 import { renderHome } from "./pages/home.js";
 import { mountRoomPage } from "./pages/room.js";
+import { renderFantyHome } from "./pages/fanty/home.js";
+import { mountFantyRoomPage } from "./pages/fanty/room.js";
+import { renderFantySubmit } from "./pages/fanty/submit.js";
 
 const app = document.getElementById("app");
 
 function renderCurrentRoute() {
   const route = parseRoute(window.location.pathname);
-  if (route.name === "home") {
+  if (route.name === "gamePicker") {
+    renderGamePicker(app);
+  } else if (route.name === "sentenceHome") {
     renderHome(app);
   } else if (route.name === "room") {
     mountRoomPage(app, route.code, { asDisplay: false });
   } else if (route.name === "display") {
     mountRoomPage(app, route.code, { asDisplay: true });
+  } else if (route.name === "fantyHome") {
+    renderFantyHome(app);
+  } else if (route.name === "fantyRoom") {
+    mountFantyRoomPage(app, route.code, { asDisplay: false });
+  } else if (route.name === "fantyDisplay") {
+    mountFantyRoomPage(app, route.code, { asDisplay: true });
+  } else if (route.name === "fantySubmit") {
+    renderFantySubmit(app);
   }
 }
 

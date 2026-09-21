@@ -1,5 +1,26 @@
 const API = "/admin/api";
 
+const LOCATIONS = [
+  { value: "apartment", label: "Квартира" },
+  { value: "bar", label: "Бар" },
+  { value: "street", label: "Улица" },
+  { value: "country_house", label: "Загородный дом" },
+];
+
+const CATEGORIES = [
+  { value: "basic", label: "Базовые" },
+  { value: "flirt", label: "Флирт" },
+  { value: "flirt_plus", label: "Флирт+" },
+  { value: "alcohol", label: "Алкоголь" },
+  { value: "food", label: "Еда" },
+];
+
+function checkboxRow(options, name) {
+  return options
+    .map((o) => `<label><input type="checkbox" name="${name}" value="${o.value}" /> ${o.label}</label>`)
+    .join(" ");
+}
+
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -112,6 +133,63 @@ async function renderDashboard() {
       <div class="prompt-count" id="prompt-count"></div>
       <div id="prompts-table"></div>
     </div>
+
+    <h1 style="margin-top:40px">🍾 Фанты — фанты (действия)</h1>
+
+    <div class="card">
+      <h2 style="margin-top:0">Добавить вручную</h2>
+      <form id="add-dare-form">
+        <label>Текст фанта</label>
+        <textarea name="text" maxlength="300" placeholder="Выпей стакан воды без использования рук." required></textarea>
+        <label>Тип</label>
+        <div class="row">
+          <label><input type="radio" name="kind" value="solo" checked /> Для одного</label>
+          <label><input type="radio" name="kind" value="team" /> Командный ({p1}/{p2})</label>
+        </div>
+        <label>Места</label>
+        <div class="row" id="dare-locations"></div>
+        <label>Категории</label>
+        <div class="row" id="dare-categories"></div>
+        <div class="error-box" id="add-dare-error"></div>
+        <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+      </form>
+    </div>
+
+    <div class="card" id="dares-pending-card" style="display:none">
+      <h2 style="margin-top:0">На проверке (предложено игроками)</h2>
+      <div id="dares-pending-table"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Активные фанты</h2>
+      <div class="prompt-count" id="dares-count"></div>
+      <div id="dares-table"></div>
+    </div>
+
+    <h1 style="margin-top:40px">🍾 Фанты — вопросы (правда)</h1>
+
+    <div class="card">
+      <h2 style="margin-top:0">Добавить вручную</h2>
+      <form id="add-truth-form">
+        <label>Текст вопроса</label>
+        <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
+        <label>Категории</label>
+        <div class="row" id="truth-categories"></div>
+        <div class="error-box" id="add-truth-error"></div>
+        <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+      </form>
+    </div>
+
+    <div class="card" id="truths-pending-card" style="display:none">
+      <h2 style="margin-top:0">На проверке (предложено игроками)</h2>
+      <div id="truths-pending-table"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Активные вопросы</h2>
+      <div class="prompt-count" id="truths-count"></div>
+      <div id="truths-table"></div>
+    </div>
   `;
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
@@ -166,17 +244,238 @@ async function renderDashboard() {
     }
   });
 
+  document.getElementById("dare-locations").innerHTML = checkboxRow(LOCATIONS, "location");
+  document.getElementById("dare-categories").innerHTML = checkboxRow(CATEGORIES, "category");
+  document.getElementById("truth-categories").innerHTML = checkboxRow(CATEGORIES, "category");
+
+  document.getElementById("add-dare-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const text = form.elements.text.value.trim();
+    const kind = form.elements.kind.value;
+    const locations = Array.from(form.querySelectorAll('input[name="location"]:checked')).map((i) => i.value);
+    const categories = Array.from(form.querySelectorAll('input[name="category"]:checked')).map((i) => i.value);
+    const errorEl = document.getElementById("add-dare-error");
+    errorEl.textContent = "";
+    if (!text) return;
+    try {
+      await api("/fanty/dares", { method: "POST", body: JSON.stringify({ text, kind, locations, categories }) });
+      form.reset();
+      await refreshDares();
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+
+  document.getElementById("add-truth-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const text = form.elements.text.value.trim();
+    const categories = Array.from(form.querySelectorAll('input[name="category"]:checked')).map((i) => i.value);
+    const errorEl = document.getElementById("add-truth-error");
+    errorEl.textContent = "";
+    if (!text) return;
+    try {
+      await api("/fanty/truths", { method: "POST", body: JSON.stringify({ text, categories }) });
+      form.reset();
+      await refreshTruths();
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+
   await refreshPrompts();
+  await refreshDares();
+  await refreshTruths();
 }
 
-function wireDeleteButtons(host) {
+function tagsHtml(item) {
+  const parts = [];
+  if (item.kind === "team") parts.push('<span class="uses-pill">командный</span>');
+  (item.locations || []).forEach((l) => parts.push(`<span class="uses-pill">${escapeHtml(l)}</span>`));
+  (item.categories || []).forEach((c) => parts.push(`<span class="uses-pill">${escapeHtml(c)}</span>`));
+  return parts.join(" ");
+}
+
+function wireBulkToolbar(host, apiBase, refreshFn) {
+  const selectAll = host.querySelector(".select-all-pending");
+  const activateBulkBtn = host.querySelector(".bulk-activate-btn");
+  const deleteBulkBtn = host.querySelector(".bulk-delete-btn");
+  const checkboxes = () => Array.from(host.querySelectorAll(".pending-check"));
+
+  function updateToolbar() {
+    const count = checkboxes().filter((c) => c.checked).length;
+    activateBulkBtn.disabled = count === 0;
+    deleteBulkBtn.disabled = count === 0;
+    activateBulkBtn.textContent = `Активировать выбранные (${count})`;
+    deleteBulkBtn.textContent = `Удалить выбранные (${count})`;
+    selectAll.checked = count > 0 && count === checkboxes().length;
+    selectAll.indeterminate = count > 0 && count < checkboxes().length;
+  }
+
+  selectAll.addEventListener("change", () => {
+    checkboxes().forEach((c) => (c.checked = selectAll.checked));
+    updateToolbar();
+  });
+  checkboxes().forEach((c) => c.addEventListener("change", updateToolbar));
+
+  activateBulkBtn.addEventListener("click", async () => {
+    const ids = checkboxes()
+      .filter((c) => c.checked)
+      .map((c) => parseInt(c.dataset.id, 10));
+    activateBulkBtn.disabled = true;
+    try {
+      await api(`${apiBase}/bulk-activate`, { method: "POST", body: JSON.stringify({ ids }) });
+      await refreshFn();
+    } catch (err) {
+      alert(err.message);
+      activateBulkBtn.disabled = false;
+    }
+  });
+
+  deleteBulkBtn.addEventListener("click", async () => {
+    const ids = checkboxes()
+      .filter((c) => c.checked)
+      .map((c) => parseInt(c.dataset.id, 10));
+    if (!confirm(`Удалить выбранные (${ids.length})?`)) return;
+    deleteBulkBtn.disabled = true;
+    try {
+      const res = await api(`${apiBase}/bulk-delete`, { method: "POST", body: JSON.stringify({ ids }) });
+      if (res.blocked > 0) {
+        alert(`Удалено ${res.deleted}, но ${res.blocked} уже использовались в игре и не были удалены.`);
+      }
+      await refreshFn();
+    } catch (err) {
+      alert(err.message);
+      deleteBulkBtn.disabled = false;
+    }
+  });
+}
+
+async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, activeTableId, countId, refreshFn }) {
+  const all = await api(apiBase);
+  const pending = all.filter((p) => p.status === "pending");
+  const active = all.filter((p) => p.status !== "pending");
+
+  const pendingCard = document.getElementById(pendingCardId);
+  const pendingHost = document.getElementById(pendingTableId);
+  if (pending.length === 0) {
+    pendingCard.style.display = "none";
+  } else {
+    pendingCard.style.display = "";
+    const rows = pending
+      .map(
+        (p) => `
+        <tr data-id="${p.id}">
+          <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
+          <td>${escapeHtml(p.text)}<br/>${tagsHtml(p)}</td>
+          <td>
+            <div class="row-actions">
+              <button class="btn" data-activate="${p.id}">Активировать</button>
+              <button class="btn danger" data-delete="${p.id}">Удалить</button>
+            </div>
+          </td>
+        </tr>
+      `
+      )
+      .join("");
+    pendingHost.innerHTML = `
+      <div class="row-actions" style="margin-bottom:10px">
+        <button class="btn secondary bulk-activate-btn" disabled>Активировать выбранные (0)</button>
+        <button class="btn danger bulk-delete-btn" disabled>Удалить выбранные (0)</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" class="select-all-pending" /></th>
+              <th>Текст</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+
+    wireBulkToolbar(pendingHost, apiBase, refreshFn);
+
+    pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          await api(`${apiBase}/${btn.dataset.activate}/activate`, { method: "POST" });
+          await refreshFn();
+        } catch (err) {
+          alert(err.message);
+          btn.disabled = false;
+        }
+      });
+    });
+    wireDeleteButtons(pendingHost, apiBase, refreshFn);
+  }
+
+  document.getElementById(countId).textContent = `Всего: ${active.length}`;
+  const tableHost = document.getElementById(activeTableId);
+  if (active.length === 0) {
+    tableHost.innerHTML = `<p class="hint">Пока нет ни одного активного элемента.</p>`;
+    return;
+  }
+
+  const rows = active
+    .map(
+      (p) => `
+      <tr data-id="${p.id}">
+        <td>${escapeHtml(p.text)}<br/>${tagsHtml(p)}</td>
+        <td>${p.uses > 0 ? `<span class="uses-pill">использован ${p.uses}×</span>` : ""}</td>
+        <td><button class="btn danger" data-delete="${p.id}">Удалить</button></td>
+      </tr>
+    `
+    )
+    .join("");
+
+  tableHost.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Текст</th><th>Использований</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+
+  wireDeleteButtons(tableHost, apiBase, refreshFn);
+}
+
+function refreshDares() {
+  return refreshFantyEntity({
+    apiBase: "/fanty/dares",
+    pendingCardId: "dares-pending-card",
+    pendingTableId: "dares-pending-table",
+    activeTableId: "dares-table",
+    countId: "dares-count",
+    refreshFn: refreshDares,
+  });
+}
+
+function refreshTruths() {
+  return refreshFantyEntity({
+    apiBase: "/fanty/truths",
+    pendingCardId: "truths-pending-card",
+    pendingTableId: "truths-pending-table",
+    activeTableId: "truths-table",
+    countId: "truths-count",
+    refreshFn: refreshTruths,
+  });
+}
+
+function wireDeleteButtons(host, apiBase = "/prompts", refreshFn = refreshPrompts) {
   host.querySelectorAll("[data-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Удалить эту фразу?")) return;
+      if (!confirm("Удалить этот элемент?")) return;
       btn.disabled = true;
       try {
-        await api(`/prompts/${btn.dataset.delete}`, { method: "DELETE" });
-        await refreshPrompts();
+        await api(`${apiBase}/${btn.dataset.delete}`, { method: "DELETE" });
+        await refreshFn();
       } catch (err) {
         alert(err.message);
         btn.disabled = false;
