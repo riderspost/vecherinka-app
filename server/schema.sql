@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS rooms (
   current_round INTEGER NOT NULL DEFAULT 0,
   voting_index INTEGER NOT NULL DEFAULT 0,
   phase_started_at TEXT,
+  game_type TEXT NOT NULL DEFAULT 'sentence',
+  device_mode TEXT NOT NULL DEFAULT 'remote',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -73,3 +75,87 @@ CREATE INDEX IF NOT EXISTS idx_round_groups_room_round ON round_groups(room_id, 
 CREATE INDEX IF NOT EXISTS idx_round_prompts_room_round ON round_prompts(room_id, round_number);
 CREATE INDEX IF NOT EXISTS idx_submissions_round_prompt ON submissions(round_prompt_id);
 CREATE INDEX IF NOT EXISTS idx_votes_round_prompt ON votes(round_prompt_id);
+
+-- Фанты
+
+CREATE TABLE IF NOT EXISTS fanty_dares (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL DEFAULT 'solo',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_by_player_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS fanty_dare_locations (
+  dare_id INTEGER NOT NULL REFERENCES fanty_dares(id) ON DELETE CASCADE,
+  location TEXT NOT NULL,
+  PRIMARY KEY (dare_id, location)
+);
+
+CREATE TABLE IF NOT EXISTS fanty_dare_categories (
+  dare_id INTEGER NOT NULL REFERENCES fanty_dares(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  PRIMARY KEY (dare_id, category)
+);
+
+CREATE TABLE IF NOT EXISTS fanty_truths (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_by_player_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS fanty_truth_categories (
+  truth_id INTEGER NOT NULL REFERENCES fanty_truths(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  PRIMARY KEY (truth_id, category)
+);
+
+CREATE TABLE IF NOT EXISTS fanty_settings (
+  room_id TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+  game_mode TEXT NOT NULL,
+  location TEXT NOT NULL,
+  categories TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fanty_state (
+  room_id TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL DEFAULT 'ready_to_spin',
+  next_spinner_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+  current_picked_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+  current_partner_id TEXT REFERENCES players(id) ON DELETE SET NULL,
+  current_choice TEXT,
+  current_content_type TEXT,
+  current_dare_id INTEGER REFERENCES fanty_dares(id),
+  current_truth_id INTEGER REFERENCES fanty_truths(id),
+  round_number INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS fanty_rounds (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  round_number INTEGER NOT NULL,
+  picked_player_id TEXT NOT NULL REFERENCES players(id),
+  partner_player_id TEXT REFERENCES players(id),
+  choice TEXT,
+  content_type TEXT NOT NULL,
+  dare_id INTEGER REFERENCES fanty_dares(id),
+  truth_id INTEGER REFERENCES fanty_truths(id),
+  counted INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS fanty_round_photos (
+  id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL REFERENCES fanty_rounds(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  order_index INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_fanty_rounds_room ON fanty_rounds(room_id);
+CREATE INDEX IF NOT EXISTS idx_fanty_round_photos_round ON fanty_round_photos(round_id);
+CREATE INDEX IF NOT EXISTS idx_fanty_dare_locations_dare ON fanty_dare_locations(dare_id);
+CREATE INDEX IF NOT EXISTS idx_fanty_dare_categories_dare ON fanty_dare_categories(dare_id);
+CREATE INDEX IF NOT EXISTS idx_fanty_truth_categories_truth ON fanty_truth_categories(truth_id);

@@ -1,5 +1,4 @@
 import os
-import random
 import uuid
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -9,19 +8,31 @@ from . import game
 from .db import get_db, close_db, init_db, register_app
 from .seed_data import seed_prompts
 from .admin import admin_bp
+from .fanty_routes import fanty_bp
+from .fanty_seed import seed_fanty_content
+from .rooms_common import (
+    BASE_DIR,
+    UPLOAD_DIR,
+    ALLOWED_IMAGE_EXT,
+    MAX_NAME_LEN,
+    RoomError,
+    gen_id,
+    clean_str,
+    get_room_or_404,
+    get_player_or_404,
+    player_public,
+    validate_avatar,
+    create_room_and_host,
+    add_player,
+    taken_emojis_for_room,
+)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
-ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
-MAX_NAME_LEN = 30
 MAX_ANSWER_LEN = 300
-CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no O/0/I/1
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app = Flask(__name__, static_folder=None)
 register_app(app)
 app.register_blueprint(admin_bp)
+app.register_blueprint(fanty_bp)
 
 
 def _load_secret_key():
@@ -48,63 +59,12 @@ with app.app_context():
     init_db()
     _db = get_db()
     seed_prompts(_db)
+    seed_fanty_content(_db)
     close_db()
-
-
-def gen_id():
-    return str(uuid.uuid4())
-
-
-def gen_room_code():
-    return "".join(random.choice(CODE_ALPHABET) for _ in range(5))
 
 
 def error(message, status=400):
     return jsonify({"error": message}), status
-
-
-def clean_str(value, max_len):
-    if not isinstance(value, str):
-        return ""
-    return value.strip()[:max_len]
-
-
-def get_room_or_404(db, code):
-    return db.execute("SELECT * FROM rooms WHERE code = ?", (code.upper(),)).fetchone()
-
-
-def get_player_or_404(db, room_id, token):
-    if not token:
-        return None
-    return db.execute(
-        "SELECT * FROM players WHERE room_id = ? AND token = ?", (room_id, token)
-    ).fetchone()
-
-
-def player_public(row):
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "avatarType": row["avatar_type"],
-        "avatarValue": row["avatar_value"],
-        "isHost": bool(row["is_host"]),
-        "isDisplay": bool(row["is_display"]),
-        "totalScore": row["total_score"],
-    }
-
-
-def _validate_avatar(avatar_type, avatar_value):
-    if avatar_type not in ("emoji", "photo"):
-        return "emoji", "🙂"
-    if avatar_type == "photo":
-        path = os.path.join(UPLOAD_DIR, os.path.basename(avatar_value or ""))
-        if not avatar_value or not os.path.isfile(path):
-            return "emoji", "🙂"
-        return "photo", os.path.basename(avatar_value)
-    value = (avatar_value or "🙂").strip()
-    if not value:
-        value = "🙂"
-    return "emoji", value[:8]
 
 
 @app.route("/api/upload-avatar", methods=["POST"])
@@ -123,30 +83,13 @@ def upload_avatar():
 @app.route("/api/rooms", methods=["POST"])
 def create_room():
     data = request.get_json(silent=True) or {}
-    name = clean_str(data.get("name"), MAX_NAME_LEN)
-    if not name:
-        return error("Введите имя")
-    avatar_type, avatar_value = _validate_avatar(data.get("avatarType"), data.get("avatarValue"))
-
     db = get_db()
-    for _ in range(10):
-        code = gen_room_code()
-        if not get_room_or_404(db, code):
-            break
-    else:
-        return error("Не удалось создать комнату, попробуйте ещё раз", 500)
-
-    room_id = gen_id()
-    db.execute(
-        "INSERT INTO rooms (id, code, status) VALUES (?, ?, 'lobby')", (room_id, code)
-    )
-    player_id = gen_id()
-    token = uuid.uuid4().hex
-    db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host)
-           VALUES (?, ?, ?, ?, ?, ?, 1)""",
-        (player_id, room_id, token, name, avatar_type, avatar_value),
-    )
+    try:
+        _room_id, code, token, player_id = create_room_and_host(
+            db, "sentence", data.get("name"), data.get("avatarType"), data.get("avatarValue")
+        )
+    except RoomError as e:
+        return error(e.message, e.status)
     db.commit()
     return jsonify({"code": code, "token": token, "playerId": player_id})
 
@@ -157,12 +100,7 @@ def taken_emojis(code):
     room = get_room_or_404(db, code)
     if not room:
         return error("Комната не найдена", 404)
-    rows = db.execute(
-        """SELECT avatar_value FROM players
-           WHERE room_id = ? AND is_display = 0 AND avatar_type = 'emoji'""",
-        (room["id"],),
-    ).fetchall()
-    return jsonify({"taken": [r["avatar_value"] for r in rows]})
+    return jsonify({"taken": taken_emojis_for_room(db, room["id"])})
 
 
 @app.route("/api/rooms/<code>/join", methods=["POST"])
@@ -174,31 +112,17 @@ def join_room(code):
 
     data = request.get_json(silent=True) or {}
     is_display = bool(data.get("isDisplay"))
-    name = clean_str(data.get("name"), MAX_NAME_LEN) or ("Экран" if is_display else "")
-    if not name:
-        return error("Введите имя")
     if not is_display and room["status"] != "lobby":
         return error("Игра уже началась, подключиться нельзя")
+    if not is_display and room["device_mode"] == "local":
+        return error("Эта комната только для локальных игроков — попросите организатора добавить вас")
 
-    avatar_type, avatar_value = _validate_avatar(data.get("avatarType"), data.get("avatarValue"))
-    if is_display:
-        avatar_type, avatar_value = "emoji", "📺"
-    elif avatar_type == "emoji":
-        taken = db.execute(
-            """SELECT 1 FROM players
-               WHERE room_id = ? AND is_display = 0 AND avatar_type = 'emoji' AND avatar_value = ?""",
-            (room["id"], avatar_value),
-        ).fetchone()
-        if taken:
-            return error("Этот эмодзи уже выбрал другой игрок, выберите другой")
-
-    player_id = gen_id()
-    token = uuid.uuid4().hex
-    db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (player_id, room["id"], token, name, avatar_type, avatar_value, int(is_display)),
-    )
+    try:
+        token, player_id = add_player(
+            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue"), is_display
+        )
+    except RoomError as e:
+        return error(e.message, e.status)
     db.commit()
     return jsonify({"code": room["code"], "token": token, "playerId": player_id})
 

@@ -35,6 +35,8 @@ def init_db():
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         db.executescript(f.read())
     _ensure_column(db, "prompts", "status", "status TEXT NOT NULL DEFAULT 'active'")
+    _ensure_column(db, "rooms", "game_type", "game_type TEXT NOT NULL DEFAULT 'sentence'")
+    _ensure_column(db, "rooms", "device_mode", "device_mode TEXT NOT NULL DEFAULT 'remote'")
     db.commit()
     db.close()
 
