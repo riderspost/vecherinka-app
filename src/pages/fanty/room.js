@@ -6,7 +6,7 @@ import { escapeHtml } from "../../utils.js";
 import { GAME_MODES, locationLabel, categoryLabel } from "./constants.js";
 
 const POLL_MS = 1500;
-const SPIN_ANIMATION_MS = 3000;
+const SPIN_ANIMATION_MS = 9000;
 
 const BOTTLE_IMG = `<img src="/src/assets/bottle.png" alt="" class="bottle-img" draggable="false" />`;
 
