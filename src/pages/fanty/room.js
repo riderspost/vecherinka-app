@@ -8,6 +8,22 @@ import { GAME_MODES, locationLabel, categoryLabel } from "./constants.js";
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 3000;
 
+const BOTTLE_SVG = `
+<svg viewBox="0 14 60 188" width="42" height="132">
+  <defs>
+    <linearGradient id="bottleGlass" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#183d1c" />
+      <stop offset="30%" stop-color="#4a9a3f" />
+      <stop offset="52%" stop-color="#8fd66e" />
+      <stop offset="70%" stop-color="#3f8a37" />
+      <stop offset="100%" stop-color="#122c14" />
+    </linearGradient>
+  </defs>
+  <path d="M25 14 L35 14 L35 86 C35 86 47 98 49 116 L49 176 C49 194 41 202 30 202 C19 202 11 194 11 176 L11 116 C13 98 25 86 25 86 Z" fill="url(#bottleGlass)" />
+  <rect x="18" y="95" width="5" height="90" rx="2.5" fill="rgba(255,255,255,0.32)" />
+  <ellipse cx="30" cy="15" rx="5" ry="2" fill="#0d1f0f" />
+</svg>`;
+
 export function mountFantyRoomPage(container, code, opts) {
   const asDisplay = Boolean(opts && opts.asDisplay);
   let pollTimer = null;
@@ -320,7 +336,7 @@ function renderBottleCircle(players, fanty) {
 
   const bottle = document.createElement("div");
   bottle.className = "bottle";
-  bottle.textContent = "🍾";
+  bottle.innerHTML = BOTTLE_SVG;
   let staticAngle = 0;
   const targetId = fanty.phase === "awaiting_partner_spin" ? fanty.pickedPlayerId : fanty.partnerPlayerId || fanty.pickedPlayerId;
   if (targetId) {
