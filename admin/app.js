@@ -86,115 +86,148 @@ function renderLogin() {
   });
 }
 
+function setupTabs(tabButtons, sections) {
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tabButtons.forEach((b) => b.classList.toggle("active", b === btn));
+      Object.entries(sections).forEach(([key, el]) => {
+        el.style.display = key === btn.dataset.target ? "" : "none";
+      });
+    });
+  });
+}
+
+function pendingReviewCard(idPrefix, title) {
+  return `
+    <div class="card" id="${idPrefix}-pending-card" style="display:none">
+      <h2 style="margin-top:0">${title}</h2>
+      <div id="${idPrefix}-pending-table"></div>
+    </div>
+  `;
+}
+
 async function renderDashboard() {
   root.innerHTML = `
     <div class="admin-header">
-      <h1>🎉 Вечеринка — вопросы игры</h1>
+      <h1>🎉 Вечеринка — админка</h1>
       <button class="btn secondary" id="logout-btn">Выйти</button>
     </div>
 
-    <div class="card">
-      <h2 style="margin-top:0">Добавить вручную</h2>
-      <form id="add-form">
-        <label>Текст фразы (начало предложения)</label>
-        <textarea name="text" maxlength="300" placeholder="Если бы я был..." required></textarea>
-        <div class="error-box" id="add-error"></div>
-        <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
-      </form>
+    <div class="tabs" id="main-tabs">
+      <button class="tab-btn active" data-target="prompts">Продолжи предложение</button>
+      <button class="tab-btn" data-target="fanty">Фанты</button>
     </div>
 
-    <div class="card">
-      <h2 style="margin-top:0">Сгенерировать через AI</h2>
-      <div class="row">
-        <div>
-          <label>Сколько сгенерировать</label>
-          <input type="number" id="gen-count" min="1" max="30" value="10" />
+    <div id="section-prompts">
+      <div class="card">
+        <h2 style="margin-top:0">Добавить вручную</h2>
+        <form id="add-form">
+          <label>Текст фразы (начало предложения)</label>
+          <textarea name="text" maxlength="300" placeholder="Если бы я был..." required></textarea>
+          <div class="error-box" id="add-error"></div>
+          <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Сгенерировать через AI</h2>
+        <div class="row">
+          <div>
+            <label>Сколько сгенерировать</label>
+            <input type="number" id="gen-count" min="1" max="30" value="10" />
+          </div>
+          <div style="flex:2">
+            <label>Тема/пожелание (необязательно)</label>
+            <input type="text" id="gen-theme" maxlength="200" placeholder="Например: про путешествия" />
+          </div>
+          <div style="flex:0 0 auto">
+            <button class="btn" id="gen-btn">Сгенерировать</button>
+          </div>
         </div>
-        <div style="flex:2">
-          <label>Тема/пожелание (необязательно)</label>
-          <input type="text" id="gen-theme" maxlength="200" placeholder="Например: про путешествия" />
+        <div class="error-box" id="gen-error"></div>
+        <div class="success-box" id="gen-success"></div>
+      </div>
+
+      ${pendingReviewCard("prompts", "На проверке (сгенерировано AI)")}
+
+      <div class="card">
+        <h2 style="margin-top:0">Активные вопросы</h2>
+        <div class="prompt-count" id="prompts-count"></div>
+        <div id="prompts-table"></div>
+      </div>
+    </div>
+
+    <div id="section-fanty" style="display:none">
+      <div class="tabs" id="fanty-tabs">
+        <button class="tab-btn active" data-target="dares">Фанты</button>
+        <button class="tab-btn" data-target="truths">Вопросы (правда)</button>
+      </div>
+
+      <div id="fanty-subsection-dares">
+        <div class="card">
+          <h2 style="margin-top:0">Добавить вручную</h2>
+          <form id="add-dare-form">
+            <label>Текст фанта</label>
+            <textarea name="text" maxlength="300" placeholder="Выпей стакан воды без использования рук." required></textarea>
+            <label>Тип</label>
+            <div class="row">
+              <label><input type="radio" name="kind" value="solo" checked /> Для одного</label>
+              <label><input type="radio" name="kind" value="team" /> Командный ({p1}/{p2})</label>
+            </div>
+            <label>Места</label>
+            <div class="row" id="dare-locations"></div>
+            <label>Категории</label>
+            <div class="row" id="dare-categories"></div>
+            <div class="error-box" id="add-dare-error"></div>
+            <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+          </form>
         </div>
-        <div style="flex:0 0 auto">
-          <button class="btn" id="gen-btn">Сгенерировать</button>
+
+        ${pendingReviewCard("dares", "На проверке (предложено игроками)")}
+
+        <div class="card">
+          <h2 style="margin-top:0">Активные фанты</h2>
+          <div class="prompt-count" id="dares-count"></div>
+          <div id="dares-table"></div>
         </div>
       </div>
-      <div class="error-box" id="gen-error"></div>
-      <div class="success-box" id="gen-success"></div>
-    </div>
 
-    <div class="card" id="pending-card" style="display:none">
-      <h2 style="margin-top:0">На проверке (сгенерировано AI)</h2>
-      <p class="hint">Эти фразы ещё не используются в игре, пока их не активируют.</p>
-      <div id="pending-table"></div>
-    </div>
-
-    <div class="card">
-      <h2 style="margin-top:0">Активные вопросы</h2>
-      <div class="prompt-count" id="prompt-count"></div>
-      <div id="prompts-table"></div>
-    </div>
-
-    <h1 style="margin-top:40px">🍾 Фанты — фанты (действия)</h1>
-
-    <div class="card">
-      <h2 style="margin-top:0">Добавить вручную</h2>
-      <form id="add-dare-form">
-        <label>Текст фанта</label>
-        <textarea name="text" maxlength="300" placeholder="Выпей стакан воды без использования рук." required></textarea>
-        <label>Тип</label>
-        <div class="row">
-          <label><input type="radio" name="kind" value="solo" checked /> Для одного</label>
-          <label><input type="radio" name="kind" value="team" /> Командный ({p1}/{p2})</label>
+      <div id="fanty-subsection-truths" style="display:none">
+        <div class="card">
+          <h2 style="margin-top:0">Добавить вручную</h2>
+          <form id="add-truth-form">
+            <label>Текст вопроса</label>
+            <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
+            <label>Категории</label>
+            <div class="row" id="truth-categories"></div>
+            <div class="error-box" id="add-truth-error"></div>
+            <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+          </form>
         </div>
-        <label>Места</label>
-        <div class="row" id="dare-locations"></div>
-        <label>Категории</label>
-        <div class="row" id="dare-categories"></div>
-        <div class="error-box" id="add-dare-error"></div>
-        <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
-      </form>
-    </div>
 
-    <div class="card" id="dares-pending-card" style="display:none">
-      <h2 style="margin-top:0">На проверке (предложено игроками)</h2>
-      <div id="dares-pending-table"></div>
-    </div>
+        ${pendingReviewCard("truths", "На проверке (предложено игроками)")}
 
-    <div class="card">
-      <h2 style="margin-top:0">Активные фанты</h2>
-      <div class="prompt-count" id="dares-count"></div>
-      <div id="dares-table"></div>
-    </div>
-
-    <h1 style="margin-top:40px">🍾 Фанты — вопросы (правда)</h1>
-
-    <div class="card">
-      <h2 style="margin-top:0">Добавить вручную</h2>
-      <form id="add-truth-form">
-        <label>Текст вопроса</label>
-        <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
-        <label>Категории</label>
-        <div class="row" id="truth-categories"></div>
-        <div class="error-box" id="add-truth-error"></div>
-        <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
-      </form>
-    </div>
-
-    <div class="card" id="truths-pending-card" style="display:none">
-      <h2 style="margin-top:0">На проверке (предложено игроками)</h2>
-      <div id="truths-pending-table"></div>
-    </div>
-
-    <div class="card">
-      <h2 style="margin-top:0">Активные вопросы</h2>
-      <div class="prompt-count" id="truths-count"></div>
-      <div id="truths-table"></div>
+        <div class="card">
+          <h2 style="margin-top:0">Активные вопросы</h2>
+          <div class="prompt-count" id="truths-count"></div>
+          <div id="truths-table"></div>
+        </div>
+      </div>
     </div>
   `;
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
     await api("/logout", { method: "POST" });
     renderLogin();
+  });
+
+  setupTabs(document.querySelectorAll("#main-tabs .tab-btn"), {
+    prompts: document.getElementById("section-prompts"),
+    fanty: document.getElementById("section-fanty"),
+  });
+  setupTabs(document.querySelectorAll("#fanty-tabs .tab-btn"), {
+    dares: document.getElementById("fanty-subsection-dares"),
+    truths: document.getElementById("fanty-subsection-truths"),
   });
 
   document.getElementById("add-form").addEventListener("submit", async (e) => {
@@ -352,13 +385,29 @@ function wireBulkToolbar(host, apiBase, refreshFn) {
   });
 }
 
-async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, activeTableId, countId, refreshFn }) {
+function wireDeleteButtons(host, apiBase, refreshFn) {
+  host.querySelectorAll("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Удалить этот элемент?")) return;
+      btn.disabled = true;
+      try {
+        await api(`${apiBase}/${btn.dataset.delete}`, { method: "DELETE" });
+        await refreshFn();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
   const all = await api(apiBase);
   const pending = all.filter((p) => p.status === "pending");
   const active = all.filter((p) => p.status !== "pending");
 
-  const pendingCard = document.getElementById(pendingCardId);
-  const pendingHost = document.getElementById(pendingTableId);
+  const pendingCard = document.getElementById(`${idPrefix}-pending-card`);
+  const pendingHost = document.getElementById(`${idPrefix}-pending-table`);
   if (pending.length === 0) {
     pendingCard.style.display = "none";
   } else {
@@ -368,7 +417,7 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
         (p) => `
         <tr data-id="${p.id}">
           <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
-          <td>${escapeHtml(p.text)}<br/>${tagsHtml(p)}</td>
+          <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
           <td>
             <div class="row-actions">
               <button class="btn" data-activate="${p.id}">Активировать</button>
@@ -389,7 +438,7 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
           <thead>
             <tr>
               <th><input type="checkbox" class="select-all-pending" /></th>
-              <th>Текст</th>
+              <th>${textLabel}</th>
               <th></th>
             </tr>
           </thead>
@@ -415,8 +464,8 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
     wireDeleteButtons(pendingHost, apiBase, refreshFn);
   }
 
-  document.getElementById(countId).textContent = `Всего: ${active.length}`;
-  const tableHost = document.getElementById(activeTableId);
+  document.getElementById(`${idPrefix}-count`).textContent = `Всего: ${active.length}`;
+  const tableHost = document.getElementById(`${idPrefix}-table`);
   if (active.length === 0) {
     tableHost.innerHTML = `<p class="hint">Пока нет ни одного активного элемента.</p>`;
     return;
@@ -426,7 +475,7 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
     .map(
       (p) => `
       <tr data-id="${p.id}">
-        <td>${escapeHtml(p.text)}<br/>${tagsHtml(p)}</td>
+        <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
         <td>${p.uses > 0 ? `<span class="uses-pill">использован ${p.uses}×</span>` : ""}</td>
         <td><button class="btn danger" data-delete="${p.id}">Удалить</button></td>
       </tr>
@@ -437,7 +486,7 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
   tableHost.innerHTML = `
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Текст</th><th>Использований</th><th></th></tr></thead>
+        <thead><tr><th>${textLabel}</th><th>Использований</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -446,188 +495,31 @@ async function refreshFantyEntity({ apiBase, pendingCardId, pendingTableId, acti
   wireDeleteButtons(tableHost, apiBase, refreshFn);
 }
 
+function refreshPrompts() {
+  return refreshEntityList({
+    apiBase: "/prompts",
+    idPrefix: "prompts",
+    textLabel: "Фраза",
+    refreshFn: refreshPrompts,
+  });
+}
+
 function refreshDares() {
-  return refreshFantyEntity({
+  return refreshEntityList({
     apiBase: "/fanty/dares",
-    pendingCardId: "dares-pending-card",
-    pendingTableId: "dares-pending-table",
-    activeTableId: "dares-table",
-    countId: "dares-count",
+    idPrefix: "dares",
+    textLabel: "Текст",
     refreshFn: refreshDares,
   });
 }
 
 function refreshTruths() {
-  return refreshFantyEntity({
+  return refreshEntityList({
     apiBase: "/fanty/truths",
-    pendingCardId: "truths-pending-card",
-    pendingTableId: "truths-pending-table",
-    activeTableId: "truths-table",
-    countId: "truths-count",
+    idPrefix: "truths",
+    textLabel: "Текст",
     refreshFn: refreshTruths,
   });
-}
-
-function wireDeleteButtons(host, apiBase = "/prompts", refreshFn = refreshPrompts) {
-  host.querySelectorAll("[data-delete]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Удалить этот элемент?")) return;
-      btn.disabled = true;
-      try {
-        await api(`${apiBase}/${btn.dataset.delete}`, { method: "DELETE" });
-        await refreshFn();
-      } catch (err) {
-        alert(err.message);
-        btn.disabled = false;
-      }
-    });
-  });
-}
-
-async function refreshPrompts() {
-  const all = await api("/prompts");
-  const pending = all.filter((p) => p.status === "pending");
-  const active = all.filter((p) => p.status !== "pending");
-
-  const pendingCard = document.getElementById("pending-card");
-  const pendingHost = document.getElementById("pending-table");
-  if (pending.length === 0) {
-    pendingCard.style.display = "none";
-  } else {
-    pendingCard.style.display = "";
-    const rows = pending
-      .map(
-        (p) => `
-        <tr data-id="${p.id}">
-          <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
-          <td>${escapeHtml(p.text)}</td>
-          <td>
-            <div class="row-actions">
-              <button class="btn" data-activate="${p.id}">Активировать</button>
-              <button class="btn danger" data-delete="${p.id}">Удалить</button>
-            </div>
-          </td>
-        </tr>
-      `
-      )
-      .join("");
-    pendingHost.innerHTML = `
-      <div class="row-actions" style="margin-bottom:10px">
-        <button class="btn secondary" id="bulk-activate-btn" disabled>Активировать выбранные (0)</button>
-        <button class="btn danger" id="bulk-delete-btn" disabled>Удалить выбранные (0)</button>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="select-all-pending" /></th>
-              <th>Фраза</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-
-    const selectAll = document.getElementById("select-all-pending");
-    const activateBulkBtn = document.getElementById("bulk-activate-btn");
-    const deleteBulkBtn = document.getElementById("bulk-delete-btn");
-    const checkboxes = () => Array.from(pendingHost.querySelectorAll(".pending-check"));
-
-    function updateToolbar() {
-      const checked = checkboxes().filter((c) => c.checked);
-      const count = checked.length;
-      activateBulkBtn.disabled = count === 0;
-      deleteBulkBtn.disabled = count === 0;
-      activateBulkBtn.textContent = `Активировать выбранные (${count})`;
-      deleteBulkBtn.textContent = `Удалить выбранные (${count})`;
-      selectAll.checked = count > 0 && count === checkboxes().length;
-      selectAll.indeterminate = count > 0 && count < checkboxes().length;
-    }
-
-    selectAll.addEventListener("change", () => {
-      checkboxes().forEach((c) => (c.checked = selectAll.checked));
-      updateToolbar();
-    });
-    checkboxes().forEach((c) => c.addEventListener("change", updateToolbar));
-
-    activateBulkBtn.addEventListener("click", async () => {
-      const ids = checkboxes()
-        .filter((c) => c.checked)
-        .map((c) => parseInt(c.dataset.id, 10));
-      activateBulkBtn.disabled = true;
-      try {
-        await api("/prompts/bulk-activate", { method: "POST", body: JSON.stringify({ ids }) });
-        await refreshPrompts();
-      } catch (err) {
-        alert(err.message);
-        activateBulkBtn.disabled = false;
-      }
-    });
-
-    deleteBulkBtn.addEventListener("click", async () => {
-      const ids = checkboxes()
-        .filter((c) => c.checked)
-        .map((c) => parseInt(c.dataset.id, 10));
-      if (!confirm(`Удалить выбранные фразы (${ids.length})?`)) return;
-      deleteBulkBtn.disabled = true;
-      try {
-        const res = await api("/prompts/bulk-delete", { method: "POST", body: JSON.stringify({ ids }) });
-        if (res.blocked > 0) {
-          alert(`Удалено ${res.deleted}, но ${res.blocked} уже использовались в игре и не были удалены.`);
-        }
-        await refreshPrompts();
-      } catch (err) {
-        alert(err.message);
-        deleteBulkBtn.disabled = false;
-      }
-    });
-
-    pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          await api(`/prompts/${btn.dataset.activate}/activate`, { method: "POST" });
-          await refreshPrompts();
-        } catch (err) {
-          alert(err.message);
-          btn.disabled = false;
-        }
-      });
-    });
-    wireDeleteButtons(pendingHost);
-  }
-
-  document.getElementById("prompt-count").textContent = `Всего: ${active.length}`;
-  const tableHost = document.getElementById("prompts-table");
-  if (active.length === 0) {
-    tableHost.innerHTML = `<p class="hint">Пока нет ни одной активной фразы.</p>`;
-    return;
-  }
-
-  const rows = active
-    .map(
-      (p) => `
-      <tr data-id="${p.id}">
-        <td>${escapeHtml(p.text)}</td>
-        <td>${p.uses > 0 ? `<span class="uses-pill">использован ${p.uses}×</span>` : ""}</td>
-        <td><button class="btn danger" data-delete="${p.id}">Удалить</button></td>
-      </tr>
-    `
-    )
-    .join("");
-
-  tableHost.innerHTML = `
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Фраза</th><th>Использований</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
-
-  wireDeleteButtons(tableHost);
 }
 
 main();
