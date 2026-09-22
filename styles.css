@@ -721,6 +721,15 @@ h2, h3 {
   transform-origin: center;
 }
 
+.bottle-img {
+  display: block;
+  height: 132px;
+  width: auto;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+  user-select: none;
+}
+
 .fanty-panel {
   display: flex;
   flex-direction: column;
