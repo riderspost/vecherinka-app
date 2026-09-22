@@ -343,7 +343,7 @@ function renderBottleCircle(players, fanty) {
     const idx = players.findIndex((p) => p.id === targetId);
     if (idx >= 0) staticAngle = seatAngle(idx, players.length) + 90;
   }
-  bottle.style.transform = `rotate(${staticAngle}deg)`;
+  bottle.style.transform = `translate(-50%, -50%) rotate(${staticAngle}deg)`;
   circleWrap.appendChild(bottle);
 
   return { circleWrap, bottle };
@@ -354,7 +354,7 @@ async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, fre
   const targetAngle = (idx >= 0 ? seatAngle(idx, players.length) : 0) + 90;
   ctrl.setAnimating(true);
   bottle.style.transition = `transform ${SPIN_ANIMATION_MS}ms cubic-bezier(0.17,0.67,0.3,1)`;
-  bottle.style.transform = `rotate(${targetAngle + 1080}deg)`;
+  bottle.style.transform = `translate(-50%, -50%) rotate(${targetAngle + 1080}deg)`;
   await new Promise((resolve) => setTimeout(resolve, SPIN_ANIMATION_MS));
   ctrl.setAnimating(false);
   ctrl.rerender(freshState);
