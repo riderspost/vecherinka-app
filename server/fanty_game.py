@@ -7,7 +7,9 @@ from .rooms_common import gen_id
 MIN_PLAYERS = 2
 MAX_PHOTOS = 5
 LOCATIONS = ("street", "apartment", "bar", "country_house")
-CATEGORIES = ("basic", "flirt", "flirt_plus", "alcohol", "food")
+MOOD_CATEGORIES = ("basic", "flirt", "flirt_plus")
+ATTRIBUTES = ("alcohol", "food")
+CATEGORIES = MOOD_CATEGORIES + ATTRIBUTES
 GAME_MODES = ("truth_or_dare", "solo", "team")
 
 _lock = threading.Lock()

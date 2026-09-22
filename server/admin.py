@@ -407,9 +407,11 @@ def admin_add_truth():
         return jsonify({"error": "Введите текст вопроса"}), 400
     if len(text) > MAX_PROMPT_LEN:
         return jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400
-    categories = [c for c in (data.get("categories") or []) if c in fanty_game.CATEGORIES]
+    categories = list(dict.fromkeys(c for c in (data.get("categories") or []) if c in fanty_game.MOOD_CATEGORIES))
     if not categories:
-        return jsonify({"error": "Выберите хотя бы одну категорию"}), 400
+        return jsonify({"error": "Выберите категорию"}), 400
+    if len(categories) > 1:
+        return jsonify({"error": "Для вопроса можно выбрать только одну категорию"}), 400
 
     db = get_db()
     if db.execute("SELECT 1 FROM fanty_truths WHERE text = ?", (text,)).fetchone():
