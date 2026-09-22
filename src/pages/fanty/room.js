@@ -345,8 +345,8 @@ async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, fre
   const idx = players.findIndex((p) => p.id === targetPlayerId);
   const targetAngle = (idx >= 0 ? seatAngle(idx, players.length) : 0) + 90;
   ctrl.setAnimating(true);
-  bottle.style.transition = `transform ${SPIN_ANIMATION_MS}ms cubic-bezier(0.17,0.67,0.3,1)`;
-  bottle.style.transform = `translate(-50%, -50%) rotate(${targetAngle + 1080}deg)`;
+  bottle.style.transition = `transform ${SPIN_ANIMATION_MS}ms cubic-bezier(0.1,0.85,0.15,1)`;
+  bottle.style.transform = `translate(-50%, -50%) rotate(${targetAngle + 2160}deg)`;
   await new Promise((resolve) => setTimeout(resolve, SPIN_ANIMATION_MS));
   ctrl.setAnimating(false);
   ctrl.setLastAngle(targetAngle);
