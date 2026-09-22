@@ -7,10 +7,13 @@ const LOCATIONS = [
   { value: "country_house", label: "Загородный дом" },
 ];
 
-const CATEGORIES = [
+const MOOD_CATEGORIES = [
   { value: "basic", label: "Базовые" },
   { value: "flirt", label: "Флирт" },
   { value: "flirt_plus", label: "Флирт+" },
+];
+
+const ATTRIBUTES = [
   { value: "alcohol", label: "Алкоголь" },
   { value: "food", label: "Еда" },
 ];
@@ -19,6 +22,21 @@ function checkboxRow(options, name) {
   return options
     .map((o) => `<label><input type="checkbox" name="${name}" value="${o.value}" /> ${o.label}</label>`)
     .join(" ");
+}
+
+function radioRow(options, name, defaultValue) {
+  return options
+    .map(
+      (o) =>
+        `<label><input type="radio" name="${name}" value="${o.value}"${
+          o.value === defaultValue ? " checked" : ""
+        } /> ${o.label}</label>`
+    )
+    .join(" ");
+}
+
+function labelFor(list, value) {
+  return list.find((o) => o.value === value)?.label || value;
 }
 
 function escapeHtml(str) {
@@ -176,8 +194,10 @@ async function renderDashboard() {
             </div>
             <label>Места</label>
             <div class="row" id="dare-locations"></div>
-            <label>Категории</label>
-            <div class="row" id="dare-categories"></div>
+            <label>Категория</label>
+            <div class="row" id="dare-category"></div>
+            <label>Атрибуты (необязательно)</label>
+            <div class="row" id="dare-attributes"></div>
             <div class="error-box" id="add-dare-error"></div>
             <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
           </form>
@@ -198,8 +218,8 @@ async function renderDashboard() {
           <form id="add-truth-form">
             <label>Текст вопроса</label>
             <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
-            <label>Категории</label>
-            <div class="row" id="truth-categories"></div>
+            <label>Категория</label>
+            <div class="row" id="truth-category"></div>
             <div class="error-box" id="add-truth-error"></div>
             <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
           </form>
@@ -278,8 +298,9 @@ async function renderDashboard() {
   });
 
   document.getElementById("dare-locations").innerHTML = checkboxRow(LOCATIONS, "location");
-  document.getElementById("dare-categories").innerHTML = checkboxRow(CATEGORIES, "category");
-  document.getElementById("truth-categories").innerHTML = checkboxRow(CATEGORIES, "category");
+  document.getElementById("dare-category").innerHTML = radioRow(MOOD_CATEGORIES, "category", "basic");
+  document.getElementById("dare-attributes").innerHTML = checkboxRow(ATTRIBUTES, "attribute");
+  document.getElementById("truth-category").innerHTML = radioRow(MOOD_CATEGORIES, "category", "basic");
 
   document.getElementById("add-dare-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -287,7 +308,8 @@ async function renderDashboard() {
     const text = form.elements.text.value.trim();
     const kind = form.elements.kind.value;
     const locations = Array.from(form.querySelectorAll('input[name="location"]:checked')).map((i) => i.value);
-    const categories = Array.from(form.querySelectorAll('input[name="category"]:checked')).map((i) => i.value);
+    const attributes = Array.from(form.querySelectorAll('input[name="attribute"]:checked')).map((i) => i.value);
+    const categories = [form.elements.category.value, ...attributes];
     const errorEl = document.getElementById("add-dare-error");
     errorEl.textContent = "";
     if (!text) return;
@@ -304,7 +326,7 @@ async function renderDashboard() {
     e.preventDefault();
     const form = e.target;
     const text = form.elements.text.value.trim();
-    const categories = Array.from(form.querySelectorAll('input[name="category"]:checked')).map((i) => i.value);
+    const categories = [form.elements.category.value];
     const errorEl = document.getElementById("add-truth-error");
     errorEl.textContent = "";
     if (!text) return;
@@ -324,9 +346,16 @@ async function renderDashboard() {
 
 function tagsHtml(item) {
   const parts = [];
-  if (item.kind === "team") parts.push('<span class="uses-pill">командный</span>');
-  (item.locations || []).forEach((l) => parts.push(`<span class="uses-pill">${escapeHtml(l)}</span>`));
-  (item.categories || []).forEach((c) => parts.push(`<span class="uses-pill">${escapeHtml(c)}</span>`));
+  if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
+  (item.locations || []).forEach((l) => {
+    parts.push(`<span class="tag-pill tag-location">${escapeHtml(labelFor(LOCATIONS, l))}</span>`);
+  });
+  (item.categories || []).forEach((c) => {
+    const isAttribute = ATTRIBUTES.some((a) => a.value === c);
+    const list = isAttribute ? ATTRIBUTES : MOOD_CATEGORIES;
+    const cls = isAttribute ? "tag-attribute" : "tag-category";
+    parts.push(`<span class="tag-pill ${cls}">${escapeHtml(labelFor(list, c))}</span>`);
+  });
   return parts.join(" ");
 }
 
