@@ -29,6 +29,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let pollTimer = null;
   let stopped = false;
   let animating = false;
+  let lastBottleAngle = 0;
 
   function stop() {
     stopped = true;
@@ -152,6 +153,8 @@ export function mountFantyRoomPage(container, code, opts) {
       const ctrl = {
         setAnimating: (v) => (animating = v),
         rerender: (s) => render(s, token),
+        getLastAngle: () => lastBottleAngle,
+        setLastAngle: (a) => (lastBottleAngle = a),
       };
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
@@ -313,7 +316,7 @@ function seatAngle(index, total) {
   return (360 / total) * index - 90;
 }
 
-function renderBottleCircle(players, fanty) {
+function renderBottleCircle(players, fanty, ctrl) {
   const circleWrap = document.createElement("div");
   circleWrap.className = "bottle-circle";
   const radius = 42;
@@ -330,18 +333,21 @@ function renderBottleCircle(players, fanty) {
       (p.id === fanty.partnerPlayerId ? " circle-seat-partner" : "");
     seat.style.left = `${x}%`;
     seat.style.top = `${y}%`;
-    seat.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>`;
+    seat.innerHTML = `<div class="seat-avatar">${avatarHtml(p)}</div><span>${escapeHtml(p.name)}</span>`;
     circleWrap.appendChild(seat);
   });
 
   const bottle = document.createElement("div");
   bottle.className = "bottle";
   bottle.innerHTML = BOTTLE_SVG;
-  let staticAngle = 0;
   const targetId = fanty.phase === "awaiting_partner_spin" ? fanty.pickedPlayerId : fanty.partnerPlayerId || fanty.pickedPlayerId;
+  let staticAngle = ctrl ? ctrl.getLastAngle() : 0;
   if (targetId) {
     const idx = players.findIndex((p) => p.id === targetId);
-    if (idx >= 0) staticAngle = seatAngle(idx, players.length) + 90;
+    if (idx >= 0) {
+      staticAngle = seatAngle(idx, players.length) + 90;
+      if (ctrl) ctrl.setLastAngle(staticAngle);
+    }
   }
   bottle.style.transform = `translate(-50%, -50%) rotate(${staticAngle}deg)`;
   circleWrap.appendChild(bottle);
@@ -357,6 +363,7 @@ async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, fre
   bottle.style.transform = `translate(-50%, -50%) rotate(${targetAngle + 1080}deg)`;
   await new Promise((resolve) => setTimeout(resolve, SPIN_ANIMATION_MS));
   ctrl.setAnimating(false);
+  ctrl.setLastAngle(targetAngle);
   ctrl.rerender(freshState);
 }
 
@@ -367,7 +374,7 @@ function renderPlaying(wrap, state, token, code, ctrl) {
   const displayRound = fanty.phase === "ready_to_spin" ? fanty.roundNumber + 1 : fanty.roundNumber;
   wrap.innerHTML = `<p class="round-label">Раунд ${displayRound}</p>`;
 
-  const { circleWrap, bottle } = renderBottleCircle(players, fanty);
+  const { circleWrap, bottle } = renderBottleCircle(players, fanty, ctrl);
   wrap.appendChild(circleWrap);
 
   const panel = document.createElement("div");
