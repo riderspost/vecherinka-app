@@ -11,6 +11,7 @@ MOOD_CATEGORIES = ("basic", "flirt", "flirt_plus")
 ATTRIBUTES = ("alcohol", "food")
 CATEGORIES = MOOD_CATEGORIES + ATTRIBUTES
 GAME_MODES = ("truth_or_dare", "solo", "team")
+PICK_MODES = ("random", "fair")
 
 _lock = threading.Lock()
 
@@ -137,42 +138,60 @@ def can_act_as_picked(room, state, player):
     return player["id"] == state["current_picked_id"]
 
 
+def _pick_main_player(state, settings, active_ids):
+    exclude = set()
+    if state["round_number"] > 0:
+        exclude.add(state["next_spinner_id"])
+
+    if settings["pick_mode"] != "fair":
+        candidates = [pid for pid in active_ids if pid not in exclude] or active_ids
+        return random.choice(candidates), None
+
+    picked_cycle = [pid for pid in json.loads(state["picked_cycle"] or "[]") if pid in active_ids]
+    remaining = [pid for pid in active_ids if pid not in picked_cycle]
+    if not remaining:
+        picked_cycle = []
+        remaining = active_ids[:]
+    candidates = [pid for pid in remaining if pid not in exclude] or remaining
+    picked = random.choice(candidates)
+    picked_cycle = picked_cycle + [picked]
+    return picked, json.dumps(picked_cycle)
+
+
 def spin_main(db, room):
     with _lock:
         state = get_state(db, room["id"])
         active = get_active_players(db, room["id"])
         active_ids = [p["id"] for p in active]
-
-        exclude = set()
-        if state["round_number"] > 0:
-            exclude.add(state["next_spinner_id"])
-        candidates = [pid for pid in active_ids if pid not in exclude] or active_ids
-        picked = random.choice(candidates)
-
         settings = get_settings(db, room["id"])
+
+        picked, picked_cycle_json = _pick_main_player(state, settings, active_ids)
+        cycle_sql = ", picked_cycle=?" if picked_cycle_json is not None else ""
+        cycle_params = (picked_cycle_json,) if picked_cycle_json is not None else ()
+
         round_number = state["round_number"] + 1
 
         if settings["game_mode"] == "truth_or_dare":
             db.execute(
-                """UPDATE fanty_state SET phase='awaiting_choice', current_picked_id=?,
+                f"""UPDATE fanty_state SET phase='awaiting_choice', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type=NULL,
-                   current_dare_id=NULL, current_truth_id=NULL, round_number=? WHERE room_id=?""",
-                (picked, round_number, room["id"]),
+                   current_dare_id=NULL, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                (picked, round_number) + cycle_params + (room["id"],),
             )
         elif settings["game_mode"] == "team":
             db.execute(
-                """UPDATE fanty_state SET phase='awaiting_partner_spin', current_picked_id=?,
+                f"""UPDATE fanty_state SET phase='awaiting_partner_spin', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type=NULL,
-                   current_dare_id=NULL, current_truth_id=NULL, round_number=? WHERE room_id=?""",
-                (picked, round_number, room["id"]),
+                   current_dare_id=NULL, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                (picked, round_number) + cycle_params + (room["id"],),
             )
         else:  # solo
             dare_id = pick_dare(db, room["id"], settings, "solo")
             db.execute(
-                """UPDATE fanty_state SET phase='awaiting_action', current_picked_id=?,
+                f"""UPDATE fanty_state SET phase='awaiting_action', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type='dare',
-                   current_dare_id=?, current_truth_id=NULL, round_number=? WHERE room_id=?""",
-                (picked, dare_id, round_number, room["id"]),
+                   current_dare_id=?, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                (picked, dare_id, round_number) + cycle_params + (room["id"],),
             )
         db.commit()
 

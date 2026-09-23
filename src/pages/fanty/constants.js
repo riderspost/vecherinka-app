@@ -19,10 +19,19 @@ export const GAME_MODES = [
   { value: "team", label: "Командные фанты" },
 ];
 
+export const PICK_MODES = [
+  { value: "random", label: "Полный рандом" },
+  { value: "fair", label: "Поровну для всех" },
+];
+
 export function locationLabel(value) {
   return LOCATIONS.find((l) => l.value === value)?.label || value;
 }
 
 export function categoryLabel(value) {
   return CATEGORIES.find((c) => c.value === value)?.label || value;
+}
+
+export function pickModeLabel(value) {
+  return PICK_MODES.find((p) => p.value === value)?.label || value;
 }

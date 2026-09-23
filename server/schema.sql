@@ -117,7 +117,8 @@ CREATE TABLE IF NOT EXISTS fanty_settings (
   room_id TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
   game_mode TEXT NOT NULL,
   location TEXT NOT NULL,
-  categories TEXT NOT NULL
+  categories TEXT NOT NULL,
+  pick_mode TEXT NOT NULL DEFAULT 'random'
 );
 
 CREATE TABLE IF NOT EXISTS fanty_state (
@@ -130,7 +131,8 @@ CREATE TABLE IF NOT EXISTS fanty_state (
   current_content_type TEXT,
   current_dare_id INTEGER REFERENCES fanty_dares(id),
   current_truth_id INTEGER REFERENCES fanty_truths(id),
-  round_number INTEGER NOT NULL DEFAULT 0
+  round_number INTEGER NOT NULL DEFAULT 0,
+  picked_cycle TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS fanty_rounds (

@@ -3,7 +3,7 @@ import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
-import { GAME_MODES, locationLabel, categoryLabel } from "./constants.js";
+import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
@@ -183,6 +183,7 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
     .map(categoryLabel)
     .map(escapeHtml)
     .join(", ")}</p>
+    <p class="tagline">Бутылка выбирает: ${escapeHtml(pickModeLabel(state.settings.pickMode))}</p>
     <p class="players-count">Игроков: ${players.length} (минимум ${state.minPlayers})</p>
   `;
   wrap.appendChild(playersList(players));

@@ -48,6 +48,7 @@ def create_room():
     categories = [c for c in (data.get("categories") or []) if c in fg.CATEGORIES]
     if not categories:
         return error("Выберите хотя бы один тип фантов")
+    pick_mode = data.get("pickMode") if data.get("pickMode") in fg.PICK_MODES else "random"
 
     db = get_db()
     dare_count, truth_count = fg.content_pool_sizes(db, game_mode, location, categories)
@@ -64,8 +65,8 @@ def create_room():
         return error(e.message, e.status)
 
     db.execute(
-        "INSERT INTO fanty_settings (room_id, game_mode, location, categories) VALUES (?, ?, ?, ?)",
-        (room_id, game_mode, location, json.dumps(categories)),
+        "INSERT INTO fanty_settings (room_id, game_mode, location, categories, pick_mode) VALUES (?, ?, ?, ?, ?)",
+        (room_id, game_mode, location, json.dumps(categories), pick_mode),
     )
     fg.init_state(db, room_id, player_id)
     db.commit()
@@ -284,6 +285,7 @@ def _build_state(db, room, player):
             "gameMode": settings["game_mode"],
             "location": settings["location"],
             "categories": fg.settings_categories(settings),
+            "pickMode": settings["pick_mode"],
         },
         "players": [player_public(p) for p in players],
         "me": player_public(player),

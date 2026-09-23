@@ -37,6 +37,8 @@ def init_db():
     _ensure_column(db, "prompts", "status", "status TEXT NOT NULL DEFAULT 'active'")
     _ensure_column(db, "rooms", "game_type", "game_type TEXT NOT NULL DEFAULT 'sentence'")
     _ensure_column(db, "rooms", "device_mode", "device_mode TEXT NOT NULL DEFAULT 'remote'")
+    _ensure_column(db, "fanty_settings", "pick_mode", "pick_mode TEXT NOT NULL DEFAULT 'random'")
+    _ensure_column(db, "fanty_state", "picked_cycle", "picked_cycle TEXT NOT NULL DEFAULT '[]'")
     db.commit()
     db.close()
 

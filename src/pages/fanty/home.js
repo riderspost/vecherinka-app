@@ -2,7 +2,7 @@ import { api, fantyApi } from "../../api.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
-import { LOCATIONS, CATEGORIES, GAME_MODES } from "./constants.js";
+import { LOCATIONS, CATEGORIES, GAME_MODES, PICK_MODES } from "./constants.js";
 
 function radioGroup(name, options, defaultValue) {
   const wrap = document.createElement("div");
@@ -113,6 +113,10 @@ export function renderFantyHome(container) {
     categoriesLabel.textContent = "Типы фантов";
     const categoriesGroup = checkboxGroup(CATEGORIES, ["basic"]);
 
+    const pickModeLabelEl = document.createElement("label");
+    pickModeLabelEl.textContent = "Кого выбирает бутылка";
+    const pickModeGroup = radioGroup("pickMode", PICK_MODES, "random");
+
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
     btn.textContent = "Создать комнату";
@@ -142,6 +146,7 @@ export function renderFantyHome(container) {
           gameMode: modeGroup.getValue(),
           location: locationSelect.value,
           categories,
+          pickMode: pickModeGroup.getValue(),
         });
         saveSession(res.code, { token: res.token, playerId: res.playerId });
         navigate(`/fanty/r/${res.code}`);
@@ -161,6 +166,8 @@ export function renderFantyHome(container) {
     formHost.appendChild(locationSelect);
     formHost.appendChild(categoriesLabel);
     formHost.appendChild(categoriesGroup.element);
+    formHost.appendChild(pickModeLabelEl);
+    formHost.appendChild(pickModeGroup.element);
     formHost.appendChild(errorEl);
     formHost.appendChild(btn);
   }
