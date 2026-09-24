@@ -286,14 +286,21 @@ function renderResetForm(wrap, token) {
   `;
 
   const pf = passwordField("Новый пароль (от 8 символов)", "new-password");
+  const pfConfirm = passwordField("Повторите пароль", "new-password");
   const btn = primaryBtn("Сохранить");
   const msgEl = messageDiv();
 
   btn.addEventListener("click", async () => {
     const password = pf.input.value;
-    if (!password) {
+    const confirm = pfConfirm.input.value;
+    if (!password || !confirm) {
       msgEl.className = "error-msg";
-      msgEl.textContent = "Введите новый пароль";
+      msgEl.textContent = "Заполните оба поля";
+      return;
+    }
+    if (password !== confirm) {
+      msgEl.className = "error-msg";
+      msgEl.textContent = "Пароли не совпадают";
       return;
     }
     btn.disabled = true;
@@ -309,6 +316,7 @@ function renderResetForm(wrap, token) {
   });
 
   wrap.appendChild(pf.element);
+  wrap.appendChild(pfConfirm.element);
   wrap.appendChild(msgEl);
   wrap.appendChild(btn);
 }
