@@ -40,6 +40,9 @@ def init_db():
     _ensure_column(db, "fanty_settings", "pick_mode", "pick_mode TEXT NOT NULL DEFAULT 'random'")
     _ensure_column(db, "fanty_state", "picked_cycle", "picked_cycle TEXT NOT NULL DEFAULT '[]'")
     _ensure_column(db, "rooms", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL")
+    _ensure_column(db, "users", "email_verified", "email_verified INTEGER NOT NULL DEFAULT 1")
+    _ensure_column(db, "users", "verification_code", "verification_code TEXT")
+    _ensure_column(db, "users", "verification_code_expires_at", "verification_code_expires_at TEXT")
     db.commit()
     db.close()
 

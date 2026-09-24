@@ -1,6 +1,8 @@
 import { authApi } from "../api.js";
 import { navigate } from "../router.js";
 
+const RESEND_COOLDOWN_MS = 20000;
+
 function textInput(placeholder, type = "text") {
   const input = document.createElement("input");
   input.className = "text-input";
@@ -8,6 +10,31 @@ function textInput(placeholder, type = "text") {
   input.placeholder = placeholder;
   input.autocomplete = type === "password" ? "current-password" : "email";
   return input;
+}
+
+function passwordField(placeholder, autocomplete) {
+  const wrap = document.createElement("div");
+  wrap.className = "password-field";
+
+  const input = document.createElement("input");
+  input.className = "text-input";
+  input.type = "password";
+  input.placeholder = placeholder;
+  input.autocomplete = autocomplete;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "password-toggle";
+  toggle.textContent = "👁️";
+  toggle.addEventListener("click", () => {
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    toggle.textContent = showing ? "👁️" : "🙈";
+  });
+
+  wrap.appendChild(input);
+  wrap.appendChild(toggle);
+  return { element: wrap, input };
 }
 
 function primaryBtn(text) {
@@ -67,18 +94,78 @@ export function renderAccountPage(container) {
     tab.classList.add("active");
   }
 
+  function showVerifyStep(email) {
+    formHost.innerHTML = "";
+
+    const info = document.createElement("p");
+    info.className = "tagline";
+    info.textContent = `Мы отправили код подтверждения на ${email}`;
+    formHost.appendChild(info);
+
+    const codeInput = document.createElement("input");
+    codeInput.className = "text-input code-input";
+    codeInput.maxLength = 6;
+    codeInput.inputMode = "numeric";
+    codeInput.placeholder = "000000";
+
+    const btn = primaryBtn("Подтвердить");
+    const msgEl = messageDiv();
+
+    btn.addEventListener("click", async () => {
+      const code = codeInput.value.trim();
+      if (!code) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = "Введите код из письма";
+        return;
+      }
+      btn.disabled = true;
+      msgEl.textContent = "";
+      try {
+        await authApi.verifyEmail(email, code);
+        navigate("/");
+      } catch (e) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = e.message;
+        btn.disabled = false;
+      }
+    });
+
+    const resendBtn = document.createElement("button");
+    resendBtn.className = "link-btn";
+    resendBtn.textContent = "Отправить код ещё раз";
+    resendBtn.addEventListener("click", async () => {
+      resendBtn.disabled = true;
+      try {
+        await authApi.resendCode(email);
+        msgEl.className = "success-msg";
+        msgEl.textContent = "Код отправлен ещё раз";
+      } catch (e) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = e.message;
+      }
+      setTimeout(() => {
+        resendBtn.disabled = false;
+      }, RESEND_COOLDOWN_MS);
+    });
+
+    formHost.appendChild(codeInput);
+    formHost.appendChild(msgEl);
+    formHost.appendChild(btn);
+    formHost.appendChild(resendBtn);
+  }
+
   function showLoginForm() {
     setActive(loginTab);
     formHost.innerHTML = "";
 
     const emailInput = textInput("Email");
-    const passwordInput = textInput("Пароль", "password");
+    const pf = passwordField("Пароль", "current-password");
     const btn = primaryBtn("Войти");
     const msgEl = messageDiv();
 
     btn.addEventListener("click", async () => {
       const email = emailInput.value.trim();
-      const password = passwordInput.value;
+      const password = pf.input.value;
       if (!email || !password) {
         msgEl.className = "error-msg";
         msgEl.textContent = "Заполните email и пароль";
@@ -90,6 +177,10 @@ export function renderAccountPage(container) {
         await authApi.login(email, password);
         navigate("/");
       } catch (e) {
+        if (e.needsVerification) {
+          showVerifyStep(e.email);
+          return;
+        }
         msgEl.className = "error-msg";
         msgEl.textContent = e.message;
         btn.disabled = false;
@@ -97,7 +188,7 @@ export function renderAccountPage(container) {
     });
 
     formHost.appendChild(emailInput);
-    formHost.appendChild(passwordInput);
+    formHost.appendChild(pf.element);
     formHost.appendChild(msgEl);
     formHost.appendChild(btn);
   }
@@ -107,24 +198,34 @@ export function renderAccountPage(container) {
     formHost.innerHTML = "";
 
     const emailInput = textInput("Email");
-    const passwordInput = textInput("Пароль (от 8 символов)", "password");
-    passwordInput.autocomplete = "new-password";
+    const pf = passwordField("Пароль (от 8 символов)", "new-password");
+    const pfConfirm = passwordField("Повторите пароль", "new-password");
     const btn = primaryBtn("Зарегистрироваться");
     const msgEl = messageDiv();
 
     btn.addEventListener("click", async () => {
       const email = emailInput.value.trim();
-      const password = passwordInput.value;
-      if (!email || !password) {
+      const password = pf.input.value;
+      const confirm = pfConfirm.input.value;
+      if (!email || !password || !confirm) {
         msgEl.className = "error-msg";
-        msgEl.textContent = "Заполните email и пароль";
+        msgEl.textContent = "Заполните все поля";
+        return;
+      }
+      if (password !== confirm) {
+        msgEl.className = "error-msg";
+        msgEl.textContent = "Пароли не совпадают";
         return;
       }
       btn.disabled = true;
       msgEl.textContent = "";
       try {
-        await authApi.register(email, password);
-        navigate("/");
+        const res = await authApi.register(email, password);
+        if (res.needsVerification) {
+          showVerifyStep(res.email);
+        } else {
+          navigate("/");
+        }
       } catch (e) {
         msgEl.className = "error-msg";
         msgEl.textContent = e.message;
@@ -133,7 +234,8 @@ export function renderAccountPage(container) {
     });
 
     formHost.appendChild(emailInput);
-    formHost.appendChild(passwordInput);
+    formHost.appendChild(pf.element);
+    formHost.appendChild(pfConfirm.element);
     formHost.appendChild(msgEl);
     formHost.appendChild(btn);
   }
@@ -158,7 +260,7 @@ export function renderAccountPage(container) {
       try {
         await authApi.forgotPassword(email);
         msgEl.className = "success-msg";
-        msgEl.textContent = "Если такой email зарегистрирован, на него отправлена ссылка для восстановления пароля";
+        msgEl.textContent = "Ссылка для восстановления пароля отправлена на почту";
       } catch (e) {
         msgEl.className = "error-msg";
         msgEl.textContent = e.message;
@@ -183,13 +285,12 @@ function renderResetForm(wrap, token) {
     <p class="tagline">Придумайте новый пароль для входа</p>
   `;
 
-  const passwordInput = textInput("Новый пароль (от 8 символов)", "password");
-  passwordInput.autocomplete = "new-password";
+  const pf = passwordField("Новый пароль (от 8 символов)", "new-password");
   const btn = primaryBtn("Сохранить");
   const msgEl = messageDiv();
 
   btn.addEventListener("click", async () => {
-    const password = passwordInput.value;
+    const password = pf.input.value;
     if (!password) {
       msgEl.className = "error-msg";
       msgEl.textContent = "Введите новый пароль";
@@ -207,7 +308,7 @@ function renderResetForm(wrap, token) {
     }
   });
 
-  wrap.appendChild(passwordInput);
+  wrap.appendChild(pf.element);
   wrap.appendChild(msgEl);
   wrap.appendChild(btn);
 }

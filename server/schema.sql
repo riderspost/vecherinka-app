@@ -4,7 +4,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   reset_token TEXT,
-  reset_token_expires_at TEXT
+  reset_token_expires_at TEXT,
+  email_verified INTEGER NOT NULL DEFAULT 1,
+  verification_code TEXT,
+  verification_code_expires_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS rooms (

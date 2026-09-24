@@ -15,7 +15,9 @@ async function request(method, path, body) {
   }
   if (!res.ok) {
     const message = (data && data.error) || "Ошибка сети";
-    throw new Error(message);
+    const err = new Error(message);
+    if (data && typeof data === "object") Object.assign(err, data);
+    throw err;
   }
   return data;
 }
@@ -50,6 +52,8 @@ export const authApi = {
   session: () => request("GET", "/api/auth/session"),
   forgotPassword: (email) => request("POST", "/api/auth/forgot-password", { email }),
   resetPassword: (token, password) => request("POST", "/api/auth/reset-password", { token, password }),
+  verifyEmail: (email, code) => request("POST", "/api/auth/verify-email", { email, code }),
+  resendCode: (email) => request("POST", "/api/auth/resend-code", { email }),
 };
 
 export const fantyApi = {

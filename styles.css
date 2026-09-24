@@ -295,6 +295,28 @@ label {
   text-transform: uppercase;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field .text-input {
+  padding-right: 46px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 17px;
+  line-height: 1;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--text-dim);
+}
+
 .answer-input {
   min-height: 100px;
   resize: vertical;
