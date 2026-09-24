@@ -12,6 +12,9 @@ export function parseRoute(pathname) {
   if (parts[0] === "sentence") {
     return { name: "sentenceHome" };
   }
+  if (parts[0] === "account") {
+    return { name: "account" };
+  }
   if (parts[0] === "fanty") {
     if (parts[1] === "submit") {
       return { name: "fantySubmit" };

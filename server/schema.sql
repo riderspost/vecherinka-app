@@ -1,3 +1,12 @@
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  reset_token TEXT,
+  reset_token_expires_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS rooms (
   id TEXT PRIMARY KEY,
   code TEXT UNIQUE NOT NULL,
@@ -7,6 +16,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   phase_started_at TEXT,
   game_type TEXT NOT NULL DEFAULT 'sentence',
   device_mode TEXT NOT NULL DEFAULT 'remote',
+  created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

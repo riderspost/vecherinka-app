@@ -132,6 +132,45 @@ body {
   font-size: 15px;
 }
 
+.account-corner {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-email {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-btn:active:not(:disabled) {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.account-btn:disabled {
+  opacity: 0.5;
+}
+
 .game-cards {
   display: flex;
   flex-direction: column;

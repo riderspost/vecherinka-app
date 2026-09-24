@@ -43,6 +43,15 @@ export const api = {
   },
 };
 
+export const authApi = {
+  register: (email, password) => request("POST", "/api/auth/register", { email, password }),
+  login: (email, password) => request("POST", "/api/auth/login", { email, password }),
+  logout: () => request("POST", "/api/auth/logout"),
+  session: () => request("GET", "/api/auth/session"),
+  forgotPassword: (email) => request("POST", "/api/auth/forgot-password", { email }),
+  resetPassword: (token, password) => request("POST", "/api/auth/reset-password", { token, password }),
+};
+
 export const fantyApi = {
   createRoom: (payload) => request("POST", "/api/fanty/rooms", payload),
   addLocalPlayer: (code, token, name, avatarType, avatarValue) =>

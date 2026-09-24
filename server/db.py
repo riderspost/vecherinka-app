@@ -39,6 +39,7 @@ def init_db():
     _ensure_column(db, "rooms", "device_mode", "device_mode TEXT NOT NULL DEFAULT 'remote'")
     _ensure_column(db, "fanty_settings", "pick_mode", "pick_mode TEXT NOT NULL DEFAULT 'random'")
     _ensure_column(db, "fanty_state", "picked_cycle", "picked_cycle TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column(db, "rooms", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL")
     db.commit()
     db.close()
 

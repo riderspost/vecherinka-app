@@ -18,3 +18,7 @@ services:
         sync: false
       - key: OPENROUTER_MODEL
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false

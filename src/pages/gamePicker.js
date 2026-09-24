@@ -1,7 +1,51 @@
 import { navigate } from "../router.js";
+import { authApi } from "../api.js";
+
+function renderAccountCorner() {
+  const corner = document.createElement("div");
+  corner.className = "account-corner";
+  corner.innerHTML = `<button class="account-btn" disabled>...</button>`;
+
+  authApi
+    .session()
+    .then((res) => {
+      corner.innerHTML = "";
+      if (res.authenticated) {
+        const label = document.createElement("span");
+        label.className = "account-email";
+        label.textContent = res.email;
+        const logoutBtn = document.createElement("button");
+        logoutBtn.className = "account-btn";
+        logoutBtn.textContent = "Выйти";
+        logoutBtn.addEventListener("click", async () => {
+          logoutBtn.disabled = true;
+          try {
+            await authApi.logout();
+            navigate("/");
+          } catch (e) {
+            logoutBtn.disabled = false;
+          }
+        });
+        corner.appendChild(label);
+        corner.appendChild(logoutBtn);
+      } else {
+        const loginBtn = document.createElement("button");
+        loginBtn.className = "account-btn";
+        loginBtn.textContent = "Войти";
+        loginBtn.addEventListener("click", () => navigate("/account"));
+        corner.appendChild(loginBtn);
+      }
+    })
+    .catch(() => {
+      corner.innerHTML = "";
+    });
+
+  return corner;
+}
 
 export function renderGamePicker(container) {
   container.innerHTML = "";
+  container.appendChild(renderAccountCorner());
 
   const wrap = document.createElement("div");
   wrap.className = "screen home-screen";

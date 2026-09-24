@@ -70,7 +70,7 @@ def validate_avatar(avatar_type, avatar_value):
     return "emoji", value[:8]
 
 
-def create_room_and_host(db, game_type, name, avatar_type, avatar_value, device_mode="remote"):
+def create_room_and_host(db, game_type, name, avatar_type, avatar_value, device_mode="remote", created_by_user_id=None):
     """Creates a room (in 'lobby' status) with the given host player. Returns (room_id, code, token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN)
     if not name:
@@ -86,8 +86,8 @@ def create_room_and_host(db, game_type, name, avatar_type, avatar_value, device_
 
     room_id = gen_id()
     db.execute(
-        "INSERT INTO rooms (id, code, status, game_type, device_mode) VALUES (?, ?, 'lobby', ?, ?)",
-        (room_id, code, game_type, device_mode),
+        "INSERT INTO rooms (id, code, status, game_type, device_mode, created_by_user_id) VALUES (?, ?, 'lobby', ?, ?, ?)",
+        (room_id, code, game_type, device_mode, created_by_user_id),
     )
     player_id = gen_id()
     token = uuid.uuid4().hex

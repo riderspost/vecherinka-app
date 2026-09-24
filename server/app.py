@@ -1,13 +1,15 @@
 import os
 import uuid
+from datetime import timedelta
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.utils import secure_filename
 
 from . import game
 from .db import get_db, close_db, init_db, register_app
 from .seed_data import seed_prompts
 from .admin import admin_bp
+from .auth import auth_bp
 from .fanty_routes import fanty_bp
 from .fanty_seed import seed_fanty_content
 from .rooms_common import (
@@ -32,6 +34,7 @@ MAX_ANSWER_LEN = 300
 app = Flask(__name__, static_folder=None)
 register_app(app)
 app.register_blueprint(admin_bp)
+app.register_blueprint(auth_bp)
 app.register_blueprint(fanty_bp)
 
 
@@ -53,6 +56,7 @@ app.secret_key = _load_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
 
 with app.app_context():
@@ -86,7 +90,12 @@ def create_room():
     db = get_db()
     try:
         _room_id, code, token, player_id = create_room_and_host(
-            db, "sentence", data.get("name"), data.get("avatarType"), data.get("avatarValue")
+            db,
+            "sentence",
+            data.get("name"),
+            data.get("avatarType"),
+            data.get("avatarValue"),
+            created_by_user_id=session.get("user_id"),
         )
     except RoomError as e:
         return error(e.message, e.status)

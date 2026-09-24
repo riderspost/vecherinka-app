@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from werkzeug.utils import secure_filename
 
 from . import fanty_game as fg
@@ -59,7 +59,13 @@ def create_room():
 
     try:
         room_id, code, token, player_id = create_room_and_host(
-            db, "fanty", data.get("name"), data.get("avatarType"), data.get("avatarValue"), device_mode
+            db,
+            "fanty",
+            data.get("name"),
+            data.get("avatarType"),
+            data.get("avatarValue"),
+            device_mode,
+            created_by_user_id=session.get("user_id"),
         )
     except RoomError as e:
         return error(e.message, e.status)

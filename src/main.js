@@ -5,6 +5,7 @@ import { mountRoomPage } from "./pages/room.js";
 import { renderFantyHome } from "./pages/fanty/home.js";
 import { mountFantyRoomPage } from "./pages/fanty/room.js";
 import { renderFantySubmit } from "./pages/fanty/submit.js";
+import { renderAccountPage } from "./pages/account.js";
 
 const app = document.getElementById("app");
 
@@ -26,6 +27,8 @@ function renderCurrentRoute() {
     mountFantyRoomPage(app, route.code, { asDisplay: true });
   } else if (route.name === "fantySubmit") {
     renderFantySubmit(app);
+  } else if (route.name === "account") {
+    renderAccountPage(app);
   }
 }
 
