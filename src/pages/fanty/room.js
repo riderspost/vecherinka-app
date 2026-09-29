@@ -38,6 +38,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let animating = false;
   let lastBottleAngle = 0;
   let timerIntervalId = null;
+  let currentAudio = null;
 
   function stop() {
     stopped = true;
@@ -161,6 +162,10 @@ export function mountFantyRoomPage(container, code, opts) {
         clearInterval(timerIntervalId);
         timerIntervalId = null;
       }
+      if (currentAudio && (!state.fanty || state.fanty.phase !== "awaiting_action")) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
       container.innerHTML = "";
       const page = document.createElement("div");
       page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
@@ -183,6 +188,13 @@ export function mountFantyRoomPage(container, code, opts) {
         getLastAngle: () => lastBottleAngle,
         setLastAngle: (a) => (lastBottleAngle = a),
         setTimerInterval: (id) => (timerIntervalId = id),
+        setAudio: (a) => (currentAudio = a),
+        stopAudio: () => {
+          if (currentAudio) {
+            currentAudio.pause();
+            currentAudio = null;
+          }
+        },
       };
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
@@ -573,7 +585,9 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       goBtn.addEventListener("click", async () => {
         goBtn.disabled = true;
         if (fanty.musicUrl) {
-          new Audio(fanty.musicUrl).play().catch(() => {});
+          const audio = new Audio(fanty.musicUrl);
+          audio.play().catch(() => {});
+          if (ctrl) ctrl.setAudio(audio);
         }
         try {
           await fantyApi.startPerformance(code, token);
@@ -608,8 +622,9 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
         if (remaining <= 0) {
           timerEl.textContent = "Стооооп!";
           timerEl.classList.add("big-timer-stop");
+          if (ctrl) ctrl.stopAudio();
         } else {
-          timerEl.textContent = `${Math.ceil(remaining / 1000)}с`;
+          timerEl.textContent = `${Math.ceil(remaining / 1000)}`;
         }
       }
       tick();
@@ -662,6 +677,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
     async function resolve(counted) {
       countedBtn.disabled = true;
       notCountedBtn.disabled = true;
+      if (ctrl) ctrl.stopAudio();
       try {
         await fantyApi.resolve(code, token, counted, photosState.files);
       } catch (e) {
