@@ -184,7 +184,7 @@ async function renderDashboard() {
 
       <div id="fanty-subsection-dares">
         <div class="card">
-          <h2 style="margin-top:0">Добавить вручную</h2>
+          <h2 style="margin-top:0" id="dare-form-heading">Добавить вручную</h2>
           <form id="add-dare-form">
             <label>Текст фанта</label>
             <textarea name="text" maxlength="300" placeholder="Выпей стакан воды без использования рук." required></textarea>
@@ -212,7 +212,10 @@ async function renderDashboard() {
               <label>Секунд: <input type="number" id="dare-timer-seconds" value="60" min="5" max="600" style="width:70px" /></label>
             </div>
             <div class="error-box" id="add-dare-error"></div>
-            <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+            <div class="row-actions" style="margin-top:8px">
+              <button type="submit" class="btn" id="dare-submit-btn">Добавить</button>
+              <button type="button" class="btn secondary" id="dare-cancel-edit-btn" style="display:none">Отмена</button>
+            </div>
           </form>
         </div>
 
@@ -351,6 +354,56 @@ async function renderDashboard() {
     }
   });
 
+  let editingDareId = null;
+  const dareFormHeading = document.getElementById("dare-form-heading");
+  const dareSubmitBtn = document.getElementById("dare-submit-btn");
+  const dareCancelEditBtn = document.getElementById("dare-cancel-edit-btn");
+
+  function resetDareForm() {
+    dareForm.reset();
+    updateMixedPairVisibility();
+    updateTimerSecondsVisibility();
+    uploadedAudioFilename = null;
+    audioStatus.textContent = "";
+    document.getElementById("dare-timer-seconds").value = 60;
+    editingDareId = null;
+    dareFormHeading.textContent = "Добавить вручную";
+    dareSubmitBtn.textContent = "Добавить";
+    dareCancelEditBtn.style.display = "none";
+  }
+
+  window.startEditingDare = function (dare) {
+    editingDareId = dare.id;
+    dareForm.elements.text.value = dare.text;
+    dareForm.querySelector(`input[name="kind"][value="${dare.kind}"]`).checked = true;
+    dareForm.elements.mixedPair.checked = dare.mixedPair;
+    updateMixedPairVisibility();
+
+    dareForm.querySelectorAll('input[name="location"]').forEach((el) => {
+      el.checked = dare.locations.includes(el.value);
+    });
+    const moodValue = MOOD_CATEGORIES.find((m) => dare.categories.includes(m.value))?.value || "basic";
+    dareForm.querySelector(`input[name="category"][value="${moodValue}"]`).checked = true;
+    dareForm.querySelectorAll('input[name="attribute"]').forEach((el) => {
+      el.checked = dare.categories.includes(el.value);
+    });
+
+    uploadedAudioFilename = dare.musicUrl ? dare.musicUrl.split("/").pop() : null;
+    audioStatus.textContent = dare.musicUrl ? "Текущий трек сохранится, если не загрузить новый" : "";
+    audioInput.value = "";
+
+    hasTimerCheckbox.checked = dare.hasTimer;
+    updateTimerSecondsVisibility();
+    document.getElementById("dare-timer-seconds").value = dare.timerSeconds || 60;
+
+    dareFormHeading.textContent = `Редактировать фант #${dare.id}`;
+    dareSubmitBtn.textContent = "Сохранить изменения";
+    dareCancelEditBtn.style.display = "";
+    dareForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  dareCancelEditBtn.addEventListener("click", resetDareForm);
+
   dareForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -365,26 +418,23 @@ async function renderDashboard() {
     const errorEl = document.getElementById("add-dare-error");
     errorEl.textContent = "";
     if (!text) return;
+    const payload = {
+      text,
+      kind,
+      mixedPair,
+      locations,
+      categories,
+      musicFilename: uploadedAudioFilename,
+      hasTimer,
+      timerSeconds,
+    };
     try {
-      await api("/fanty/dares", {
-        method: "POST",
-        body: JSON.stringify({
-          text,
-          kind,
-          mixedPair,
-          locations,
-          categories,
-          musicFilename: uploadedAudioFilename,
-          hasTimer,
-          timerSeconds,
-        }),
-      });
-      form.reset();
-      updateMixedPairVisibility();
-      updateTimerSecondsVisibility();
-      uploadedAudioFilename = null;
-      audioStatus.textContent = "";
-      document.getElementById("dare-timer-seconds").value = 60;
+      if (editingDareId) {
+        await api(`/fanty/dares/${editingDareId}`, { method: "PUT", body: JSON.stringify(payload) });
+      } else {
+        await api("/fanty/dares", { method: "POST", body: JSON.stringify(payload) });
+      }
+      resetDareForm();
       await refreshDares();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -502,7 +552,17 @@ function wireDeleteButtons(host, apiBase, refreshFn) {
   });
 }
 
-async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
+function wireEditButtons(host, all, onEdit) {
+  if (!onEdit) return;
+  host.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = all.find((x) => String(x.id) === btn.dataset.edit);
+      if (item) onEdit(item);
+    });
+  });
+}
+
+async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn, onEdit }) {
   const all = await api(apiBase);
   const pending = all.filter((p) => p.status === "pending");
   const active = all.filter((p) => p.status !== "pending");
@@ -522,6 +582,7 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
           <td>
             <div class="row-actions">
               <button class="btn" data-activate="${p.id}">Активировать</button>
+              ${onEdit ? `<button class="btn" data-edit="${p.id}">Редактировать</button>` : ""}
               <button class="btn danger" data-delete="${p.id}">Удалить</button>
             </div>
           </td>
@@ -563,6 +624,7 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
       });
     });
     wireDeleteButtons(pendingHost, apiBase, refreshFn);
+    wireEditButtons(pendingHost, all, onEdit);
   }
 
   document.getElementById(`${idPrefix}-count`).textContent = `Всего: ${active.length}`;
@@ -578,7 +640,12 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
       <tr data-id="${p.id}">
         <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
         <td>${p.uses > 0 ? `<span class="uses-pill">использован ${p.uses}×</span>` : ""}</td>
-        <td><button class="btn danger" data-delete="${p.id}">Удалить</button></td>
+        <td>
+          <div class="row-actions">
+            ${onEdit ? `<button class="btn" data-edit="${p.id}">Редактировать</button>` : ""}
+            <button class="btn danger" data-delete="${p.id}">Удалить</button>
+          </div>
+        </td>
       </tr>
     `
     )
@@ -594,6 +661,7 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn }) {
   `;
 
   wireDeleteButtons(tableHost, apiBase, refreshFn);
+  wireEditButtons(tableHost, all, onEdit);
 }
 
 function refreshPrompts() {
@@ -611,6 +679,7 @@ function refreshDares() {
     idPrefix: "dares",
     textLabel: "Текст",
     refreshFn: refreshDares,
+    onEdit: startEditingDare,
   });
 }
 

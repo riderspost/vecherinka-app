@@ -307,23 +307,21 @@ def admin_upload_audio():
     return jsonify({"filename": filename})
 
 
-@admin_bp.route("/api/fanty/dares", methods=["POST"])
-@admin_required
-def admin_add_dare():
-    data = request.get_json(force=True, silent=True) or {}
+def _parse_dare_payload(data):
+    """Validates + normalizes a create/edit dare payload. Returns (fields, categories, locations, error_response)."""
     text = (data.get("text") or "").strip()
     if not text:
-        return jsonify({"error": "Введите текст фанта"}), 400
+        return None, None, None, (jsonify({"error": "Введите текст фанта"}), 400)
     if len(text) > MAX_PROMPT_LEN:
-        return jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400
+        return None, None, None, (jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400)
     kind = data.get("kind") if data.get("kind") in ("solo", "team") else "solo"
     mixed_pair = bool(data.get("mixedPair")) and kind == "team"
     categories = [c for c in (data.get("categories") or []) if c in fanty_game.CATEGORIES]
     locations = [loc for loc in (data.get("locations") or []) if loc in fanty_game.LOCATIONS]
     if not categories:
-        return jsonify({"error": "Выберите хотя бы одну категорию"}), 400
+        return None, None, None, (jsonify({"error": "Выберите хотя бы одну категорию"}), 400)
     if not locations:
-        return jsonify({"error": "Выберите хотя бы одно место"}), 400
+        return None, None, None, (jsonify({"error": "Выберите хотя бы одно место"}), 400)
 
     music_filename = data.get("musicFilename") or None
     if music_filename and not os.path.isfile(os.path.join(UPLOAD_DIR, os.path.basename(music_filename))):
@@ -337,13 +335,55 @@ def admin_add_dare():
             timer_seconds = 60
         timer_seconds = max(5, min(600, timer_seconds))
 
+    fields = {
+        "text": text,
+        "kind": kind,
+        "mixed_pair": int(mixed_pair),
+        "music_filename": music_filename,
+        "has_timer": int(has_timer),
+        "timer_seconds": timer_seconds,
+    }
+    return fields, categories, locations, None
+
+
+def _dare_json(dare_id, fields, status, uses, categories, locations):
+    return {
+        "id": dare_id,
+        "text": fields["text"],
+        "kind": fields["kind"],
+        "status": status,
+        "uses": uses,
+        "categories": categories,
+        "locations": locations,
+        "mixedPair": bool(fields["mixed_pair"]),
+        "musicUrl": f"/uploads/{fields['music_filename']}" if fields["music_filename"] else None,
+        "hasTimer": bool(fields["has_timer"]),
+        "timerSeconds": fields["timer_seconds"],
+    }
+
+
+@admin_bp.route("/api/fanty/dares", methods=["POST"])
+@admin_required
+def admin_add_dare():
+    data = request.get_json(force=True, silent=True) or {}
+    fields, categories, locations, err = _parse_dare_payload(data)
+    if err:
+        return err
+
     db = get_db()
-    if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (text,)).fetchone():
+    if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (fields["text"],)).fetchone():
         return jsonify({"error": "Такой фант уже есть"}), 400
     cur = db.execute(
         """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename, has_timer, timer_seconds)
            VALUES (?, ?, 'active', ?, ?, ?, ?)""",
-        (text, kind, int(mixed_pair), music_filename, int(has_timer), timer_seconds),
+        (
+            fields["text"],
+            fields["kind"],
+            fields["mixed_pair"],
+            fields["music_filename"],
+            fields["has_timer"],
+            fields["timer_seconds"],
+        ),
     )
     dare_id = cur.lastrowid
     db.executemany(
@@ -355,21 +395,56 @@ def admin_add_dare():
         [(dare_id, loc) for loc in locations],
     )
     db.commit()
-    return jsonify(
-        {
-            "id": dare_id,
-            "text": text,
-            "kind": kind,
-            "status": "active",
-            "uses": 0,
-            "categories": categories,
-            "locations": locations,
-            "mixedPair": mixed_pair,
-            "musicUrl": f"/uploads/{music_filename}" if music_filename else None,
-            "hasTimer": has_timer,
-            "timerSeconds": timer_seconds,
-        }
+    return jsonify(_dare_json(dare_id, fields, "active", 0, categories, locations))
+
+
+@admin_bp.route("/api/fanty/dares/<int:dare_id>", methods=["PUT"])
+@admin_required
+def admin_edit_dare(dare_id):
+    db = get_db()
+    existing = db.execute("SELECT * FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Не найдено"}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    fields, categories, locations, err = _parse_dare_payload(data)
+    if err:
+        return err
+
+    dupe = db.execute(
+        "SELECT 1 FROM fanty_dares WHERE text = ? AND id != ?", (fields["text"], dare_id)
+    ).fetchone()
+    if dupe:
+        return jsonify({"error": "Такой фант уже есть"}), 400
+
+    db.execute(
+        """UPDATE fanty_dares SET text=?, kind=?, mixed_pair=?, music_filename=?, has_timer=?, timer_seconds=?
+           WHERE id=?""",
+        (
+            fields["text"],
+            fields["kind"],
+            fields["mixed_pair"],
+            fields["music_filename"],
+            fields["has_timer"],
+            fields["timer_seconds"],
+            dare_id,
+        ),
     )
+    db.execute("DELETE FROM fanty_dare_categories WHERE dare_id = ?", (dare_id,))
+    db.executemany(
+        "INSERT OR IGNORE INTO fanty_dare_categories (dare_id, category) VALUES (?, ?)",
+        [(dare_id, c) for c in categories],
+    )
+    db.execute("DELETE FROM fanty_dare_locations WHERE dare_id = ?", (dare_id,))
+    db.executemany(
+        "INSERT OR IGNORE INTO fanty_dare_locations (dare_id, location) VALUES (?, ?)",
+        [(dare_id, loc) for loc in locations],
+    )
+    db.commit()
+    uses = db.execute(
+        "SELECT COUNT(*) AS c FROM fanty_rounds WHERE dare_id = ?", (dare_id,)
+    ).fetchone()["c"]
+    return jsonify(_dare_json(dare_id, fields, existing["status"], uses, categories, locations))
 
 
 @admin_bp.route("/api/fanty/dares/<int:dare_id>", methods=["DELETE"])
