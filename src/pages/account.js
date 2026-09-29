@@ -68,6 +68,16 @@ export function renderAccountPage(container) {
     <p class="tagline">Войдите, чтобы видеть историю игр и управлять своими фантами</p>
   `;
 
+  const homeLink = document.createElement("a");
+  homeLink.className = "link-btn";
+  homeLink.href = "/";
+  homeLink.textContent = "← На главную";
+  homeLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigate("/");
+  });
+  wrap.appendChild(homeLink);
+
   const tabs = document.createElement("div");
   tabs.className = "tabs";
   const loginTab = document.createElement("button");
