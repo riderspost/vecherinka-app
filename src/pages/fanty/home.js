@@ -6,6 +6,40 @@ import { LOCATIONS, MOOD_CATEGORIES, ATTRIBUTES, GAME_MODES, PICK_MODES, MIN_PLA
 
 const TOTAL_STEPS = 5;
 
+function optionRow(labelEl, hint) {
+  const row = document.createElement("div");
+  row.className = "option-row";
+
+  const main = document.createElement("div");
+  main.className = "option-row-main";
+  main.appendChild(labelEl);
+
+  if (hint) {
+    const hintBtn = document.createElement("button");
+    hintBtn.type = "button";
+    hintBtn.className = "hint-toggle";
+    hintBtn.textContent = "ⓘ";
+    hintBtn.setAttribute("aria-label", "Что это значит?");
+
+    const hintText = document.createElement("div");
+    hintText.className = "hint-text";
+    hintText.textContent = hint;
+    hintText.hidden = true;
+
+    hintBtn.addEventListener("click", () => {
+      hintText.hidden = !hintText.hidden;
+    });
+
+    main.appendChild(hintBtn);
+    row.appendChild(main);
+    row.appendChild(hintText);
+  } else {
+    row.appendChild(main);
+  }
+
+  return row;
+}
+
 function radioGroup(name, options, defaultValue) {
   const wrap = document.createElement("div");
   wrap.className = "radio-group";
@@ -19,7 +53,7 @@ function radioGroup(name, options, defaultValue) {
     if (opt.value === defaultValue) input.checked = true;
     label.appendChild(input);
     label.appendChild(document.createTextNode(" " + opt.label));
-    wrap.appendChild(label);
+    wrap.appendChild(optionRow(label, opt.hint));
   });
   return {
     element: wrap,
@@ -39,7 +73,7 @@ function checkboxGroup(options, defaultChecked) {
     if (defaultChecked.includes(opt.value)) input.checked = true;
     label.appendChild(input);
     label.appendChild(document.createTextNode(" " + opt.label));
-    wrap.appendChild(label);
+    wrap.appendChild(optionRow(label, opt.hint));
   });
   return {
     element: wrap,
@@ -224,8 +258,16 @@ export function renderFantyHome(container) {
       const deviceGroup = radioGroup(
         "deviceMode",
         [
-          { value: "remote", label: "Каждый со своего телефона" },
-          { value: "local", label: "Все с одного устройства" },
+          {
+            value: "remote",
+            label: "Каждый со своего телефона",
+            hint: "Каждый игрок заходит в комнату по ссылке или QR-коду со своего телефона.",
+          },
+          {
+            value: "local",
+            label: "Все с одного устройства",
+            hint: "Играете все вместе с одного телефона или планшета — хост по очереди добавляет игроков перед началом.",
+          },
         ],
         formState.deviceMode
       );

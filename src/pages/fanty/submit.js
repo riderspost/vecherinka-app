@@ -1,4 +1,4 @@
-import { fantyApi } from "../../api.js";
+import { authApi, fantyApi } from "../../api.js";
 import { navigate } from "../../router.js";
 import { LOCATIONS, CATEGORIES } from "./constants.js";
 
@@ -47,6 +47,46 @@ export function renderFantySubmit(container) {
 
   const wrap = document.createElement("div");
   wrap.className = "screen home-screen";
+  wrap.innerHTML = `<p class="tagline">Проверяем доступ...</p>`;
+  container.appendChild(wrap);
+
+  authApi
+    .session()
+    .then((res) => {
+      if (res.authenticated) {
+        renderForm(wrap);
+      } else {
+        renderLoginRequired(wrap);
+      }
+    })
+    .catch(() => renderLoginRequired(wrap));
+}
+
+function renderLoginRequired(wrap) {
+  wrap.innerHTML = `
+    <h1 class="logo">💡 Предложить фант</h1>
+    <p class="tagline">Предлагать свои фанты и вопросы могут только зарегистрированные пользователи. Войдите или зарегистрируйтесь, чтобы продолжить.</p>
+  `;
+
+  const row = document.createElement("div");
+  row.className = "row-actions";
+
+  const backBtn = document.createElement("button");
+  backBtn.className = "btn";
+  backBtn.textContent = "Назад";
+  backBtn.addEventListener("click", () => navigate("/fanty"));
+
+  const loginBtn = document.createElement("button");
+  loginBtn.className = "btn btn-primary";
+  loginBtn.textContent = "Войти";
+  loginBtn.addEventListener("click", () => navigate("/account"));
+
+  row.appendChild(backBtn);
+  row.appendChild(loginBtn);
+  wrap.appendChild(row);
+}
+
+function renderForm(wrap) {
   wrap.innerHTML = `
     <h1 class="logo">💡 Предложить фант</h1>
     <p class="tagline">Ваш вариант попадёт на проверку администратору и появится в игре после одобрения</p>
@@ -166,7 +206,6 @@ export function renderFantySubmit(container) {
   wrap.appendChild(successEl);
   wrap.appendChild(btn);
   wrap.appendChild(backLink);
-  container.appendChild(wrap);
 
   updateVisibility();
 }

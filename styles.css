@@ -210,6 +210,12 @@ body {
   color: var(--text-dim);
 }
 
+.game-card-players {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
@@ -269,6 +275,44 @@ label {
   accent-color: var(--primary);
   width: 18px;
   height: 18px;
+}
+
+.option-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.option-row-main .radio-option,
+.option-row-main .checkbox-option {
+  flex: 1;
+}
+
+.hint-toggle {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.hint-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .text-input,

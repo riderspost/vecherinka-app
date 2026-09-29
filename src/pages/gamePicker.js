@@ -61,11 +61,13 @@ export function renderGamePicker(container) {
       <span class="game-card-emoji">✏️</span>
       <span class="game-card-title">Продолжи предложение</span>
       <span class="game-card-desc">Придумывайте смешные продолжения фраз и голосуйте за лучшие</span>
+      <span class="game-card-players">От 4 игроков</span>
     </button>
     <button class="game-card" data-path="/fanty">
       <span class="game-card-emoji">🍾</span>
       <span class="game-card-title">Фанты</span>
       <span class="game-card-desc">Крутите бутылочку — правда, действие или командные фанты</span>
+      <span class="game-card-players">От 2 игроков</span>
     </button>
   `;
   cards.querySelectorAll(".game-card").forEach((btn) => {

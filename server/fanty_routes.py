@@ -370,6 +370,9 @@ def state(code):
 
 @fanty_bp.route("/submit", methods=["POST"])
 def submit_content():
+    if not session.get("user_id"):
+        return error("Предлагать свои фанты могут только зарегистрированные пользователи", 401)
+
     data = request.get_json(silent=True) or {}
     content_type = data.get("type")
     text = clean_str(data.get("text"), MAX_TEXT_LEN)
