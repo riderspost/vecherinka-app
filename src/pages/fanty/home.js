@@ -100,6 +100,16 @@ export function renderFantyHome(container) {
     <p class="tagline">Правда, действие и командные фанты для компании</p>
   `;
 
+  const homeLink = document.createElement("a");
+  homeLink.className = "link-btn";
+  homeLink.href = "/";
+  homeLink.textContent = "← На главную";
+  homeLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigate("/");
+  });
+  wrap.appendChild(homeLink);
+
   const formHost = document.createElement("div");
   wrap.appendChild(formHost);
   container.appendChild(wrap);
@@ -192,9 +202,23 @@ export function renderFantyHome(container) {
       const modeGroup = radioGroup("gameMode", GAME_MODES, formState.gameMode);
       formHost.appendChild(modeGroup.element);
 
+      const pairModeWrap = document.createElement("div");
+      const pairModeLabelEl = document.createElement("label");
+      pairModeLabelEl.textContent = "Кто может быть в паре";
+      const pairModeGroup = radioGroup("pairMode", PAIR_MODES, formState.pairMode);
+      pairModeWrap.appendChild(pairModeLabelEl);
+      pairModeWrap.appendChild(pairModeGroup.element);
+      pairModeWrap.hidden = formState.gameMode !== "team";
+      formHost.appendChild(pairModeWrap);
+
+      modeGroup.element.addEventListener("change", () => {
+        pairModeWrap.hidden = modeGroup.getValue() !== "team";
+      });
+
       const nextBtn = navButtons();
       nextBtn.addEventListener("click", () => {
         formState.gameMode = modeGroup.getValue();
+        formState.pairMode = formState.gameMode === "team" ? pairModeGroup.getValue() : "any";
         stepIndex += 1;
         renderStep();
       });
@@ -234,11 +258,6 @@ export function renderFantyHome(container) {
       pickModeLabelEl.textContent = "Кого выбирает бутылка";
       const pickModeGroup = radioGroup("pickMode", PICK_MODES, formState.pickMode);
 
-      const isTeam = formState.gameMode === "team";
-      const pairModeLabelEl = document.createElement("label");
-      pairModeLabelEl.textContent = "Кто может быть в паре";
-      const pairModeGroup = isTeam ? radioGroup("pairMode", PAIR_MODES, formState.pairMode) : null;
-
       const errorEl = document.createElement("div");
       errorEl.className = "error-msg";
 
@@ -248,10 +267,6 @@ export function renderFantyHome(container) {
       formHost.appendChild(attributesGroup.element);
       formHost.appendChild(pickModeLabelEl);
       formHost.appendChild(pickModeGroup.element);
-      if (isTeam) {
-        formHost.appendChild(pairModeLabelEl);
-        formHost.appendChild(pairModeGroup.element);
-      }
       formHost.appendChild(errorEl);
 
       const nextBtn = navButtons();
@@ -265,7 +280,6 @@ export function renderFantyHome(container) {
         formState.categories = categories;
         formState.attributes = attributes;
         formState.pickMode = pickModeGroup.getValue();
-        formState.pairMode = isTeam ? pairModeGroup.getValue() : "any";
         stepIndex += 1;
         renderStep();
       });
@@ -391,57 +405,124 @@ export function renderFantyHome(container) {
   }
 
   function showJoinForm() {
+    renderJoinCodeStep("");
+  }
+
+  function renderJoinCodeStep(prefillCode) {
     formHost.innerHTML = "";
+
+    const stepLabel = document.createElement("p");
+    stepLabel.className = "tagline";
+    stepLabel.textContent = "Шаг 1 из 2";
+    formHost.appendChild(stepLabel);
+
+    const h = document.createElement("h2");
+    h.textContent = "Код комнаты";
+    formHost.appendChild(h);
+    const desc = document.createElement("p");
+    desc.className = "tagline";
+    desc.textContent = "Введите код, который вам прислал организатор.";
+    formHost.appendChild(desc);
 
     const codeInput = document.createElement("input");
     codeInput.className = "text-input code-input";
     codeInput.placeholder = "КОД КОМНАТЫ";
     codeInput.maxLength = 5;
+    codeInput.value = prefillCode;
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "error-msg";
+
+    const row = document.createElement("div");
+    row.className = "row-actions";
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Назад";
+    backBtn.addEventListener("click", showChoiceScreen);
+    const nextBtn = document.createElement("button");
+    nextBtn.className = "btn btn-primary";
+    nextBtn.textContent = "Далее";
+    row.appendChild(backBtn);
+    row.appendChild(nextBtn);
+
+    nextBtn.addEventListener("click", async () => {
+      const code = codeInput.value.trim().toUpperCase();
+      if (code.length !== 5) {
+        errorEl.textContent = "Введите код комнаты";
+        return;
+      }
+      nextBtn.disabled = true;
+      errorEl.textContent = "";
+      try {
+        const res = await api.getTakenEmojis(code);
+        if (res.gameType !== "fanty") {
+          throw new Error("Этот код от другой игры");
+        }
+        if (res.status !== "lobby") {
+          throw new Error("Игра уже началась, подключиться нельзя");
+        }
+        if (res.deviceMode === "local") {
+          throw new Error("Эта комната только для локальных игроков — попросите организатора добавить вас");
+        }
+        renderJoinDetailsStep(code, res);
+      } catch (e) {
+        errorEl.textContent = e.message;
+        nextBtn.disabled = false;
+      }
+    });
+
+    formHost.appendChild(codeInput);
+    formHost.appendChild(errorEl);
+    formHost.appendChild(row);
+  }
+
+  function renderJoinDetailsStep(code, info) {
+    formHost.innerHTML = "";
+
+    const stepLabel = document.createElement("p");
+    stepLabel.className = "tagline";
+    stepLabel.textContent = "Шаг 2 из 2";
+    formHost.appendChild(stepLabel);
+
+    const h = document.createElement("h2");
+    h.textContent = `Комната ${code}`;
+    formHost.appendChild(h);
+    const desc = document.createElement("p");
+    desc.className = "tagline";
+    desc.textContent = "Представьтесь остальным игрокам.";
+    formHost.appendChild(desc);
 
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
     nameInput.maxLength = 30;
 
-    const picker = createAvatarPicker();
+    const picker = createAvatarPicker(null, info.taken || []);
 
-    let requireGender = false;
+    const requireGender = Boolean(info.requireGender);
     const genderLabel = document.createElement("label");
     genderLabel.textContent = "Пол";
-    genderLabel.hidden = true;
     const genderGroup = radioGroup("gender", GENDERS, null);
-    genderGroup.element.hidden = true;
-
-    codeInput.addEventListener("input", async () => {
-      const code = codeInput.value.trim().toUpperCase();
-      if (code.length !== 5) {
-        requireGender = false;
-        genderLabel.hidden = true;
-        genderGroup.element.hidden = true;
-        return;
-      }
-      try {
-        const res = await api.getTakenEmojis(code);
-        requireGender = Boolean(res.requireGender);
-      } catch (e) {
-        requireGender = false;
-      }
-      genderLabel.hidden = !requireGender;
-      genderGroup.element.hidden = !requireGender;
-    });
-
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
 
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
 
+    const row = document.createElement("div");
+    row.className = "row-actions";
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Назад";
+    backBtn.addEventListener("click", () => renderJoinCodeStep(code));
+    const btn = document.createElement("button");
+    btn.className = "btn btn-primary";
+    btn.textContent = "Присоединиться";
+    row.appendChild(backBtn);
+    row.appendChild(btn);
+
     btn.addEventListener("click", async () => {
-      const code = codeInput.value.trim().toUpperCase();
       const name = nameInput.value.trim();
-      if (!code || !name) {
-        errorEl.textContent = "Заполните код и имя";
+      if (!name) {
+        errorEl.textContent = "Введите имя";
         return;
       }
       const gender = requireGender ? genderGroup.getValue() : null;
@@ -462,21 +543,12 @@ export function renderFantyHome(container) {
       }
     });
 
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", showChoiceScreen);
-
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    row.appendChild(backBtn);
-    row.appendChild(btn);
-
-    formHost.appendChild(codeInput);
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
-    formHost.appendChild(genderLabel);
-    formHost.appendChild(genderGroup.element);
+    if (requireGender) {
+      formHost.appendChild(genderLabel);
+      formHost.appendChild(genderGroup.element);
+    }
     formHost.appendChild(errorEl);
     formHost.appendChild(row);
   }

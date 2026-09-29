@@ -110,7 +110,12 @@ def taken_emojis(code):
     room = get_room_or_404(db, code)
     if not room:
         return error("Комната не найдена", 404)
-    result = {"taken": taken_emojis_for_room(db, room["id"])}
+    result = {
+        "taken": taken_emojis_for_room(db, room["id"]),
+        "gameType": room["game_type"],
+        "status": room["status"],
+        "deviceMode": room["device_mode"],
+    }
     if room["game_type"] == "fanty":
         settings = fg.get_settings(db, room["id"])
         result["requireGender"] = fg.gender_required(settings)
