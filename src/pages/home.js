@@ -13,25 +13,33 @@ export function renderHome(container) {
     <p class="tagline">Простые игры для весёлой компании</p>
   `;
 
-  const tabs = document.createElement("div");
-  tabs.className = "tabs";
-  const createTab = document.createElement("button");
-  createTab.className = "tab active";
-  createTab.textContent = "Создать комнату";
-  const joinTab = document.createElement("button");
-  joinTab.className = "tab";
-  joinTab.textContent = "У меня есть код";
-  tabs.appendChild(createTab);
-  tabs.appendChild(joinTab);
-  wrap.appendChild(tabs);
-
   const formHost = document.createElement("div");
   wrap.appendChild(formHost);
   container.appendChild(wrap);
 
+  function showChoiceScreen() {
+    formHost.innerHTML = "";
+
+    const cards = document.createElement("div");
+    cards.className = "game-cards";
+    cards.innerHTML = `
+      <button class="game-card" data-choice="create">
+        <span class="game-card-emoji">🆕</span>
+        <span class="game-card-title">Создать комнату</span>
+        <span class="game-card-desc">Начать новую игру</span>
+      </button>
+      <button class="game-card" data-choice="join">
+        <span class="game-card-emoji">🔑</span>
+        <span class="game-card-title">У меня есть код</span>
+        <span class="game-card-desc">Присоединиться к уже созданной комнате</span>
+      </button>
+    `;
+    cards.querySelector('[data-choice="create"]').addEventListener("click", showCreateForm);
+    cards.querySelector('[data-choice="join"]').addEventListener("click", showJoinForm);
+    formHost.appendChild(cards);
+  }
+
   function showCreateForm() {
-    createTab.classList.add("active");
-    joinTab.classList.remove("active");
     formHost.innerHTML = "";
 
     const nameInput = document.createElement("input");
@@ -67,15 +75,23 @@ export function renderHome(container) {
       }
     });
 
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Назад";
+    backBtn.addEventListener("click", showChoiceScreen);
+
+    const row = document.createElement("div");
+    row.className = "row-actions";
+    row.appendChild(backBtn);
+    row.appendChild(btn);
+
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
     formHost.appendChild(errorEl);
-    formHost.appendChild(btn);
+    formHost.appendChild(row);
   }
 
   function showJoinForm() {
-    joinTab.classList.add("active");
-    createTab.classList.remove("active");
     formHost.innerHTML = "";
 
     const codeInput = document.createElement("input");
@@ -118,14 +134,22 @@ export function renderHome(container) {
       }
     });
 
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Назад";
+    backBtn.addEventListener("click", showChoiceScreen);
+
+    const row = document.createElement("div");
+    row.className = "row-actions";
+    row.appendChild(backBtn);
+    row.appendChild(btn);
+
     formHost.appendChild(codeInput);
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
     formHost.appendChild(errorEl);
-    formHost.appendChild(btn);
+    formHost.appendChild(row);
   }
 
-  createTab.addEventListener("click", showCreateForm);
-  joinTab.addEventListener("click", showJoinForm);
-  showCreateForm();
+  showChoiceScreen();
 }
