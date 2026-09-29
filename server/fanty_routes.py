@@ -48,7 +48,7 @@ def create_room():
     categories = [c for c in (data.get("categories") or []) if c in fg.CATEGORIES]
     if not categories:
         return error("Выберите хотя бы один тип фантов")
-    pick_mode = data.get("pickMode") if data.get("pickMode") in fg.PICK_MODES else "random"
+    pick_mode = data.get("pickMode") if data.get("pickMode") in fg.PICK_MODES else "fair"
 
     db = get_db()
     dare_count, truth_count = fg.content_pool_sizes(db, game_mode, location, categories)
@@ -117,8 +117,10 @@ def start_room(code):
     if room["status"] != "lobby":
         return error("Игра уже началась")
     active = fg.get_active_players(db, room["id"])
-    if len(active) < fg.MIN_PLAYERS:
-        return error(f"Нужно минимум {fg.MIN_PLAYERS} игрока(ов)")
+    settings = fg.get_settings(db, room["id"])
+    min_players = fg.min_players_for(settings["game_mode"])
+    if len(active) < min_players:
+        return error(f"Нужно минимум {min_players} игрока(ов)")
     fg.start_game(db, room)
     return jsonify({"ok": True})
 
@@ -295,8 +297,8 @@ def _build_state(db, room, player):
         },
         "players": [player_public(p) for p in players],
         "me": player_public(player),
-        "canStart": room["status"] == "lobby" and active_count >= fg.MIN_PLAYERS,
-        "minPlayers": fg.MIN_PLAYERS,
+        "canStart": room["status"] == "lobby" and active_count >= fg.min_players_for(settings["game_mode"]),
+        "minPlayers": fg.min_players_for(settings["game_mode"]),
     }
 
     if room["status"] == "finished":

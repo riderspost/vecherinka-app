@@ -4,7 +4,7 @@ import threading
 
 from .rooms_common import gen_id
 
-MIN_PLAYERS = 2
+MIN_PLAYERS_BY_MODE = {"truth_or_dare": 2, "solo": 2, "team": 3}
 MAX_PHOTOS = 5
 LOCATIONS = ("street", "apartment", "bar", "country_house")
 MOOD_CATEGORIES = ("basic", "flirt", "flirt_plus")
@@ -12,6 +12,10 @@ ATTRIBUTES = ("alcohol", "food")
 CATEGORIES = MOOD_CATEGORIES + ATTRIBUTES
 GAME_MODES = ("truth_or_dare", "solo", "team")
 PICK_MODES = ("random", "fair")
+
+
+def min_players_for(game_mode):
+    return MIN_PLAYERS_BY_MODE.get(game_mode, 2)
 
 _lock = threading.Lock()
 

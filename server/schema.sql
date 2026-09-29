@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS fanty_settings (
   game_mode TEXT NOT NULL,
   location TEXT NOT NULL,
   categories TEXT NOT NULL,
-  pick_mode TEXT NOT NULL DEFAULT 'random'
+  pick_mode TEXT NOT NULL DEFAULT 'fair'
 );
 
 CREATE TABLE IF NOT EXISTS fanty_state (
