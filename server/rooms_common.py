@@ -5,6 +5,7 @@ import uuid
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
 ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
+ALLOWED_AUDIO_EXT = {"mp3", "ogg", "wav", "m4a"}
 MAX_NAME_LEN = 30
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no O/0/I/1
 

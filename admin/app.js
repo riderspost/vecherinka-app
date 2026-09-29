@@ -46,9 +46,10 @@ function escapeHtml(str) {
 }
 
 async function api(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
   const res = await fetch(API + path, {
     credentials: "same-origin",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    headers: options.body && !isFormData ? { "Content-Type": "application/json" } : undefined,
     ...options,
   });
   let data = null;
@@ -201,6 +202,13 @@ async function renderDashboard() {
             <div class="row" id="dare-category"></div>
             <label>Атрибуты (необязательно)</label>
             <div class="row" id="dare-attributes"></div>
+            <label>Музыка (необязательно)</label>
+            <input type="file" id="dare-audio-input" accept="audio/*" />
+            <div id="dare-audio-status" class="hint"></div>
+            <div class="row">
+              <label><input type="checkbox" id="dare-has-timer" /> Таймер</label>
+              <label>Секунд: <input type="number" id="dare-timer-seconds" value="60" min="5" max="600" style="width:70px" /></label>
+            </div>
             <div class="error-box" id="add-dare-error"></div>
             <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
           </form>
@@ -313,6 +321,26 @@ async function renderDashboard() {
   dareForm.querySelectorAll('input[name="kind"]').forEach((el) => el.addEventListener("change", updateMixedPairVisibility));
   updateMixedPairVisibility();
 
+  let uploadedAudioFilename = null;
+  const audioInput = document.getElementById("dare-audio-input");
+  const audioStatus = document.getElementById("dare-audio-status");
+  audioInput.addEventListener("change", async () => {
+    const file = audioInput.files && audioInput.files[0];
+    if (!file) return;
+    uploadedAudioFilename = null;
+    audioStatus.textContent = "Загрузка...";
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await api("/fanty/upload-audio", { method: "POST", body: form });
+      uploadedAudioFilename = res.filename;
+      audioStatus.textContent = `Загружено: ${file.name}`;
+    } catch (err) {
+      audioStatus.textContent = err.message;
+      audioInput.value = "";
+    }
+  });
+
   dareForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -322,13 +350,30 @@ async function renderDashboard() {
     const locations = Array.from(form.querySelectorAll('input[name="location"]:checked')).map((i) => i.value);
     const attributes = Array.from(form.querySelectorAll('input[name="attribute"]:checked')).map((i) => i.value);
     const categories = [form.elements.category.value, ...attributes];
+    const hasTimer = document.getElementById("dare-has-timer").checked;
+    const timerSeconds = parseInt(document.getElementById("dare-timer-seconds").value, 10) || 60;
     const errorEl = document.getElementById("add-dare-error");
     errorEl.textContent = "";
     if (!text) return;
     try {
-      await api("/fanty/dares", { method: "POST", body: JSON.stringify({ text, kind, mixedPair, locations, categories }) });
+      await api("/fanty/dares", {
+        method: "POST",
+        body: JSON.stringify({
+          text,
+          kind,
+          mixedPair,
+          locations,
+          categories,
+          musicFilename: uploadedAudioFilename,
+          hasTimer,
+          timerSeconds,
+        }),
+      });
       form.reset();
       updateMixedPairVisibility();
+      uploadedAudioFilename = null;
+      audioStatus.textContent = "";
+      document.getElementById("dare-timer-seconds").value = 60;
       await refreshDares();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -361,6 +406,8 @@ function tagsHtml(item) {
   const parts = [];
   if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
   if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
+  if (item.musicUrl) parts.push('<span class="tag-pill tag-music">🎵 музыка</span>');
+  if (item.hasTimer) parts.push(`<span class="tag-pill tag-timer">⏱ ${item.timerSeconds}с</span>`);
   (item.locations || []).forEach((l) => {
     parts.push(`<span class="tag-pill tag-location">${escapeHtml(labelFor(LOCATIONS, l))}</span>`);
   });

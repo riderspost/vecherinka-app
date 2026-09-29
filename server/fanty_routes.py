@@ -181,6 +181,25 @@ def choose(code):
     return jsonify({"ok": True})
 
 
+@fanty_bp.route("/rooms/<code>/start-performance", methods=["POST"])
+def start_performance(code):
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    data = request.get_json(silent=True) or {}
+    player = get_player_or_404(db, room["id"], data.get("token"))
+    if not player:
+        return error("Игрок не найден", 404)
+    state = fg.get_state(db, room["id"])
+    if state["phase"] != "awaiting_action":
+        return error("Сейчас нельзя это начать")
+    if not fg.can_act_as_picked(room, state, player):
+        return error("Начать может только выполняющий фант")
+    fg.start_performance(db, room)
+    return jsonify({"ok": True})
+
+
 @fanty_bp.route("/rooms/<code>/spin-partner", methods=["POST"])
 def spin_partner(code):
     db = get_db()
@@ -353,7 +372,8 @@ def _build_state(db, room, player):
         text = None
         if fstate["current_content_type"] == "dare":
             row = db.execute(
-                "SELECT text FROM fanty_dares WHERE id = ?", (fstate["current_dare_id"],)
+                "SELECT text, music_filename, has_timer, timer_seconds FROM fanty_dares WHERE id = ?",
+                (fstate["current_dare_id"],),
             ).fetchone()
             text = row["text"] if row else None
             if text and fstate["current_partner_id"]:
@@ -362,6 +382,10 @@ def _build_state(db, room, player):
                     players_by_id.get(fstate["current_picked_id"], placeholder),
                     players_by_id.get(fstate["current_partner_id"], placeholder),
                 )
+            fanty["musicUrl"] = f"/uploads/{row['music_filename']}" if row and row["music_filename"] else None
+            fanty["hasTimer"] = bool(row["has_timer"]) if row else False
+            fanty["timerSeconds"] = row["timer_seconds"] if row else None
+            fanty["performanceStartedAt"] = fstate["performance_started_at"]
         elif fstate["current_content_type"] == "truth":
             row = db.execute(
                 "SELECT text FROM fanty_truths WHERE id = ?", (fstate["current_truth_id"],)

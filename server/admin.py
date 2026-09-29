@@ -1,13 +1,16 @@
 import hmac
 import os
 import sqlite3
+import uuid
 from functools import wraps
 
 from flask import Blueprint, request, jsonify, session, send_from_directory
+from werkzeug.utils import secure_filename
 
 from .db import get_db
 from . import ai_prompts
 from . import fanty_game
+from .rooms_common import UPLOAD_DIR, ALLOWED_AUDIO_EXT
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADMIN_DIR = os.path.join(BASE_DIR, "admin")
@@ -258,6 +261,7 @@ def admin_list_dares():
     db = get_db()
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair,
+                  d.music_filename, d.has_timer, d.timer_seconds,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d ORDER BY d.id DESC"""
     ).fetchall()
@@ -281,9 +285,26 @@ def admin_list_dares():
                 "categories": cats,
                 "locations": locs,
                 "mixedPair": bool(r["mixed_pair"]),
+                "musicUrl": f"/uploads/{r['music_filename']}" if r["music_filename"] else None,
+                "hasTimer": bool(r["has_timer"]),
+                "timerSeconds": r["timer_seconds"],
             }
         )
     return jsonify(result)
+
+
+@admin_bp.route("/api/fanty/upload-audio", methods=["POST"])
+@admin_required
+def admin_upload_audio():
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "Файл не передан"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_AUDIO_EXT:
+        return jsonify({"error": "Недопустимый формат файла (нужен mp3/ogg/wav/m4a)"}), 400
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_DIR, secure_filename(filename)))
+    return jsonify({"filename": filename})
 
 
 @admin_bp.route("/api/fanty/dares", methods=["POST"])
@@ -304,12 +325,25 @@ def admin_add_dare():
     if not locations:
         return jsonify({"error": "Выберите хотя бы одно место"}), 400
 
+    music_filename = data.get("musicFilename") or None
+    if music_filename and not os.path.isfile(os.path.join(UPLOAD_DIR, os.path.basename(music_filename))):
+        music_filename = None
+    has_timer = bool(data.get("hasTimer"))
+    timer_seconds = 60
+    if has_timer:
+        try:
+            timer_seconds = int(data.get("timerSeconds") or 60)
+        except (TypeError, ValueError):
+            timer_seconds = 60
+        timer_seconds = max(5, min(600, timer_seconds))
+
     db = get_db()
     if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (text,)).fetchone():
         return jsonify({"error": "Такой фант уже есть"}), 400
     cur = db.execute(
-        "INSERT INTO fanty_dares (text, kind, status, mixed_pair) VALUES (?, ?, 'active', ?)",
-        (text, kind, int(mixed_pair)),
+        """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename, has_timer, timer_seconds)
+           VALUES (?, ?, 'active', ?, ?, ?, ?)""",
+        (text, kind, int(mixed_pair), music_filename, int(has_timer), timer_seconds),
     )
     dare_id = cur.lastrowid
     db.executemany(
@@ -331,6 +365,9 @@ def admin_add_dare():
             "categories": categories,
             "locations": locations,
             "mixedPair": mixed_pair,
+            "musicUrl": f"/uploads/{music_filename}" if music_filename else None,
+            "hasTimer": has_timer,
+            "timerSeconds": timer_seconds,
         }
     )
 

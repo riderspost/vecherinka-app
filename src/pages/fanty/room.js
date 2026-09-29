@@ -37,6 +37,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let stopped = false;
   let animating = false;
   let lastBottleAngle = 0;
+  let timerIntervalId = null;
 
   function stop() {
     stopped = true;
@@ -156,6 +157,10 @@ export function mountFantyRoomPage(container, code, opts) {
     tick();
 
     function render(state, token) {
+      if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        timerIntervalId = null;
+      }
       container.innerHTML = "";
       const page = document.createElement("div");
       page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
@@ -177,6 +182,7 @@ export function mountFantyRoomPage(container, code, opts) {
         rerender: (s) => render(s, token),
         getLastAngle: () => lastBottleAngle,
         setLastAngle: (a) => (lastBottleAngle = a),
+        setTimerInterval: (id) => (timerIntervalId = id),
       };
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
@@ -508,7 +514,7 @@ function renderPlaying(wrap, state, token, code, ctrl) {
       panel.appendChild(msg);
     }
   } else if (fanty.phase === "awaiting_action") {
-    renderAwaitingAction(panel, state, token, code, players);
+    renderAwaitingAction(panel, state, token, code, players, ctrl);
   }
 
   wrap.appendChild(panel);
@@ -532,7 +538,7 @@ function renderPlaying(wrap, state, token, code, ctrl) {
   }
 }
 
-function renderAwaitingAction(panel, state, token, code, players) {
+function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   const fanty = state.fanty;
   const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
   const partnerName = fanty.partnerPlayerId
@@ -555,6 +561,67 @@ function renderAwaitingAction(panel, state, token, code, players) {
   text.className = "prompt-text";
   text.textContent = fanty.contentText || "…";
   panel.appendChild(text);
+
+  const needsStart = Boolean(fanty.hasTimer || fanty.musicUrl);
+  const started = !needsStart || Boolean(fanty.performanceStartedAt);
+
+  if (!started) {
+    if (fanty.canAct) {
+      const goBtn = document.createElement("button");
+      goBtn.className = "btn btn-primary";
+      goBtn.textContent = "Поехали!";
+      goBtn.addEventListener("click", async () => {
+        goBtn.disabled = true;
+        if (fanty.musicUrl) {
+          new Audio(fanty.musicUrl).play().catch(() => {});
+        }
+        try {
+          await fantyApi.startPerformance(code, token);
+          const fresh = await fantyApi.getState(code, token);
+          if (ctrl) ctrl.rerender(fresh);
+        } catch (e) {
+          alert(e.message);
+          goBtn.disabled = false;
+        }
+      });
+      panel.appendChild(goBtn);
+    } else {
+      const msg = document.createElement("p");
+      msg.className = "tagline";
+      msg.textContent = "Ждём, когда начнут...";
+      panel.appendChild(msg);
+    }
+    return;
+  }
+
+  if (needsStart) {
+    if (fanty.hasTimer) {
+      const timerEl = document.createElement("div");
+      timerEl.className = "big-timer";
+      panel.appendChild(timerEl);
+
+      const startedAt = new Date(fanty.performanceStartedAt).getTime();
+      const totalMs = fanty.timerSeconds * 1000;
+
+      function tick() {
+        const remaining = startedAt + totalMs - Date.now();
+        if (remaining <= 0) {
+          timerEl.textContent = "Стооооп!";
+          timerEl.classList.add("big-timer-stop");
+        } else {
+          timerEl.textContent = `${Math.ceil(remaining / 1000)}с`;
+        }
+      }
+      tick();
+      if (ctrl) ctrl.setTimerInterval(setInterval(tick, 250));
+    }
+    if (fanty.musicUrl) {
+      const musicMsg = document.createElement("p");
+      musicMsg.className = "tagline";
+      musicMsg.textContent = "🎵 Играет музыка";
+      panel.appendChild(musicMsg);
+    }
+  }
 
   if (fanty.canResolve) {
     const photosState = { files: [] };

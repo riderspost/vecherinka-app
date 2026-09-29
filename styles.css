@@ -605,6 +605,34 @@ label {
   color: var(--accent);
 }
 
+.big-timer {
+  text-align: center;
+  font-size: 56px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.big-timer-stop {
+  color: var(--primary);
+  animation: stopPulse 0.6s ease-in-out infinite;
+}
+
+@keyframes stopPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .big-timer-stop {
+    animation: none;
+  }
+}
+
 .spinner {
   align-self: center;
   width: 30px;

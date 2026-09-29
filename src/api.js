@@ -65,6 +65,7 @@ export const fantyApi = {
     request("GET", `/api/fanty/rooms/${code}/state?token=${encodeURIComponent(token)}`),
   spin: (code, token) => request("POST", `/api/fanty/rooms/${code}/spin`, { token }),
   choose: (code, token, choice) => request("POST", `/api/fanty/rooms/${code}/choose`, { token, choice }),
+  startPerformance: (code, token) => request("POST", `/api/fanty/rooms/${code}/start-performance`, { token }),
   spinPartner: (code, token) => request("POST", `/api/fanty/rooms/${code}/spin-partner`, { token }),
   resolve: (code, token, counted, photoFilenames) =>
     request("POST", `/api/fanty/rooms/${code}/resolve`, { token, counted, photoFilenames }),

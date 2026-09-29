@@ -99,7 +99,10 @@ CREATE TABLE IF NOT EXISTS fanty_dares (
   status TEXT NOT NULL DEFAULT 'active',
   created_by_player_id TEXT REFERENCES players(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  mixed_pair INTEGER NOT NULL DEFAULT 0
+  mixed_pair INTEGER NOT NULL DEFAULT 0,
+  music_filename TEXT,
+  has_timer INTEGER NOT NULL DEFAULT 0,
+  timer_seconds INTEGER NOT NULL DEFAULT 60
 );
 
 CREATE TABLE IF NOT EXISTS fanty_dare_locations (
@@ -148,7 +151,8 @@ CREATE TABLE IF NOT EXISTS fanty_state (
   current_dare_id INTEGER REFERENCES fanty_dares(id),
   current_truth_id INTEGER REFERENCES fanty_truths(id),
   round_number INTEGER NOT NULL DEFAULT 0,
-  picked_cycle TEXT NOT NULL DEFAULT '[]'
+  picked_cycle TEXT NOT NULL DEFAULT '[]',
+  performance_started_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS fanty_rounds (

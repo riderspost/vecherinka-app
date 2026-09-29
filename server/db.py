@@ -46,6 +46,10 @@ def init_db():
     _ensure_column(db, "players", "gender", "gender TEXT")
     _ensure_column(db, "fanty_dares", "mixed_pair", "mixed_pair INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "fanty_settings", "pair_mode", "pair_mode TEXT NOT NULL DEFAULT 'any'")
+    _ensure_column(db, "fanty_dares", "music_filename", "music_filename TEXT")
+    _ensure_column(db, "fanty_dares", "has_timer", "has_timer INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_dares", "timer_seconds", "timer_seconds INTEGER NOT NULL DEFAULT 60")
+    _ensure_column(db, "fanty_state", "performance_started_at", "performance_started_at TEXT")
     db.commit()
     db.close()
 

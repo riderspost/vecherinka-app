@@ -208,6 +208,16 @@ tr:hover td { background: rgba(255, 255, 255, 0.03); }
   color: #7ee787;
 }
 
+.tag-music {
+  background: rgba(159, 122, 234, 0.15);
+  color: #b39ffb;
+}
+
+.tag-timer {
+  background: rgba(255, 210, 63, 0.15);
+  color: #ffd23f;
+}
+
 .prompt-count {
   color: var(--text-muted);
   font-size: 13px;

@@ -1,6 +1,7 @@
 import json
 import random
 import threading
+from datetime import datetime
 
 from .rooms_common import gen_id
 
@@ -199,14 +200,16 @@ def spin_main(db, room):
             db.execute(
                 f"""UPDATE fanty_state SET phase='awaiting_choice', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type=NULL,
-                   current_dare_id=NULL, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                   current_dare_id=NULL, current_truth_id=NULL, performance_started_at=NULL,
+                   round_number=?{cycle_sql} WHERE room_id=?""",
                 (picked, round_number) + cycle_params + (room["id"],),
             )
         elif settings["game_mode"] == "team":
             db.execute(
                 f"""UPDATE fanty_state SET phase='awaiting_partner_spin', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type=NULL,
-                   current_dare_id=NULL, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                   current_dare_id=NULL, current_truth_id=NULL, performance_started_at=NULL,
+                   round_number=?{cycle_sql} WHERE room_id=?""",
                 (picked, round_number) + cycle_params + (room["id"],),
             )
         else:  # solo
@@ -214,7 +217,8 @@ def spin_main(db, room):
             db.execute(
                 f"""UPDATE fanty_state SET phase='awaiting_action', current_picked_id=?,
                    current_partner_id=NULL, current_choice=NULL, current_content_type='dare',
-                   current_dare_id=?, current_truth_id=NULL, round_number=?{cycle_sql} WHERE room_id=?""",
+                   current_dare_id=?, current_truth_id=NULL, performance_started_at=NULL,
+                   round_number=?{cycle_sql} WHERE room_id=?""",
                 (picked, dare_id, round_number) + cycle_params + (room["id"],),
             )
         db.commit()
@@ -232,7 +236,8 @@ def choose_truth_or_action(db, room, choice):
             content_type = "dare"
         db.execute(
             """UPDATE fanty_state SET phase='awaiting_action', current_choice=?,
-               current_content_type=?, current_dare_id=?, current_truth_id=?
+               current_content_type=?, current_dare_id=?, current_truth_id=?,
+               performance_started_at=NULL
                WHERE room_id=?""",
             (
                 choice,
@@ -241,6 +246,16 @@ def choose_truth_or_action(db, room, choice):
                 content_id if content_type == "truth" else None,
                 room["id"],
             ),
+        )
+        db.commit()
+
+
+def start_performance(db, room):
+    with _lock:
+        db.execute(
+            """UPDATE fanty_state SET performance_started_at=?
+               WHERE room_id=? AND performance_started_at IS NULL""",
+            (datetime.utcnow().isoformat() + "Z", room["id"]),
         )
         db.commit()
 
@@ -261,7 +276,8 @@ def spin_partner(db, room):
         dare_id = pick_dare(db, room["id"], settings, "team")
         db.execute(
             """UPDATE fanty_state SET phase='awaiting_action', current_partner_id=?,
-               current_content_type='dare', current_dare_id=?, current_truth_id=NULL
+               current_content_type='dare', current_dare_id=?, current_truth_id=NULL,
+               performance_started_at=NULL
                WHERE room_id=?""",
             (partner, dare_id, room["id"]),
         )
@@ -309,7 +325,8 @@ def resolve_round(db, room, counted, photo_filenames):
         db.execute(
             """UPDATE fanty_state SET phase='ready_to_spin', next_spinner_id=?,
                current_picked_id=NULL, current_partner_id=NULL, current_choice=NULL,
-               current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL
+               current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL,
+               performance_started_at=NULL
                WHERE room_id=?""",
             (next_spinner, room["id"]),
         )
