@@ -9,8 +9,8 @@ export function renderHome(container) {
   const wrap = document.createElement("div");
   wrap.className = "screen home-screen";
   wrap.innerHTML = `
-    <h1 class="logo">🎉 Вечеринка</h1>
-    <p class="tagline">Простые игры для весёлой компании</p>
+    <h1 class="logo">✏️ Продолжи предложение</h1>
+    <p class="tagline">Придумывайте смешные продолжения фраз и голосуйте за лучшие</p>
   `;
 
   const formHost = document.createElement("div");
