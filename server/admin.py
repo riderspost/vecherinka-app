@@ -257,7 +257,7 @@ def _bulk_delete(table, ids, used_ids):
 def admin_list_dares():
     db = get_db()
     rows = db.execute(
-        """SELECT d.id, d.text, d.kind, d.status,
+        """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d ORDER BY d.id DESC"""
     ).fetchall()
@@ -280,6 +280,7 @@ def admin_list_dares():
                 "uses": r["uses"],
                 "categories": cats,
                 "locations": locs,
+                "mixedPair": bool(r["mixed_pair"]),
             }
         )
     return jsonify(result)
@@ -295,6 +296,7 @@ def admin_add_dare():
     if len(text) > MAX_PROMPT_LEN:
         return jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400
     kind = data.get("kind") if data.get("kind") in ("solo", "team") else "solo"
+    mixed_pair = bool(data.get("mixedPair")) and kind == "team"
     categories = [c for c in (data.get("categories") or []) if c in fanty_game.CATEGORIES]
     locations = [loc for loc in (data.get("locations") or []) if loc in fanty_game.LOCATIONS]
     if not categories:
@@ -305,7 +307,10 @@ def admin_add_dare():
     db = get_db()
     if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (text,)).fetchone():
         return jsonify({"error": "Такой фант уже есть"}), 400
-    cur = db.execute("INSERT INTO fanty_dares (text, kind, status) VALUES (?, ?, 'active')", (text, kind))
+    cur = db.execute(
+        "INSERT INTO fanty_dares (text, kind, status, mixed_pair) VALUES (?, ?, 'active', ?)",
+        (text, kind, int(mixed_pair)),
+    )
     dare_id = cur.lastrowid
     db.executemany(
         "INSERT OR IGNORE INTO fanty_dare_categories (dare_id, category) VALUES (?, ?)",
@@ -325,6 +330,7 @@ def admin_add_dare():
             "uses": 0,
             "categories": categories,
             "locations": locations,
+            "mixedPair": mixed_pair,
         }
     )
 

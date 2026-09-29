@@ -12,10 +12,20 @@ ATTRIBUTES = ("alcohol", "food")
 CATEGORIES = MOOD_CATEGORIES + ATTRIBUTES
 GAME_MODES = ("truth_or_dare", "solo", "team")
 PICK_MODES = ("random", "fair")
+PAIR_MODES = ("any", "mixed")
 
 
 def min_players_for(game_mode):
     return MIN_PLAYERS_BY_MODE.get(game_mode, 2)
+
+
+def gender_required(settings):
+    return settings["game_mode"] == "team" and settings["pair_mode"] == "mixed"
+
+
+def has_both_genders(players):
+    genders = {p["gender"] for p in players}
+    return "m" in genders and "f" in genders
 
 _lock = threading.Lock()
 
@@ -52,16 +62,21 @@ def start_game(db, room):
     db.commit()
 
 
-def content_pool_sizes(db, game_mode, location, categories):
+def content_pool_sizes(db, game_mode, location, categories, pair_mode="any"):
     """Dare/truth pool sizes for a location+categories combo, used to validate room settings before creation."""
     cat_placeholders = ",".join("?" * len(categories))
     dare_kind = "team" if game_mode == "team" else "solo"
+    mixed_filter = ""
+    mixed_params = []
+    if dare_kind == "team":
+        mixed_filter = "AND d.mixed_pair = ?"
+        mixed_params = [1 if pair_mode == "mixed" else 0]
     dare_count = db.execute(
         f"""SELECT COUNT(DISTINCT d.id) AS c FROM fanty_dares d
             JOIN fanty_dare_locations dl ON dl.dare_id = d.id AND dl.location = ?
             JOIN fanty_dare_categories dc ON dc.dare_id = d.id AND dc.category IN ({cat_placeholders})
-            WHERE d.status = 'active' AND d.kind = ?""",
-        [location] + categories + [dare_kind],
+            WHERE d.status = 'active' AND d.kind = ? {mixed_filter}""",
+        [location] + categories + [dare_kind] + mixed_params,
     ).fetchone()["c"]
     truth_count = 0
     if game_mode == "truth_or_dare":
@@ -77,12 +92,17 @@ def content_pool_sizes(db, game_mode, location, categories):
 def _content_pool_dares(db, settings, kind):
     categories = settings_categories(settings)
     cat_placeholders = ",".join("?" * len(categories))
+    mixed_filter = ""
+    mixed_params = []
+    if kind == "team":
+        mixed_filter = "AND d.mixed_pair = ?"
+        mixed_params = [1 if settings["pair_mode"] == "mixed" else 0]
     rows = db.execute(
         f"""SELECT DISTINCT d.id FROM fanty_dares d
             JOIN fanty_dare_locations dl ON dl.dare_id = d.id AND dl.location = ?
             JOIN fanty_dare_categories dc ON dc.dare_id = d.id AND dc.category IN ({cat_placeholders})
-            WHERE d.status = 'active' AND d.kind = ?""",
-        [settings["location"]] + categories + [kind],
+            WHERE d.status = 'active' AND d.kind = ? {mixed_filter}""",
+        [settings["location"]] + categories + [kind] + mixed_params,
     ).fetchall()
     return [r["id"] for r in rows]
 
@@ -229,10 +249,15 @@ def spin_partner(db, room):
     with _lock:
         state = get_state(db, room["id"])
         active = get_active_players(db, room["id"])
-        candidates = [p["id"] for p in active if p["id"] != state["current_picked_id"]]
+        settings = get_settings(db, room["id"])
+
+        picked = next((p for p in active if p["id"] == state["current_picked_id"]), None)
+        pool = [p for p in active if p["id"] != state["current_picked_id"]]
+        if settings["pair_mode"] == "mixed" and picked is not None:
+            pool = [p for p in pool if p["gender"] != picked["gender"]]
+        candidates = [p["id"] for p in pool]
         partner = random.choice(candidates) if candidates else None
 
-        settings = get_settings(db, room["id"])
         dare_id = pick_dare(db, room["id"], settings, "team")
         db.execute(
             """UPDATE fanty_state SET phase='awaiting_action', current_partner_id=?,
@@ -243,8 +268,13 @@ def spin_partner(db, room):
         db.commit()
 
 
-def format_team_text(text, name1, name2):
-    return text.replace("{p1}", name1).replace("{p2}", name2)
+def format_team_text(text, player1, player2):
+    text = text.replace("{p1}", player1["name"]).replace("{p2}", player2["name"])
+    if player1["gender"] == "m" and player2["gender"] == "f":
+        text = text.replace("{m}", player1["name"]).replace("{f}", player2["name"])
+    elif player1["gender"] == "f" and player2["gender"] == "m":
+        text = text.replace("{m}", player2["name"]).replace("{f}", player1["name"])
+    return text
 
 
 def resolve_round(db, room, counted, photo_filenames):

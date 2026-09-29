@@ -2,7 +2,16 @@ import { api, fantyApi } from "../../api.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
-import { LOCATIONS, MOOD_CATEGORIES, ATTRIBUTES, GAME_MODES, PICK_MODES, MIN_PLAYERS_BY_MODE } from "./constants.js";
+import {
+  LOCATIONS,
+  MOOD_CATEGORIES,
+  ATTRIBUTES,
+  GAME_MODES,
+  PICK_MODES,
+  PAIR_MODES,
+  GENDERS,
+  MIN_PLAYERS_BY_MODE,
+} from "./constants.js";
 
 const TOTAL_STEPS = 5;
 
@@ -134,8 +143,10 @@ export function renderFantyHome(container) {
       categories: ["basic"],
       attributes: [],
       pickMode: "fair",
+      pairMode: "any",
       deviceMode: "remote",
       name: "",
+      gender: null,
     };
     let stepIndex = 0;
 
@@ -223,6 +234,11 @@ export function renderFantyHome(container) {
       pickModeLabelEl.textContent = "Кого выбирает бутылка";
       const pickModeGroup = radioGroup("pickMode", PICK_MODES, formState.pickMode);
 
+      const isTeam = formState.gameMode === "team";
+      const pairModeLabelEl = document.createElement("label");
+      pairModeLabelEl.textContent = "Кто может быть в паре";
+      const pairModeGroup = isTeam ? radioGroup("pairMode", PAIR_MODES, formState.pairMode) : null;
+
       const errorEl = document.createElement("div");
       errorEl.className = "error-msg";
 
@@ -232,6 +248,10 @@ export function renderFantyHome(container) {
       formHost.appendChild(attributesGroup.element);
       formHost.appendChild(pickModeLabelEl);
       formHost.appendChild(pickModeGroup.element);
+      if (isTeam) {
+        formHost.appendChild(pairModeLabelEl);
+        formHost.appendChild(pairModeGroup.element);
+      }
       formHost.appendChild(errorEl);
 
       const nextBtn = navButtons();
@@ -245,6 +265,7 @@ export function renderFantyHome(container) {
         formState.categories = categories;
         formState.attributes = attributes;
         formState.pickMode = pickModeGroup.getValue();
+        formState.pairMode = isTeam ? pairModeGroup.getValue() : "any";
         stepIndex += 1;
         renderStep();
       });
@@ -296,20 +317,35 @@ export function renderFantyHome(container) {
 
       const picker = createAvatarPicker();
 
+      const needsGender = formState.gameMode === "team" && formState.pairMode === "mixed";
+      const genderLabel = document.createElement("label");
+      genderLabel.textContent = "Ваш пол";
+      const genderGroup = needsGender ? radioGroup("gender", GENDERS, formState.gender) : null;
+
       const errorEl = document.createElement("div");
       errorEl.className = "error-msg";
 
       formHost.appendChild(nameInput);
       formHost.appendChild(picker.element);
+      if (needsGender) {
+        formHost.appendChild(genderLabel);
+        formHost.appendChild(genderGroup.element);
+      }
       formHost.appendChild(errorEl);
 
       const nextBtn = navButtons("Создать комнату", () => {
         formState.name = nameInput.value.trim();
+        if (needsGender) formState.gender = genderGroup.getValue();
       });
       nextBtn.addEventListener("click", async () => {
         const name = nameInput.value.trim();
         if (!name) {
           errorEl.textContent = "Введите имя";
+          return;
+        }
+        const gender = needsGender ? genderGroup.getValue() : null;
+        if (needsGender && !gender) {
+          errorEl.textContent = "Выберите пол";
           return;
         }
         nextBtn.disabled = true;
@@ -319,11 +355,13 @@ export function renderFantyHome(container) {
           const res = await fantyApi.createRoom({
             name,
             ...avatar,
+            gender,
             deviceMode: formState.deviceMode,
             gameMode: formState.gameMode,
             location: formState.location,
             categories: [...formState.categories, ...formState.attributes],
             pickMode: formState.pickMode,
+            pairMode: formState.pairMode,
           });
           saveSession(res.code, { token: res.token, playerId: res.playerId });
           navigate(`/fanty/r/${res.code}`);
@@ -367,6 +405,31 @@ export function renderFantyHome(container) {
 
     const picker = createAvatarPicker();
 
+    let requireGender = false;
+    const genderLabel = document.createElement("label");
+    genderLabel.textContent = "Пол";
+    genderLabel.hidden = true;
+    const genderGroup = radioGroup("gender", GENDERS, null);
+    genderGroup.element.hidden = true;
+
+    codeInput.addEventListener("input", async () => {
+      const code = codeInput.value.trim().toUpperCase();
+      if (code.length !== 5) {
+        requireGender = false;
+        genderLabel.hidden = true;
+        genderGroup.element.hidden = true;
+        return;
+      }
+      try {
+        const res = await api.getTakenEmojis(code);
+        requireGender = Boolean(res.requireGender);
+      } catch (e) {
+        requireGender = false;
+      }
+      genderLabel.hidden = !requireGender;
+      genderGroup.element.hidden = !requireGender;
+    });
+
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
     btn.textContent = "Присоединиться";
@@ -381,11 +444,16 @@ export function renderFantyHome(container) {
         errorEl.textContent = "Заполните код и имя";
         return;
       }
+      const gender = requireGender ? genderGroup.getValue() : null;
+      if (requireGender && !gender) {
+        errorEl.textContent = "Выберите пол";
+        return;
+      }
       btn.disabled = true;
       errorEl.textContent = "";
       try {
         const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar });
+        const res = await api.joinRoom(code, { name, ...avatar, gender });
         saveSession(res.code, { token: res.token, playerId: res.playerId });
         navigate(`/fanty/r/${res.code}`);
       } catch (e) {
@@ -407,6 +475,8 @@ export function renderFantyHome(container) {
     formHost.appendChild(codeInput);
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
+    formHost.appendChild(genderLabel);
+    formHost.appendChild(genderGroup.element);
     formHost.appendChild(errorEl);
     formHost.appendChild(row);
   }

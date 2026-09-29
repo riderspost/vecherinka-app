@@ -43,6 +43,9 @@ def init_db():
     _ensure_column(db, "users", "email_verified", "email_verified INTEGER NOT NULL DEFAULT 1")
     _ensure_column(db, "users", "verification_code", "verification_code TEXT")
     _ensure_column(db, "users", "verification_code_expires_at", "verification_code_expires_at TEXT")
+    _ensure_column(db, "players", "gender", "gender TEXT")
+    _ensure_column(db, "fanty_dares", "mixed_pair", "mixed_pair INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_settings", "pair_mode", "pair_mode TEXT NOT NULL DEFAULT 'any'")
     db.commit()
     db.close()
 

@@ -203,6 +203,11 @@ tr:hover td { background: rgba(255, 255, 255, 0.03); }
   color: var(--text-muted);
 }
 
+.tag-mixed {
+  background: rgba(126, 231, 135, 0.15);
+  color: #7ee787;
+}
+
 .prompt-count {
   color: var(--text-muted);
   font-size: 13px;

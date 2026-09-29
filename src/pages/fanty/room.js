@@ -3,12 +3,33 @@ import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
-import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
+import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
 
 const BOTTLE_IMG = `<img src="/src/assets/bottle.png" alt="" class="bottle-img" draggable="false" />`;
+
+function genderRadioGroup(defaultValue) {
+  const wrap = document.createElement("div");
+  wrap.className = "radio-group";
+  GENDERS.forEach((opt) => {
+    const label = document.createElement("label");
+    label.className = "radio-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "gender";
+    input.value = opt.value;
+    if (opt.value === defaultValue) input.checked = true;
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(" " + opt.label));
+    wrap.appendChild(label);
+  });
+  return {
+    element: wrap,
+    getValue: () => wrap.querySelector("input:checked")?.value,
+  };
+}
 
 export function mountFantyRoomPage(container, code, opts) {
   const asDisplay = Boolean(opts && opts.asDisplay);
@@ -56,13 +77,19 @@ export function mountFantyRoomPage(container, code, opts) {
     nameInput.maxLength = 30;
 
     let takenEmojis = [];
+    let requireGender = false;
     try {
       const res = await api.getTakenEmojis(code);
       takenEmojis = res.taken || [];
+      requireGender = Boolean(res.requireGender);
     } catch (e) {
       takenEmojis = [];
     }
     const picker = createAvatarPicker(null, takenEmojis);
+
+    const genderLabel = document.createElement("label");
+    genderLabel.textContent = "Пол";
+    const genderGroup = genderRadioGroup(null);
 
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
@@ -76,11 +103,16 @@ export function mountFantyRoomPage(container, code, opts) {
         errorEl.textContent = "Введите имя";
         return;
       }
+      const gender = requireGender ? genderGroup.getValue() : null;
+      if (requireGender && !gender) {
+        errorEl.textContent = "Выберите пол";
+        return;
+      }
       btn.disabled = true;
       errorEl.textContent = "";
       try {
         const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar });
+        const res = await api.joinRoom(code, { name, ...avatar, gender });
         saveSession(code, { token: res.token, playerId: res.playerId });
         startPolling(res.token);
       } catch (e) {
@@ -91,6 +123,10 @@ export function mountFantyRoomPage(container, code, opts) {
 
     wrap.appendChild(nameInput);
     wrap.appendChild(picker.element);
+    if (requireGender) {
+      wrap.appendChild(genderLabel);
+      wrap.appendChild(genderGroup.element);
+    }
     wrap.appendChild(errorEl);
     wrap.appendChild(btn);
   }
@@ -210,6 +246,12 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
       takenEmojis = [];
     }
     const picker = createAvatarPicker(null, takenEmojis);
+
+    const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
+    const genderLabel = document.createElement("label");
+    genderLabel.textContent = "Пол";
+    const genderGroup = genderRadioGroup(null);
+
     const addBtn = document.createElement("button");
     addBtn.className = "btn";
     addBtn.textContent = "Добавить";
@@ -222,11 +264,16 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
         addErr.textContent = "Введите имя";
         return;
       }
+      const gender = needsGender ? genderGroup.getValue() : null;
+      if (needsGender && !gender) {
+        addErr.textContent = "Выберите пол";
+        return;
+      }
       addBtn.disabled = true;
       addErr.textContent = "";
       try {
         const avatar = picker.getValue();
-        await fantyApi.addLocalPlayer(code, token, name, avatar.avatarType, avatar.avatarValue);
+        await fantyApi.addLocalPlayer(code, token, name, avatar.avatarType, avatar.avatarValue, gender);
         nameInput.value = "";
       } catch (e) {
         addErr.textContent = e.message;
@@ -237,6 +284,10 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
 
     addCard.appendChild(nameInput);
     addCard.appendChild(picker.element);
+    if (needsGender) {
+      addCard.appendChild(genderLabel);
+      addCard.appendChild(genderGroup.element);
+    }
     addCard.appendChild(addErr);
     addCard.appendChild(addBtn);
     wrap.appendChild(addCard);

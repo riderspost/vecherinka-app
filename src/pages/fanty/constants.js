@@ -91,6 +91,24 @@ export const MIN_PLAYERS_BY_MODE = {
   team: 3,
 };
 
+export const PAIR_MODES = [
+  {
+    value: "any",
+    label: "Любые",
+    hint: "Бутылка выбирает пару полностью случайно, без учёта пола.",
+  },
+  {
+    value: "mixed",
+    label: "Мужчина + женщина",
+    hint: "Бутылка составит пару только из мужчины и женщины — второй спин ограничен по полу партнёра.",
+  },
+];
+
+export const GENDERS = [
+  { value: "m", label: "Мужской" },
+  { value: "f", label: "Женский" },
+];
+
 export function locationLabel(value) {
   return LOCATIONS.find((l) => l.value === value)?.label || value;
 }

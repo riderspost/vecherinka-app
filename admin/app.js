@@ -192,6 +192,9 @@ async function renderDashboard() {
               <label><input type="radio" name="kind" value="solo" checked /> Для одного</label>
               <label><input type="radio" name="kind" value="team" /> Командный ({p1}/{p2})</label>
             </div>
+            <div class="row" id="dare-mixed-pair-row" style="display:none">
+              <label><input type="checkbox" name="mixedPair" /> Только для пары М+Ж (используйте {m}/{f} вместо {p1}/{p2})</label>
+            </div>
             <label>Места</label>
             <div class="row" id="dare-locations"></div>
             <label>Категория</label>
@@ -302,11 +305,20 @@ async function renderDashboard() {
   document.getElementById("dare-attributes").innerHTML = checkboxRow(ATTRIBUTES, "attribute");
   document.getElementById("truth-category").innerHTML = radioRow(MOOD_CATEGORIES, "category", "basic");
 
-  document.getElementById("add-dare-form").addEventListener("submit", async (e) => {
+  const dareForm = document.getElementById("add-dare-form");
+  const mixedPairRow = document.getElementById("dare-mixed-pair-row");
+  function updateMixedPairVisibility() {
+    mixedPairRow.style.display = dareForm.elements.kind.value === "team" ? "" : "none";
+  }
+  dareForm.querySelectorAll('input[name="kind"]').forEach((el) => el.addEventListener("change", updateMixedPairVisibility));
+  updateMixedPairVisibility();
+
+  dareForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
     const text = form.elements.text.value.trim();
     const kind = form.elements.kind.value;
+    const mixedPair = kind === "team" && form.elements.mixedPair.checked;
     const locations = Array.from(form.querySelectorAll('input[name="location"]:checked')).map((i) => i.value);
     const attributes = Array.from(form.querySelectorAll('input[name="attribute"]:checked')).map((i) => i.value);
     const categories = [form.elements.category.value, ...attributes];
@@ -314,8 +326,9 @@ async function renderDashboard() {
     errorEl.textContent = "";
     if (!text) return;
     try {
-      await api("/fanty/dares", { method: "POST", body: JSON.stringify({ text, kind, locations, categories }) });
+      await api("/fanty/dares", { method: "POST", body: JSON.stringify({ text, kind, mixedPair, locations, categories }) });
       form.reset();
+      updateMixedPairVisibility();
       await refreshDares();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -347,6 +360,7 @@ async function renderDashboard() {
 function tagsHtml(item) {
   const parts = [];
   if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
+  if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
   (item.locations || []).forEach((l) => {
     parts.push(`<span class="tag-pill tag-location">${escapeHtml(labelFor(LOCATIONS, l))}</span>`);
   });

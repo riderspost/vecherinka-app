@@ -53,6 +53,7 @@ def player_public(row):
         "isHost": bool(row["is_host"]),
         "isDisplay": bool(row["is_display"]),
         "totalScore": row["total_score"],
+        "gender": row["gender"],
     }
 
 
@@ -70,7 +71,9 @@ def validate_avatar(avatar_type, avatar_value):
     return "emoji", value[:8]
 
 
-def create_room_and_host(db, game_type, name, avatar_type, avatar_value, device_mode="remote", created_by_user_id=None):
+def create_room_and_host(
+    db, game_type, name, avatar_type, avatar_value, device_mode="remote", created_by_user_id=None, gender=None
+):
     """Creates a room (in 'lobby' status) with the given host player. Returns (room_id, code, token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN)
     if not name:
@@ -92,14 +95,14 @@ def create_room_and_host(db, game_type, name, avatar_type, avatar_value, device_
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host)
-           VALUES (?, ?, ?, ?, ?, ?, 1)""",
-        (player_id, room_id, token, name, avatar_type, avatar_value),
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host, gender)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
+        (player_id, room_id, token, name, avatar_type, avatar_value, gender),
     )
     return room_id, code, token, player_id
 
 
-def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_host=False):
+def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_host=False, gender=None):
     """Validates + inserts a new player row (join, or host-added local player). Returns (token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN) or ("Экран" if is_display else "")
     if not name:
@@ -120,9 +123,9 @@ def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_h
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (player_id, room["id"], token, name, avatar_type, avatar_value, int(is_display), int(is_host)),
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host, gender)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (player_id, room["id"], token, name, avatar_type, avatar_value, int(is_display), int(is_host), gender),
     )
     return token, player_id
 

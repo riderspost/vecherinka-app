@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS players (
   is_host INTEGER NOT NULL DEFAULT 0,
   is_display INTEGER NOT NULL DEFAULT 0,
   total_score REAL NOT NULL DEFAULT 0,
+  gender TEXT,
   joined_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -97,7 +98,8 @@ CREATE TABLE IF NOT EXISTS fanty_dares (
   kind TEXT NOT NULL DEFAULT 'solo',
   status TEXT NOT NULL DEFAULT 'active',
   created_by_player_id TEXT REFERENCES players(id) ON DELETE SET NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  mixed_pair INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS fanty_dare_locations (
@@ -131,7 +133,8 @@ CREATE TABLE IF NOT EXISTS fanty_settings (
   game_mode TEXT NOT NULL,
   location TEXT NOT NULL,
   categories TEXT NOT NULL,
-  pick_mode TEXT NOT NULL DEFAULT 'fair'
+  pick_mode TEXT NOT NULL DEFAULT 'fair',
+  pair_mode TEXT NOT NULL DEFAULT 'any'
 );
 
 CREATE TABLE IF NOT EXISTS fanty_state (

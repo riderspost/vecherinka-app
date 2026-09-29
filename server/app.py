@@ -6,6 +6,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.utils import secure_filename
 
 from . import game
+from . import fanty_game as fg
 from .db import get_db, close_db, init_db, register_app
 from .seed_data import seed_prompts
 from .admin import admin_bp
@@ -109,7 +110,11 @@ def taken_emojis(code):
     room = get_room_or_404(db, code)
     if not room:
         return error("Комната не найдена", 404)
-    return jsonify({"taken": taken_emojis_for_room(db, room["id"])})
+    result = {"taken": taken_emojis_for_room(db, room["id"])}
+    if room["game_type"] == "fanty":
+        settings = fg.get_settings(db, room["id"])
+        result["requireGender"] = fg.gender_required(settings)
+    return jsonify(result)
 
 
 @app.route("/api/rooms/<code>/join", methods=["POST"])
@@ -126,9 +131,16 @@ def join_room(code):
     if not is_display and room["device_mode"] == "local":
         return error("Эта комната только для локальных игроков — попросите организатора добавить вас")
 
+    gender = None
+    if not is_display and room["game_type"] == "fanty":
+        settings = fg.get_settings(db, room["id"])
+        gender = data.get("gender") if data.get("gender") in ("m", "f") else None
+        if fg.gender_required(settings) and gender is None:
+            return error("Выберите пол")
+
     try:
         token, player_id = add_player(
-            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue"), is_display
+            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue"), is_display, gender=gender
         )
     except RoomError as e:
         return error(e.message, e.status)

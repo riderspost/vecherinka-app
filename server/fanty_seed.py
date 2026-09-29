@@ -38,6 +38,10 @@ TEAM_DARES = [
     {"text": "{p1} и {p2} должны покормить друг друга с рук любой закуской со стола.", "categories": ["food", "flirt"], "locations": ["apartment", "bar", "country_house"]},
     {"text": "{p1} и {p2} 20 секунд смотрят друг другу в глаза не отводя взгляд и не смеясь.", "categories": ["flirt"], "locations": ALL_LOCATIONS},
     {"text": "{p1} и {p2} должны обняться и продержать объятия, пока остальные считают до 15.", "categories": ["flirt_plus"], "locations": ["apartment", "bar", "country_house"]},
+    {"text": "{m} должен на коленях сделать {f} самый нелепый комплимент, какой придумает.", "categories": ["flirt"], "locations": ALL_LOCATIONS, "mixed_pair": True},
+    {"text": "{m} и {f} должны станцевать медленный танец, глядя друг другу в глаза, 20 секунд.", "categories": ["flirt"], "locations": ["apartment", "bar", "country_house"], "mixed_pair": True},
+    {"text": "{f} красит {m} губы своей помадой, а {m} должен так проходить до конца следующего раунда.", "categories": ["flirt"], "locations": ["apartment", "country_house"], "mixed_pair": True},
+    {"text": "{m} признаётся {f} в самой смешной несуществующей истории их знакомства, а {f} подыгрывает.", "categories": ["basic"], "locations": ALL_LOCATIONS, "mixed_pair": True},
 ]
 
 TRUTHS = [
@@ -74,7 +78,8 @@ def _get_or_create_dare(db, entry, kind):
     if row:
         return row["id"]
     cur = db.execute(
-        "INSERT INTO fanty_dares (text, kind, status) VALUES (?, ?, 'active')", (entry["text"], kind)
+        "INSERT INTO fanty_dares (text, kind, status, mixed_pair) VALUES (?, ?, 'active', ?)",
+        (entry["text"], kind, int(entry.get("mixed_pair", False))),
     )
     dare_id = cur.lastrowid
     db.executemany(

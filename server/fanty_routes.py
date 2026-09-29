@@ -49,9 +49,14 @@ def create_room():
     if not categories:
         return error("Выберите хотя бы один тип фантов")
     pick_mode = data.get("pickMode") if data.get("pickMode") in fg.PICK_MODES else "fair"
+    pair_mode = data.get("pairMode") if data.get("pairMode") in fg.PAIR_MODES else "any"
+
+    gender = data.get("gender") if data.get("gender") in ("m", "f") else None
+    if game_mode == "team" and pair_mode == "mixed" and gender is None:
+        return error("Выберите пол")
 
     db = get_db()
-    dare_count, truth_count = fg.content_pool_sizes(db, game_mode, location, categories)
+    dare_count, truth_count = fg.content_pool_sizes(db, game_mode, location, categories, pair_mode)
     if game_mode == "truth_or_dare" and dare_count == 0 and truth_count == 0:
         return error("Для этих настроек нет ни одного фанта или вопроса — измените место или категории")
     if game_mode != "truth_or_dare" and dare_count == 0:
@@ -66,13 +71,14 @@ def create_room():
             data.get("avatarValue"),
             device_mode,
             created_by_user_id=session.get("user_id"),
+            gender=gender,
         )
     except RoomError as e:
         return error(e.message, e.status)
 
     db.execute(
-        "INSERT INTO fanty_settings (room_id, game_mode, location, categories, pick_mode) VALUES (?, ?, ?, ?, ?)",
-        (room_id, game_mode, location, json.dumps(categories), pick_mode),
+        "INSERT INTO fanty_settings (room_id, game_mode, location, categories, pick_mode, pair_mode) VALUES (?, ?, ?, ?, ?, ?)",
+        (room_id, game_mode, location, json.dumps(categories), pick_mode, pair_mode),
     )
     fg.init_state(db, room_id, player_id)
     db.commit()
@@ -94,9 +100,14 @@ def add_local_player(code):
     if room["status"] != "lobby":
         return error("Игра уже началась")
 
+    settings = fg.get_settings(db, room["id"])
+    gender = data.get("gender") if data.get("gender") in ("m", "f") else None
+    if fg.gender_required(settings) and gender is None:
+        return error("Выберите пол")
+
     try:
         _token, player_id = add_player(
-            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue")
+            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue"), gender=gender
         )
     except RoomError as e:
         return error(e.message, e.status)
@@ -121,6 +132,8 @@ def start_room(code):
     min_players = fg.min_players_for(settings["game_mode"])
     if len(active) < min_players:
         return error(f"Нужно минимум {min_players} игрока(ов)")
+    if fg.gender_required(settings) and not fg.has_both_genders(active):
+        return error("Нужен хотя бы один игрок каждого пола")
     fg.start_game(db, room)
     return jsonify({"ok": True})
 
@@ -247,6 +260,8 @@ def _build_summary(db, room):
         p["id"]: p for p in db.execute("SELECT * FROM players WHERE room_id = ?", (room["id"],)).fetchall()
     }
 
+    placeholder = {"name": "?", "gender": None}
+
     def pname(pid):
         p = players.get(pid)
         return p["name"] if p else "?"
@@ -258,7 +273,11 @@ def _build_summary(db, room):
             row = db.execute("SELECT text FROM fanty_dares WHERE id = ?", (r["dare_id"],)).fetchone()
             text = row["text"] if row else None
             if text and r["partner_player_id"]:
-                text = fg.format_team_text(text, pname(r["picked_player_id"]), pname(r["partner_player_id"]))
+                text = fg.format_team_text(
+                    text,
+                    players.get(r["picked_player_id"], placeholder),
+                    players.get(r["partner_player_id"], placeholder),
+                )
         elif r["content_type"] == "truth":
             row = db.execute("SELECT text FROM fanty_truths WHERE id = ?", (r["truth_id"],)).fetchone()
             text = row["text"] if row else None
@@ -294,6 +313,7 @@ def _build_state(db, room, player):
             "location": settings["location"],
             "categories": fg.settings_categories(settings),
             "pickMode": settings["pick_mode"],
+            "pairMode": settings["pair_mode"],
         },
         "players": [player_public(p) for p in players],
         "me": player_public(player),
@@ -309,10 +329,7 @@ def _build_state(db, room, player):
 
     fstate = fg.get_state(db, room["id"])
     players_by_id = {p["id"]: p for p in players}
-
-    def pname(pid):
-        p = players_by_id.get(pid)
-        return p["name"] if p else "?"
+    placeholder = {"name": "?", "gender": None}
 
     can_act = fg.can_act_as_picked(room, fstate, player)
 
@@ -341,7 +358,9 @@ def _build_state(db, room, player):
             text = row["text"] if row else None
             if text and fstate["current_partner_id"]:
                 text = fg.format_team_text(
-                    text, pname(fstate["current_picked_id"]), pname(fstate["current_partner_id"])
+                    text,
+                    players_by_id.get(fstate["current_picked_id"], placeholder),
+                    players_by_id.get(fstate["current_partner_id"], placeholder),
                 )
         elif fstate["current_content_type"] == "truth":
             row = db.execute(
