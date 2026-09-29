@@ -73,15 +73,5 @@ export function renderGamePicker(container) {
   });
   wrap.appendChild(cards);
 
-  const submitLink = document.createElement("a");
-  submitLink.className = "link-btn";
-  submitLink.href = "/fanty/submit";
-  submitLink.textContent = "Предложить свой фант или вопрос";
-  submitLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/fanty/submit");
-  });
-  wrap.appendChild(submitLink);
-
   container.appendChild(wrap);
 }

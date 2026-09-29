@@ -81,6 +81,16 @@ export function renderFantyHome(container) {
     cards.querySelector('[data-choice="create"]').addEventListener("click", showCreateForm);
     cards.querySelector('[data-choice="join"]').addEventListener("click", showJoinForm);
     formHost.appendChild(cards);
+
+    const submitLink = document.createElement("a");
+    submitLink.className = "link-btn";
+    submitLink.href = "/fanty/submit";
+    submitLink.textContent = "Предложить свой фант или вопрос";
+    submitLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      navigate("/fanty/submit");
+    });
+    formHost.appendChild(submitLink);
   }
 
   function showCreateForm() {
