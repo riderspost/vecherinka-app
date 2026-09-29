@@ -57,26 +57,33 @@ export function renderFantyHome(container) {
     <p class="tagline">Правда, действие и командные фанты для компании</p>
   `;
 
-  const tabs = document.createElement("div");
-  tabs.className = "tabs";
-  const createTab = document.createElement("button");
-  createTab.className = "tab active";
-  createTab.textContent = "Создать комнату";
-  const joinTab = document.createElement("button");
-  joinTab.className = "tab";
-  joinTab.textContent = "У меня есть код";
-  tabs.appendChild(createTab);
-  tabs.appendChild(joinTab);
-  wrap.appendChild(tabs);
-
   const formHost = document.createElement("div");
   wrap.appendChild(formHost);
   container.appendChild(wrap);
 
-  function showCreateForm() {
-    createTab.classList.add("active");
-    joinTab.classList.remove("active");
+  function showChoiceScreen() {
+    formHost.innerHTML = "";
 
+    const cards = document.createElement("div");
+    cards.className = "game-cards";
+    cards.innerHTML = `
+      <button class="game-card" data-choice="create">
+        <span class="game-card-emoji">🆕</span>
+        <span class="game-card-title">Создать комнату</span>
+        <span class="game-card-desc">Настроить новую игру шаг за шагом</span>
+      </button>
+      <button class="game-card" data-choice="join">
+        <span class="game-card-emoji">🔑</span>
+        <span class="game-card-title">У меня есть код</span>
+        <span class="game-card-desc">Присоединиться к уже созданной комнате</span>
+      </button>
+    `;
+    cards.querySelector('[data-choice="create"]').addEventListener("click", showCreateForm);
+    cards.querySelector('[data-choice="join"]').addEventListener("click", showJoinForm);
+    formHost.appendChild(cards);
+  }
+
+  function showCreateForm() {
     const formState = {
       gameMode: "truth_or_dare",
       location: LOCATIONS[0].value,
@@ -101,17 +108,19 @@ export function renderFantyHome(container) {
     function navButtons(nextLabel, onBack) {
       const row = document.createElement("div");
       row.className = "row-actions";
-      if (stepIndex > 0) {
-        const backBtn = document.createElement("button");
-        backBtn.className = "btn";
-        backBtn.textContent = "Назад";
-        backBtn.addEventListener("click", () => {
-          if (onBack) onBack();
+      const backBtn = document.createElement("button");
+      backBtn.className = "btn";
+      backBtn.textContent = "Назад";
+      backBtn.addEventListener("click", () => {
+        if (onBack) onBack();
+        if (stepIndex > 0) {
           stepIndex -= 1;
           renderStep();
-        });
-        row.appendChild(backBtn);
-      }
+        } else {
+          showChoiceScreen();
+        }
+      });
+      row.appendChild(backBtn);
       const nextBtn = document.createElement("button");
       nextBtn.className = "btn btn-primary";
       nextBtn.textContent = nextLabel || "Далее";
@@ -292,8 +301,6 @@ export function renderFantyHome(container) {
   }
 
   function showJoinForm() {
-    joinTab.classList.add("active");
-    createTab.classList.remove("active");
     formHost.innerHTML = "";
 
     const codeInput = document.createElement("input");
@@ -335,14 +342,22 @@ export function renderFantyHome(container) {
       }
     });
 
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn";
+    backBtn.textContent = "Назад";
+    backBtn.addEventListener("click", showChoiceScreen);
+
+    const row = document.createElement("div");
+    row.className = "row-actions";
+    row.appendChild(backBtn);
+    row.appendChild(btn);
+
     formHost.appendChild(codeInput);
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
     formHost.appendChild(errorEl);
-    formHost.appendChild(btn);
+    formHost.appendChild(row);
   }
 
-  createTab.addEventListener("click", showCreateForm);
-  joinTab.addEventListener("click", showJoinForm);
-  showCreateForm();
+  showChoiceScreen();
 }
