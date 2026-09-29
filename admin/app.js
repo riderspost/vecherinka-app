@@ -207,6 +207,8 @@ async function renderDashboard() {
             <div id="dare-audio-status" class="hint"></div>
             <div class="row">
               <label><input type="checkbox" id="dare-has-timer" /> Таймер</label>
+            </div>
+            <div class="row" id="dare-timer-seconds-row" style="display:none">
               <label>Секунд: <input type="number" id="dare-timer-seconds" value="60" min="5" max="600" style="width:70px" /></label>
             </div>
             <div class="error-box" id="add-dare-error"></div>
@@ -321,6 +323,14 @@ async function renderDashboard() {
   dareForm.querySelectorAll('input[name="kind"]').forEach((el) => el.addEventListener("change", updateMixedPairVisibility));
   updateMixedPairVisibility();
 
+  const timerSecondsRow = document.getElementById("dare-timer-seconds-row");
+  const hasTimerCheckbox = document.getElementById("dare-has-timer");
+  function updateTimerSecondsVisibility() {
+    timerSecondsRow.style.display = hasTimerCheckbox.checked ? "" : "none";
+  }
+  hasTimerCheckbox.addEventListener("change", updateTimerSecondsVisibility);
+  updateTimerSecondsVisibility();
+
   let uploadedAudioFilename = null;
   const audioInput = document.getElementById("dare-audio-input");
   const audioStatus = document.getElementById("dare-audio-status");
@@ -371,6 +381,7 @@ async function renderDashboard() {
       });
       form.reset();
       updateMixedPairVisibility();
+      updateTimerSecondsVisibility();
       uploadedAudioFilename = null;
       audioStatus.textContent = "";
       document.getElementById("dare-timer-seconds").value = 60;
