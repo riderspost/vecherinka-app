@@ -1,0 +1,182 @@
+def create_fanty_room(
+    client,
+    game_mode="solo",
+    location="apartment",
+    categories=None,
+    pick_mode="fair",
+    pair_mode="any",
+    gender=None,
+    device_mode="remote",
+    name="Host",
+    avatar_value="🙂",
+):
+    payload = {
+        "name": name,
+        "avatarType": "emoji",
+        "avatarValue": avatar_value,
+        "gameMode": game_mode,
+        "location": location,
+        "categories": categories or ["basic"],
+        "pickMode": pick_mode,
+        "pairMode": pair_mode,
+        "deviceMode": device_mode,
+    }
+    if gender:
+        payload["gender"] = gender
+    return client.post("/api/fanty/rooms", json=payload)
+
+
+def join_fanty(client, code, name, avatar_value, gender=None):
+    payload = {"name": name, "avatarType": "emoji", "avatarValue": avatar_value}
+    if gender:
+        payload["gender"] = gender
+    return client.post(f"/api/rooms/{code}/join", json=payload)
+
+
+def test_create_room_rejects_invalid_game_mode(client):
+    resp = create_fanty_room(client, game_mode="bogus")
+    assert resp.status_code == 400
+
+
+def test_create_room_rejects_invalid_category(client):
+    resp = create_fanty_room(client, categories=["nonexistent"])
+    assert resp.status_code == 400
+
+
+def test_create_room_rejects_settings_with_no_matching_dares(client):
+    # Team + alcohol dares only exist for apartment/bar/country_house, not street.
+    resp = create_fanty_room(client, game_mode="team", location="street", categories=["alcohol"])
+    assert resp.status_code == 400
+
+
+def test_solo_start_requires_min_players(client):
+    resp = create_fanty_room(client, game_mode="solo")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+
+    resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    assert resp.status_code == 400
+
+    join_fanty(client, code, "Bob", "🐶")
+    resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    assert resp.status_code == 200
+
+
+def test_solo_spin_and_resolve_cycle(client):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+
+    resp = client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+    assert resp.status_code == 200
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["fanty"]["phase"] == "awaiting_action"
+    assert state["fanty"]["contentType"] == "dare"
+    assert state["fanty"]["contentText"]
+
+    resp = client.post(
+        f"/api/fanty/rooms/{code}/resolve", json={"token": host_token, "counted": True}
+    )
+    assert resp.status_code == 200
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["fanty"]["phase"] == "ready_to_spin"
+
+
+def test_truth_or_dare_choose_flow(client):
+    resp = create_fanty_room(client, game_mode="truth_or_dare")
+    body = resp.get_json()
+    code, host_id, host_token = body["code"], body["playerId"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶").get_json()
+    tokens_by_id = {host_id: host_token, bob["playerId"]: bob["token"]}
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+
+    resp = client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+    assert resp.status_code == 200
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["fanty"]["phase"] == "awaiting_choice"
+    picked_token = tokens_by_id[state["fanty"]["pickedPlayerId"]]
+
+    resp = client.post(
+        f"/api/fanty/rooms/{code}/choose", json={"token": picked_token, "choice": "truth"}
+    )
+    assert resp.status_code == 200
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["fanty"]["phase"] == "awaiting_action"
+    assert state["fanty"]["contentType"] == "truth"
+    assert state["fanty"]["contentText"]
+
+
+def test_choose_rejected_for_non_picked_player(client):
+    resp = create_fanty_room(client, game_mode="truth_or_dare")
+    body = resp.get_json()
+    code, host_id, host_token = body["code"], body["playerId"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶").get_json()
+    tokens_by_id = {host_id: host_token, bob["playerId"]: bob["token"]}
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    picked_id = state["fanty"]["pickedPlayerId"]
+    other_token = next(t for pid, t in tokens_by_id.items() if pid != picked_id)
+
+    resp = client.post(
+        f"/api/fanty/rooms/{code}/choose", json={"token": other_token, "choice": "truth"}
+    )
+    assert resp.status_code == 400
+
+
+def test_pick_mode_fair_cycles_through_all_players_before_repeating(client):
+    resp = create_fanty_room(client, game_mode="solo", pick_mode="fair")
+    body = resp.get_json()
+    code, host_id, host_token = body["code"], body["playerId"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶").get_json()
+    tokens_by_id = {host_id: host_token, bob["playerId"]: bob["token"]}
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+
+    picked_ids = []
+    for _ in range(2):
+        state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+        spinner_token = tokens_by_id[state["fanty"]["nextSpinnerId"]]
+        resp = client.post(f"/api/fanty/rooms/{code}/spin", json={"token": spinner_token})
+        assert resp.status_code == 200
+
+        state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+        picked_ids.append(state["fanty"]["pickedPlayerId"])
+
+        resp = client.post(
+            f"/api/fanty/rooms/{code}/resolve", json={"token": host_token, "counted": True}
+        )
+        assert resp.status_code == 200
+
+    assert set(picked_ids) == {host_id, bob["playerId"]}
+
+
+def test_local_mode_blocks_remote_join(client):
+    resp = create_fanty_room(client, game_mode="solo", device_mode="local")
+    body = resp.get_json()
+    code = body["code"]
+
+    resp = join_fanty(client, code, "Bob", "🐶")
+    assert resp.status_code == 400
+
+
+def test_local_mode_host_adds_local_players(client):
+    resp = create_fanty_room(client, game_mode="solo", device_mode="local")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+
+    resp = client.post(
+        f"/api/fanty/rooms/{code}/local-players",
+        json={"token": host_token, "name": "Bob", "avatarType": "emoji", "avatarValue": "🐶"},
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    assert resp.status_code == 200
