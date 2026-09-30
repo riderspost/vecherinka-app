@@ -20,12 +20,20 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      # The key is stored base64-encoded (DEPLOY_SSH_KEY_B64) and decoded into a
+      # file here instead of passed as multiline text — a multiline GitHub
+      # secret is fragile to copy-paste (a dropped newline silently breaks it
+      # with no useful error), a single-line base64 blob isn't.
+      - name: Write deploy key
+        run: |
+          echo "${{ secrets.DEPLOY_SSH_KEY_B64 }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
       - name: Deploy to production
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key_path: /tmp/deploy_key
           script: /home/vecherinka/deploy.sh
 
   deploy-staging:
@@ -33,10 +41,14 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     steps:
+      - name: Write deploy key
+        run: |
+          echo "${{ secrets.DEPLOY_STAGING_SSH_KEY_B64 }}" | base64 -d > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
       - name: Deploy to staging
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_STAGING_USER }}
-          key: ${{ secrets.DEPLOY_STAGING_SSH_KEY }}
+          key_path: /tmp/deploy_key
           script: /home/vecherinka/deploy-staging.sh
