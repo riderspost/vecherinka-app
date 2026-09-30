@@ -45,6 +45,8 @@ jobs:
         run: |
           echo "${{ secrets.DEPLOY_STAGING_SSH_KEY_B64 }}" | base64 -d > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
+          echo "decoded key byte count: $(wc -c < /tmp/deploy_key)"
+          ssh-keygen -l -f /tmp/deploy_key || echo "ssh-keygen could not parse the decoded key"
       - name: Deploy to staging
         uses: appleboy/ssh-action@v1.0.3
         with:
