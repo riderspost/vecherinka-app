@@ -21,7 +21,7 @@ fi
 
 cd "$(dirname "$0")/.."
 
-DUMP=$(mktemp /tmp/vecherinka-content-XXXX.json)
+DUMP=$(mktemp /tmp/vecherinka-content-XXXXXX.json)
 python3 scripts/dump_content.py > "$DUMP"
 
 echo "Copying any new uploaded audio files (never overwrites existing ones)..."
