@@ -481,10 +481,22 @@ label {
 }
 
 .upload-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed var(--accent);
   color: var(--accent);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
   text-align: center;
+}
+
+.upload-label:active {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .link-btn {
