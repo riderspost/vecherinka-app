@@ -499,6 +499,12 @@ label {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.upload-label.disabled {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
 .link-btn {
   background: none;
   border: none;

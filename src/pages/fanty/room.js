@@ -643,10 +643,10 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
     const photosState = { files: [] };
 
     if (fanty.contentType === "dare") {
+      const MAX_PHOTOS = 5;
       const uploadLabel = document.createElement("label");
       uploadLabel.className = "upload-label";
       const uploadLabelText = document.createElement("span");
-      uploadLabelText.textContent = "📷 Добавить фото (0/5)";
       const uploadInput = document.createElement("input");
       uploadInput.type = "file";
       uploadInput.accept = "image/*";
@@ -655,6 +655,13 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
 
       const previewRow = document.createElement("div");
       previewRow.className = "photo-row";
+
+      function updateUploadButtonState() {
+        const full = photosState.files.length >= MAX_PHOTOS;
+        uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/${MAX_PHOTOS})`;
+        uploadInput.disabled = full;
+        uploadLabel.classList.toggle("disabled", full);
+      }
 
       function renderPreviews() {
         previewRow.innerHTML = "";
@@ -674,7 +681,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
           removeBtn.setAttribute("aria-label", "Удалить фото");
           removeBtn.addEventListener("click", () => {
             photosState.files.splice(idx, 1);
-            uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
+            updateUploadButtonState();
             renderPreviews();
           });
 
@@ -685,7 +692,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       }
 
       uploadInput.addEventListener("change", async () => {
-        const remaining = 5 - photosState.files.length;
+        const remaining = MAX_PHOTOS - photosState.files.length;
         const files = Array.from(uploadInput.files || []).slice(0, remaining);
         for (const file of files) {
           try {
@@ -695,14 +702,15 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
             alert(e.message);
           }
         }
-        uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
         uploadInput.value = "";
+        updateUploadButtonState();
         renderPreviews();
       });
       uploadLabel.appendChild(uploadLabelText);
       uploadLabel.appendChild(uploadInput);
       panel.appendChild(uploadLabel);
       panel.appendChild(previewRow);
+      updateUploadButtonState();
     }
 
     const row = document.createElement("div");
