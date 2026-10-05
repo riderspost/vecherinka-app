@@ -5,7 +5,7 @@ from datetime import datetime
 
 from .rooms_common import gen_id
 
-MIN_PLAYERS_BY_MODE = {"truth_or_dare": 2, "solo": 2, "team": 3}
+MIN_PLAYERS_BY_MODE = {"truth_or_dare": 2, "solo": 2, "team": 2}
 MAX_PHOTOS = 5
 LOCATIONS = ("street", "apartment", "bar", "country_house")
 MOOD_CATEGORIES = ("basic", "flirt", "flirt_plus")

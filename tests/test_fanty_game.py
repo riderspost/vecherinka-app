@@ -167,6 +167,20 @@ def test_local_mode_blocks_remote_join(client):
     assert resp.status_code == 400
 
 
+def test_team_mode_starts_with_two_players(client):
+    resp = create_fanty_room(client, game_mode="team")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+
+    resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    assert resp.status_code == 400  # only the host so far
+
+    join_fanty(client, code, "Bob", "🐶")
+    resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    assert resp.status_code == 200
+
+
 def test_local_mode_host_adds_local_players(client):
     resp = create_fanty_room(client, game_mode="solo", device_mode="local")
     body = resp.get_json()
