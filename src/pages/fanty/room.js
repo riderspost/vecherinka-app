@@ -641,30 +641,35 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
 
   if (fanty.canResolve) {
     const photosState = { files: [] };
-    const uploadLabel = document.createElement("label");
-    uploadLabel.className = "upload-label";
-    uploadLabel.textContent = "📷 Добавить фото (0/5)";
-    const uploadInput = document.createElement("input");
-    uploadInput.type = "file";
-    uploadInput.accept = "image/*";
-    uploadInput.multiple = true;
-    uploadInput.style.display = "none";
-    uploadInput.addEventListener("change", async () => {
-      const remaining = 5 - photosState.files.length;
-      const files = Array.from(uploadInput.files || []).slice(0, remaining);
-      for (const file of files) {
-        try {
-          const res = await fantyApi.uploadPhoto(code, file);
-          photosState.files.push(res.filename);
-        } catch (e) {
-          alert(e.message);
+
+    if (fanty.contentType === "dare") {
+      const uploadLabel = document.createElement("label");
+      uploadLabel.className = "upload-label";
+      const uploadLabelText = document.createElement("span");
+      uploadLabelText.textContent = "📷 Добавить фото (0/5)";
+      const uploadInput = document.createElement("input");
+      uploadInput.type = "file";
+      uploadInput.accept = "image/*";
+      uploadInput.multiple = true;
+      uploadInput.style.display = "none";
+      uploadInput.addEventListener("change", async () => {
+        const remaining = 5 - photosState.files.length;
+        const files = Array.from(uploadInput.files || []).slice(0, remaining);
+        for (const file of files) {
+          try {
+            const res = await fantyApi.uploadPhoto(code, file);
+            photosState.files.push(res.filename);
+          } catch (e) {
+            alert(e.message);
+          }
         }
-      }
-      uploadLabel.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
-      uploadInput.value = "";
-    });
-    uploadLabel.appendChild(uploadInput);
-    panel.appendChild(uploadLabel);
+        uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
+        uploadInput.value = "";
+      });
+      uploadLabel.appendChild(uploadLabelText);
+      uploadLabel.appendChild(uploadInput);
+      panel.appendChild(uploadLabel);
+    }
 
     const row = document.createElement("div");
     row.className = "row-actions";
