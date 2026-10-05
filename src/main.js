@@ -6,6 +6,13 @@ import { renderFantyHome } from "./pages/fanty/home.js";
 import { mountFantyRoomPage } from "./pages/fanty/room.js";
 import { renderFantySubmit } from "./pages/fanty/submit.js";
 import { renderAccountPage } from "./pages/account.js";
+import "./pwaInstall.js";
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
 
 const app = document.getElementById("app");
 

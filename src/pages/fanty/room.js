@@ -3,6 +3,7 @@ import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
+import { openLightbox } from "../../lightbox.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
@@ -726,6 +727,7 @@ function renderFinished(wrap, state) {
         const img = document.createElement("img");
         img.src = src;
         img.className = "summary-photo";
+        img.addEventListener("click", () => openLightbox(src));
         photoRow.appendChild(img);
       });
       card.appendChild(photoRow);

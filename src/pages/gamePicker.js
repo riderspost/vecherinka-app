@@ -1,5 +1,6 @@
 import { navigate } from "../router.js";
 import { authApi } from "../api.js";
+import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
 
 function renderAccountCorner() {
   const corner = document.createElement("div");
@@ -74,6 +75,15 @@ export function renderGamePicker(container) {
     btn.addEventListener("click", () => navigate(btn.dataset.path));
   });
   wrap.appendChild(cards);
+
+  const pwaSection = document.createElement("div");
+  pwaSection.className = "pwa-section";
+  pwaSection.innerHTML = `
+    <div class="hint" style="margin-top:14px;margin-bottom:6px">📲 Установить на телефон</div>
+    <div id="pwa-install-section">${pwaInstallSectionHtml()}</div>
+  `;
+  wrap.appendChild(pwaSection);
+  wirePwaInstallButton(pwaSection);
 
   container.appendChild(wrap);
 }
