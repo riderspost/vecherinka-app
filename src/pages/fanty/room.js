@@ -652,6 +652,38 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       uploadInput.accept = "image/*";
       uploadInput.multiple = true;
       uploadInput.style.display = "none";
+
+      const previewRow = document.createElement("div");
+      previewRow.className = "photo-row";
+
+      function renderPreviews() {
+        previewRow.innerHTML = "";
+        photosState.files.forEach((filename, idx) => {
+          const item = document.createElement("div");
+          item.className = "photo-preview-item";
+
+          const img = document.createElement("img");
+          img.src = `/uploads/${filename}`;
+          img.className = "summary-photo";
+          img.addEventListener("click", () => openLightbox(photosState.files.map((f) => `/uploads/${f}`), idx));
+
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "photo-remove-btn";
+          removeBtn.textContent = "✕";
+          removeBtn.setAttribute("aria-label", "Удалить фото");
+          removeBtn.addEventListener("click", () => {
+            photosState.files.splice(idx, 1);
+            uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
+            renderPreviews();
+          });
+
+          item.appendChild(img);
+          item.appendChild(removeBtn);
+          previewRow.appendChild(item);
+        });
+      }
+
       uploadInput.addEventListener("change", async () => {
         const remaining = 5 - photosState.files.length;
         const files = Array.from(uploadInput.files || []).slice(0, remaining);
@@ -665,10 +697,12 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
         }
         uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/5)`;
         uploadInput.value = "";
+        renderPreviews();
       });
       uploadLabel.appendChild(uploadLabelText);
       uploadLabel.appendChild(uploadInput);
       panel.appendChild(uploadLabel);
+      panel.appendChild(previewRow);
     }
 
     const row = document.createElement("div");
