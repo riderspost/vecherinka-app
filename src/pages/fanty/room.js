@@ -3,7 +3,7 @@ import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
-import { openLightbox } from "../../lightbox.js";
+import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
@@ -709,6 +709,17 @@ function renderFinished(wrap, state) {
     p.textContent = "Раундов не было.";
     wrap.appendChild(p);
   }
+
+  const allPhotos = summary.flatMap((r) => r.photos || []);
+
+  if (allPhotos.length > 1) {
+    const shareAllBtn = document.createElement("button");
+    shareAllBtn.className = "btn";
+    shareAllBtn.textContent = `📤 Поделиться всеми фото (${allPhotos.length})`;
+    shareAllBtn.addEventListener("click", () => shareAllImages(allPhotos));
+    wrap.appendChild(shareAllBtn);
+  }
+
   summary.forEach((r) => {
     const card = document.createElement("div");
     card.className = "fanty-summary-card";
@@ -727,7 +738,7 @@ function renderFinished(wrap, state) {
         const img = document.createElement("img");
         img.src = src;
         img.className = "summary-photo";
-        img.addEventListener("click", () => openLightbox(src));
+        img.addEventListener("click", () => openLightbox(allPhotos, allPhotos.indexOf(src)));
         photoRow.appendChild(img);
       });
       card.appendChild(photoRow);
