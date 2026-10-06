@@ -40,6 +40,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let lastBottleAngle = 0;
   let timerIntervalId = null;
   let currentAudio = null;
+  let persistentBottleEl = null;
 
   function stop() {
     stopped = true;
@@ -188,6 +189,8 @@ export function mountFantyRoomPage(container, code, opts) {
         rerender: (s) => render(s, token),
         getLastAngle: () => lastBottleAngle,
         setLastAngle: (a) => (lastBottleAngle = a),
+        getBottleElement: () => persistentBottleEl,
+        setBottleElement: (el) => (persistentBottleEl = el),
         setTimerInterval: (id) => (timerIntervalId = id),
         setAudio: (a) => (currentAudio = a),
         stopAudio: () => {
@@ -394,9 +397,18 @@ function renderBottleCircle(players, fanty, ctrl) {
     circleWrap.appendChild(seat);
   });
 
-  const bottle = document.createElement("div");
-  bottle.className = "bottle";
-  bottle.innerHTML = BOTTLE_IMG;
+  // Reuse the same bottle element across re-renders instead of recreating
+  // it every time any part of the room state changes (e.g. right after
+  // choosing truth/action) — a fresh <img> forces a repaint even when the
+  // resting angle is identical to before, which shows up as a flicker.
+  let bottle = ctrl ? ctrl.getBottleElement() : null;
+  if (!bottle) {
+    bottle = document.createElement("div");
+    bottle.className = "bottle";
+    bottle.innerHTML = BOTTLE_IMG;
+    if (ctrl) ctrl.setBottleElement(bottle);
+  }
+
   const targetId = fanty.phase === "awaiting_partner_spin" ? fanty.pickedPlayerId : fanty.partnerPlayerId || fanty.pickedPlayerId;
   let staticAngle = ctrl ? ctrl.getLastAngle() : 0;
   if (targetId) {
@@ -406,6 +418,10 @@ function renderBottleCircle(players, fanty, ctrl) {
       if (ctrl) ctrl.setLastAngle(staticAngle);
     }
   }
+  // Outside of the spin animation (which sets its own transition directly
+  // on this same element), every update here should snap instantly rather
+  // than inherit a lingering transition from a previous spin.
+  bottle.style.transition = "none";
   bottle.style.transform = `translate(-50%, -50%) rotate(${staticAngle}deg)`;
   circleWrap.appendChild(bottle);
 
