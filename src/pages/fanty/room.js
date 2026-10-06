@@ -444,11 +444,17 @@ function renderPlaying(wrap, state, token, code, ctrl) {
       btn.textContent = "Крутить бутылку!";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
+        // Set this before the network round-trips below, not after — on a
+        // slow mobile connection those can take long enough for a poll tick
+        // to land in between and wipe the bottle mid-spin (full screen
+        // re-render), which looks like the spin stopping after a second.
+        ctrl.setAnimating(true);
         try {
           await fantyApi.spin(code, token);
           const fresh = await fantyApi.getState(code, token);
           await animateSpinAndRerender(bottle, players, fresh.fanty.pickedPlayerId, ctrl, fresh);
         } catch (e) {
+          ctrl.setAnimating(false);
           alert(e.message);
           btn.disabled = false;
         }
@@ -510,11 +516,13 @@ function renderPlaying(wrap, state, token, code, ctrl) {
       btn.textContent = "Крутить на напарника!";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
+        ctrl.setAnimating(true);
         try {
           await fantyApi.spinPartner(code, token);
           const fresh = await fantyApi.getState(code, token);
           await animateSpinAndRerender(bottle, players, fresh.fanty.partnerPlayerId, ctrl, fresh);
         } catch (e) {
+          ctrl.setAnimating(false);
           alert(e.message);
           btn.disabled = false;
         }

@@ -890,6 +890,13 @@ h2, h3 {
   top: 50%;
   transform: translate(-50%, -50%);
   transform-origin: center;
+  /* Keeps the compositing layer stable instead of promoting/demoting it on
+     demand — combined with the drop-shadow filter below, on-demand layer
+     changes on mobile WebKit can show up as a faint rectangular seam at
+     first paint or a brief flicker whenever the layer gets recomposited. */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .bottle-img {
