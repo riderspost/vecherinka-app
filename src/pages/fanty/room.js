@@ -1,7 +1,7 @@
 import { api, fantyApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
-import { createAvatarPicker, avatarHtml, reuseOrCreateAvatarElement } from "../../avatarPicker.js";
+import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
@@ -40,9 +40,8 @@ export function mountFantyRoomPage(container, code, opts) {
   let lastBottleAngle = 0;
   let timerIntervalId = null;
   let currentAudio = null;
-  let persistentBottleEl = null;
-  let persistentMeAvatarEl = null;
-  const persistentSeatAvatarEls = new Map();
+  let persistentMeBadgeEl = null;
+  let persistentCircleWrap = null;
 
   function stop() {
     stopped = true;
@@ -175,15 +174,21 @@ export function mountFantyRoomPage(container, code, opts) {
       page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
 
       if (!state.me.isDisplay) {
-        const meBadge = document.createElement("div");
-        meBadge.className = "me-badge";
-        const meAvatarEl = reuseOrCreateAvatarElement(persistentMeAvatarEl, state.me);
-        persistentMeAvatarEl = meAvatarEl;
-        const meName = document.createElement("span");
-        meName.textContent = state.me.name;
-        meBadge.appendChild(meAvatarEl);
-        meBadge.appendChild(meName);
-        page.appendChild(meBadge);
+        // The badge's own avatar/name never change mid-game, so reuse the
+        // whole thing as one block instead of rebuilding (and reparenting
+        // its <img>) on every poll tick — see renderBottleCircle for the
+        // same reasoning, which is where this actually mattered visibly.
+        if (!persistentMeBadgeEl || persistentMeBadgeEl.__playerId !== state.me.id) {
+          const meBadge = document.createElement("div");
+          meBadge.className = "me-badge";
+          meBadge.__playerId = state.me.id;
+          meBadge.appendChild(createAvatarElement(state.me));
+          const meName = document.createElement("span");
+          meName.textContent = state.me.name;
+          meBadge.appendChild(meName);
+          persistentMeBadgeEl = meBadge;
+        }
+        page.appendChild(persistentMeBadgeEl);
       }
 
       const wrap = document.createElement("div");
@@ -196,10 +201,8 @@ export function mountFantyRoomPage(container, code, opts) {
         rerender: (s) => render(s, token),
         getLastAngle: () => lastBottleAngle,
         setLastAngle: (a) => (lastBottleAngle = a),
-        getBottleElement: () => persistentBottleEl,
-        setBottleElement: (el) => (persistentBottleEl = el),
-        getSeatAvatar: (playerId) => persistentSeatAvatarEls.get(playerId),
-        setSeatAvatar: (playerId, el) => persistentSeatAvatarEls.set(playerId, el),
+        getCircleWrap: () => persistentCircleWrap,
+        setCircleWrap: (el) => (persistentCircleWrap = el),
         setTimerInterval: (id) => (timerIntervalId = id),
         setAudio: (a) => (currentAudio = a),
         stopAudio: () => {
@@ -386,52 +389,8 @@ function seatAngle(index, total) {
 }
 
 function renderBottleCircle(players, fanty, ctrl) {
-  const circleWrap = document.createElement("div");
-  circleWrap.className = "bottle-circle";
   const radius = 42;
-
-  players.forEach((p, i) => {
-    const angleDeg = seatAngle(i, players.length);
-    const rad = (angleDeg * Math.PI) / 180;
-    const x = 50 + radius * Math.cos(rad);
-    const y = 50 + radius * Math.sin(rad);
-    const seat = document.createElement("div");
-    seat.className =
-      "circle-seat" +
-      (p.id === fanty.pickedPlayerId ? " circle-seat-picked" : "") +
-      (p.id === fanty.partnerPlayerId ? " circle-seat-partner" : "");
-    seat.style.left = `${x}%`;
-    seat.style.top = `${y}%`;
-
-    const avatarWrap = document.createElement("div");
-    avatarWrap.className = "seat-avatar";
-    // Same deal as the bottle: rebuilding this <img> from a string on every
-    // poll tick forces a fresh network fetch for photo avatars (never
-    // cached by the service worker) and shows up as a flicker, so reuse the
-    // existing element whenever this player's avatar hasn't changed.
-    const avatarEl = reuseOrCreateAvatarElement(ctrl ? ctrl.getSeatAvatar(p.id) : null, p);
-    if (ctrl) ctrl.setSeatAvatar(p.id, avatarEl);
-    avatarWrap.appendChild(avatarEl);
-
-    const nameEl = document.createElement("span");
-    nameEl.textContent = p.name;
-
-    seat.appendChild(avatarWrap);
-    seat.appendChild(nameEl);
-    circleWrap.appendChild(seat);
-  });
-
-  // Reuse the same bottle element across re-renders instead of recreating
-  // it every time any part of the room state changes (e.g. right after
-  // choosing truth/action) — a fresh <img> forces a repaint even when the
-  // resting angle is identical to before, which shows up as a flicker.
-  let bottle = ctrl ? ctrl.getBottleElement() : null;
-  if (!bottle) {
-    bottle = document.createElement("div");
-    bottle.className = "bottle";
-    bottle.innerHTML = BOTTLE_IMG;
-    if (ctrl) ctrl.setBottleElement(bottle);
-  }
+  const playerKey = players.map((p) => p.id).join(",");
 
   const targetId = fanty.phase === "awaiting_partner_spin" ? fanty.pickedPlayerId : fanty.partnerPlayerId || fanty.pickedPlayerId;
   let staticAngle = ctrl ? ctrl.getLastAngle() : 0;
@@ -442,13 +401,69 @@ function renderBottleCircle(players, fanty, ctrl) {
       if (ctrl) ctrl.setLastAngle(staticAngle);
     }
   }
-  // Outside of the spin animation (which sets its own transition directly
-  // on this same element), every update here should snap instantly rather
-  // than inherit a lingering transition from a previous spin.
+
+  // The player list (and so the seat layout) can't change once a fanty
+  // game is "playing" — nobody can join or leave mid-round. So once the
+  // circle is built, every later call just reuses it wholesale and only
+  // updates the picked/partner highlight + the bottle's angle in place,
+  // instead of tearing down and rebuilding every seat/avatar/bottle on
+  // every poll-detected state change. That full rebuild was the actual
+  // source of the flicker, especially visible on photo avatars (the
+  // service worker never caches /uploads/, so each rebuilt <img> forced a
+  // real network re-fetch) — reusing just the <img> node wasn't enough on
+  // its own, since it still got reparented through a freshly-created
+  // wrapper chain on every render.
+  const existing = ctrl ? ctrl.getCircleWrap() : null;
+  if (existing && existing.__playerKey === playerKey) {
+    existing.querySelectorAll(".circle-seat").forEach((seatEl) => {
+      const pid = seatEl.dataset.playerId;
+      seatEl.classList.toggle("circle-seat-picked", pid === fanty.pickedPlayerId);
+      seatEl.classList.toggle("circle-seat-partner", pid === fanty.partnerPlayerId);
+    });
+    const bottle = existing.querySelector(".bottle");
+    bottle.style.transition = "none";
+    bottle.style.transform = `translate(-50%, -50%) rotate(${staticAngle}deg)`;
+    return { circleWrap: existing, bottle };
+  }
+
+  const circleWrap = document.createElement("div");
+  circleWrap.className = "bottle-circle";
+  circleWrap.__playerKey = playerKey;
+
+  players.forEach((p, i) => {
+    const angleDeg = seatAngle(i, players.length);
+    const rad = (angleDeg * Math.PI) / 180;
+    const x = 50 + radius * Math.cos(rad);
+    const y = 50 + radius * Math.sin(rad);
+    const seat = document.createElement("div");
+    seat.dataset.playerId = p.id;
+    seat.className =
+      "circle-seat" +
+      (p.id === fanty.pickedPlayerId ? " circle-seat-picked" : "") +
+      (p.id === fanty.partnerPlayerId ? " circle-seat-partner" : "");
+    seat.style.left = `${x}%`;
+    seat.style.top = `${y}%`;
+
+    const avatarWrap = document.createElement("div");
+    avatarWrap.className = "seat-avatar";
+    avatarWrap.appendChild(createAvatarElement(p));
+
+    const nameEl = document.createElement("span");
+    nameEl.textContent = p.name;
+
+    seat.appendChild(avatarWrap);
+    seat.appendChild(nameEl);
+    circleWrap.appendChild(seat);
+  });
+
+  const bottle = document.createElement("div");
+  bottle.className = "bottle";
+  bottle.innerHTML = BOTTLE_IMG;
   bottle.style.transition = "none";
   bottle.style.transform = `translate(-50%, -50%) rotate(${staticAngle}deg)`;
   circleWrap.appendChild(bottle);
 
+  if (ctrl) ctrl.setCircleWrap(circleWrap);
   return { circleWrap, bottle };
 }
 
