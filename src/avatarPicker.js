@@ -97,3 +97,36 @@ export function avatarHtml(player) {
   }
   return `<span class="avatar-emoji">${escapeHtml(player.avatarValue)}</span>`;
 }
+
+// DOM-element (not string) version, for call sites that re-render on a poll
+// loop. Rebuilding an avatar from an HTML string on every tick forces the
+// browser to load a fresh <img> each time — invisible for the bundled emoji
+// spans, but a visible flicker for uploaded photo avatars, since those are
+// never cached by the service worker. reuseOrCreateAvatarElement lets a
+// caller keep handing back the same node across renders when the avatar
+// itself hasn't actually changed.
+export function createAvatarElement(player) {
+  if (player.avatarType === "photo") {
+    const img = document.createElement("img");
+    img.className = "avatar-img";
+    img.src = `/uploads/${player.avatarValue}`;
+    img.alt = player.name;
+    return img;
+  }
+  const span = document.createElement("span");
+  span.className = "avatar-emoji";
+  span.textContent = player.avatarValue;
+  return span;
+}
+
+function avatarElementMatches(el, player) {
+  if (!el) return false;
+  if (player.avatarType === "photo") {
+    return el.tagName === "IMG" && el.getAttribute("src") === `/uploads/${player.avatarValue}`;
+  }
+  return el.tagName === "SPAN" && el.textContent === player.avatarValue;
+}
+
+export function reuseOrCreateAvatarElement(existingEl, player) {
+  return avatarElementMatches(existingEl, player) ? existingEl : createAvatarElement(player);
+}

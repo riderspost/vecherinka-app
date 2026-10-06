@@ -1,7 +1,7 @@
 import { api, fantyApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
-import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
+import { createAvatarPicker, avatarHtml, reuseOrCreateAvatarElement } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
@@ -41,6 +41,8 @@ export function mountFantyRoomPage(container, code, opts) {
   let timerIntervalId = null;
   let currentAudio = null;
   let persistentBottleEl = null;
+  let persistentMeAvatarEl = null;
+  const persistentSeatAvatarEls = new Map();
 
   function stop() {
     stopped = true;
@@ -175,7 +177,12 @@ export function mountFantyRoomPage(container, code, opts) {
       if (!state.me.isDisplay) {
         const meBadge = document.createElement("div");
         meBadge.className = "me-badge";
-        meBadge.innerHTML = `${avatarHtml(state.me)}<span>${escapeHtml(state.me.name)}</span>`;
+        const meAvatarEl = reuseOrCreateAvatarElement(persistentMeAvatarEl, state.me);
+        persistentMeAvatarEl = meAvatarEl;
+        const meName = document.createElement("span");
+        meName.textContent = state.me.name;
+        meBadge.appendChild(meAvatarEl);
+        meBadge.appendChild(meName);
         page.appendChild(meBadge);
       }
 
@@ -191,6 +198,8 @@ export function mountFantyRoomPage(container, code, opts) {
         setLastAngle: (a) => (lastBottleAngle = a),
         getBottleElement: () => persistentBottleEl,
         setBottleElement: (el) => (persistentBottleEl = el),
+        getSeatAvatar: (playerId) => persistentSeatAvatarEls.get(playerId),
+        setSeatAvatar: (playerId, el) => persistentSeatAvatarEls.set(playerId, el),
         setTimerInterval: (id) => (timerIntervalId = id),
         setAudio: (a) => (currentAudio = a),
         stopAudio: () => {
@@ -393,7 +402,22 @@ function renderBottleCircle(players, fanty, ctrl) {
       (p.id === fanty.partnerPlayerId ? " circle-seat-partner" : "");
     seat.style.left = `${x}%`;
     seat.style.top = `${y}%`;
-    seat.innerHTML = `<div class="seat-avatar">${avatarHtml(p)}</div><span>${escapeHtml(p.name)}</span>`;
+
+    const avatarWrap = document.createElement("div");
+    avatarWrap.className = "seat-avatar";
+    // Same deal as the bottle: rebuilding this <img> from a string on every
+    // poll tick forces a fresh network fetch for photo avatars (never
+    // cached by the service worker) and shows up as a flicker, so reuse the
+    // existing element whenever this player's avatar hasn't changed.
+    const avatarEl = reuseOrCreateAvatarElement(ctrl ? ctrl.getSeatAvatar(p.id) : null, p);
+    if (ctrl) ctrl.setSeatAvatar(p.id, avatarEl);
+    avatarWrap.appendChild(avatarEl);
+
+    const nameEl = document.createElement("span");
+    nameEl.textContent = p.name;
+
+    seat.appendChild(avatarWrap);
+    seat.appendChild(nameEl);
     circleWrap.appendChild(seat);
   });
 
