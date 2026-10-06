@@ -43,6 +43,7 @@ export const api = {
     form.append("file", file);
     return request("POST", "/api/upload-avatar", form);
   },
+  contact: (email, message) => request("POST", "/api/contact", { email, message }),
 };
 
 export const authApi = {

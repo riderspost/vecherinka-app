@@ -6,6 +6,7 @@ import { renderFantyHome } from "./pages/fanty/home.js";
 import { mountFantyRoomPage } from "./pages/fanty/room.js";
 import { renderFantySubmit } from "./pages/fanty/submit.js";
 import { renderAccountPage } from "./pages/account.js";
+import { renderContactPage } from "./pages/contact.js";
 import "./pwaInstall.js";
 
 if ("serviceWorker" in navigator) {
@@ -36,6 +37,8 @@ function renderCurrentRoute() {
     renderFantySubmit(app);
   } else if (route.name === "account") {
     renderAccountPage(app);
+  } else if (route.name === "contact") {
+    renderContactPage(app);
   }
 }
 

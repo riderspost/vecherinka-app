@@ -85,5 +85,16 @@ export function renderGamePicker(container) {
   wrap.appendChild(pwaSection);
   wirePwaInstallButton(pwaSection);
 
+  const contactLink = document.createElement("a");
+  contactLink.className = "link-btn";
+  contactLink.href = "/contact";
+  contactLink.textContent = "✉️ Связаться с разработчиком";
+  contactLink.style.marginTop = "14px";
+  contactLink.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigate("/contact");
+  });
+  wrap.appendChild(contactLink);
+
   container.appendChild(wrap);
 }

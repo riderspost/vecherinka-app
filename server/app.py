@@ -1,4 +1,6 @@
+import html
 import os
+import re
 import uuid
 from datetime import timedelta
 
@@ -8,6 +10,7 @@ from werkzeug.utils import secure_filename
 from . import game
 from . import fanty_game as fg
 from .db import get_db, close_db, init_db, register_app
+from .mailer import send_email
 from .seed_data import seed_prompts
 from .admin import admin_bp
 from .auth import auth_bp
@@ -31,6 +34,9 @@ from .rooms_common import (
 )
 
 MAX_ANSWER_LEN = 300
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "riderspost@gmail.com")
+MAX_CONTACT_MESSAGE_LEN = 5000
+CONTACT_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 app = Flask(__name__, static_folder=None)
 register_app(app)
@@ -70,6 +76,30 @@ with app.app_context():
 
 def error(message, status=400):
     return jsonify({"error": message}), status
+
+
+@app.route("/api/contact", methods=["POST"])
+def contact_developer():
+    data = request.get_json(silent=True) or {}
+    contact_email = (data.get("email") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    if not CONTACT_EMAIL_RE.match(contact_email):
+        return error("Введите корректный email")
+    if not message:
+        return error("Введите сообщение")
+    if len(message) > MAX_CONTACT_MESSAGE_LEN:
+        return error(f"Слишком длинное сообщение (макс. {MAX_CONTACT_MESSAGE_LEN} символов)")
+
+    subject = f"Вечеринка: сообщение от {contact_email}"
+    body_html = (
+        f"<p>Email отправителя: {html.escape(contact_email)}</p>"
+        f"<p>{html.escape(message).replace(chr(10), '<br>')}</p>"
+    )
+    sent = send_email(SUPPORT_EMAIL, subject, body_html, reply_to=contact_email)
+    if not sent:
+        return error("Не удалось отправить сообщение, попробуйте позже", 502)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/upload-avatar", methods=["POST"])
