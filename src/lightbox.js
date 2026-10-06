@@ -117,13 +117,64 @@ export function openLightbox(sources, startIndex = 0) {
     else if (e.key === "ArrowRight") go(1);
   }
 
-  overlay.addEventListener("click", close);
+  let suppressClick = false;
+  overlay.addEventListener("click", () => {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
+    close();
+  });
   closeBtn.addEventListener("click", close);
   shareBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     shareImage(list[index]);
   });
   document.addEventListener("keydown", onKeydown);
+
+  if (list.length > 1) {
+    const SWIPE_THRESHOLD = 40;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touching = false;
+
+    overlay.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) return;
+        touching = true;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      },
+      { passive: true }
+    );
+
+    overlay.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!touching || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        // Once a swipe is clearly horizontal, stop the page itself from
+        // scrolling/bouncing underneath the fullscreen overlay.
+        if (Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+      },
+      { passive: false }
+    );
+
+    overlay.addEventListener("touchend", (e) => {
+      if (!touching) return;
+      touching = false;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        go(dx < 0 ? 1 : -1);
+        suppressClick = true;
+      }
+    });
+  }
 
   overlay.appendChild(img);
   overlay.appendChild(closeBtn);
