@@ -562,6 +562,15 @@ label {
   height: 22px;
   border-radius: 50%;
   object-fit: cover;
+  /* Same mobile WebKit remedy as the bottle (see .bottle): a rounded,
+     object-fit image sitting inside a container whose siblings keep
+     getting their style updated (the bottle's rotation, every poll tick)
+     can get swept into a repaint on some mobile GPUs even though nothing
+     about the image itself changed. Giving it its own stable compositing
+     layer stops that. */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .host-badge {
