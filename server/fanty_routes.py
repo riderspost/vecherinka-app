@@ -425,6 +425,7 @@ def submit_content():
     if not categories:
         return error("Выберите хотя бы одну категорию")
 
+    user_id = session.get("user_id")
     db = get_db()
     if content_type == "dare":
         kind = data.get("kind") if data.get("kind") in ("solo", "team") else "solo"
@@ -433,7 +434,10 @@ def submit_content():
             return error("Выберите хотя бы одно место")
         if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (text,)).fetchone():
             return error("Такой фант уже есть")
-        cur = db.execute("INSERT INTO fanty_dares (text, kind, status) VALUES (?, ?, 'pending')", (text, kind))
+        cur = db.execute(
+            "INSERT INTO fanty_dares (text, kind, status, created_by_user_id) VALUES (?, ?, 'pending', ?)",
+            (text, kind, user_id),
+        )
         dare_id = cur.lastrowid
         db.executemany(
             "INSERT OR IGNORE INTO fanty_dare_categories (dare_id, category) VALUES (?, ?)",
@@ -446,7 +450,10 @@ def submit_content():
     elif content_type == "truth":
         if db.execute("SELECT 1 FROM fanty_truths WHERE text = ?", (text,)).fetchone():
             return error("Такой вопрос уже есть")
-        cur = db.execute("INSERT INTO fanty_truths (text, status) VALUES (?, 'pending')", (text,))
+        cur = db.execute(
+            "INSERT INTO fanty_truths (text, status, created_by_user_id) VALUES (?, 'pending', ?)",
+            (text, user_id),
+        )
         truth_id = cur.lastrowid
         db.executemany(
             "INSERT OR IGNORE INTO fanty_truth_categories (truth_id, category) VALUES (?, ?)",
@@ -457,3 +464,39 @@ def submit_content():
 
     db.commit()
     return jsonify({"ok": True})
+
+
+@fanty_bp.route("/my-submissions")
+def my_submissions():
+    user_id = session.get("user_id")
+    if not user_id:
+        return error("Предлагать свои фанты могут только зарегистрированные пользователи", 401)
+
+    db = get_db()
+    dares = db.execute(
+        "SELECT id, text, kind, status, created_at FROM fanty_dares WHERE created_by_user_id = ?",
+        (user_id,),
+    ).fetchall()
+    truths = db.execute(
+        "SELECT id, text, status, created_at FROM fanty_truths WHERE created_by_user_id = ?",
+        (user_id,),
+    ).fetchall()
+
+    items = [
+        {
+            "id": r["id"],
+            "type": "dare",
+            "text": r["text"],
+            "kind": r["kind"],
+            "status": r["status"],
+            "createdAt": r["created_at"],
+        }
+        for r in dares
+    ] + [
+        {"id": r["id"], "type": "truth", "text": r["text"], "status": r["status"], "createdAt": r["created_at"]}
+        for r in truths
+    ]
+    items.sort(key=lambda i: i["createdAt"], reverse=True)
+    approved_count = sum(1 for i in items if i["status"] == "active")
+
+    return jsonify({"approvedCount": approved_count, "items": items})

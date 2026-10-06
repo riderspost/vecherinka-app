@@ -1090,3 +1090,48 @@ h2, h3 {
   padding: 8px 16px;
   font-size: 14px;
 }
+
+.my-submissions {
+  width: 100%;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.section-heading {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.submissions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.submission-row {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.submission-text {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.submission-meta {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.submission-status-approved {
+  color: #6be37a;
+  font-weight: 600;
+}
+
+.submission-status-pending {
+  color: var(--accent);
+  font-weight: 600;
+}

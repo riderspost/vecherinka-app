@@ -50,6 +50,12 @@ def init_db():
     _ensure_column(db, "fanty_dares", "has_timer", "has_timer INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "fanty_dares", "timer_seconds", "timer_seconds INTEGER NOT NULL DEFAULT 60")
     _ensure_column(db, "fanty_state", "performance_started_at", "performance_started_at TEXT")
+    _ensure_column(
+        db, "fanty_dares", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL"
+    )
+    _ensure_column(
+        db, "fanty_truths", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL"
+    )
     db.commit()
     db.close()
 

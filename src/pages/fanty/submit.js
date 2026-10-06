@@ -1,5 +1,6 @@
 import { authApi, fantyApi } from "../../api.js";
 import { navigate } from "../../router.js";
+import { escapeHtml } from "../../utils.js";
 import { LOCATIONS, CATEGORIES } from "./constants.js";
 
 function checkboxGroup(options) {
@@ -54,7 +55,10 @@ export function renderFantySubmit(container) {
     .session()
     .then((res) => {
       if (res.authenticated) {
-        renderForm(wrap);
+        const mySubmissions = createMySubmissions();
+        renderForm(wrap, mySubmissions.refresh);
+        wrap.appendChild(mySubmissions.element);
+        mySubmissions.refresh();
       } else {
         renderLoginRequired(wrap);
       }
@@ -86,7 +90,7 @@ function renderLoginRequired(wrap) {
   wrap.appendChild(row);
 }
 
-function renderForm(wrap) {
+function renderForm(wrap, onSubmitted) {
   wrap.innerHTML = `
     <h1 class="logo">💡 Предложить фант</h1>
     <p class="tagline">Ваш вариант попадёт на проверку администратору и появится в игре после одобрения</p>
@@ -176,6 +180,7 @@ function renderForm(wrap) {
       await fantyApi.submit(payload);
       successEl.textContent = "Спасибо! Ваш вариант отправлен на проверку.";
       textArea.value = "";
+      if (onSubmitted) onSubmitted();
     } catch (e) {
       errorEl.textContent = e.message;
     } finally {
@@ -208,4 +213,57 @@ function renderForm(wrap) {
   wrap.appendChild(backLink);
 
   updateVisibility();
+}
+
+function createMySubmissions() {
+  const host = document.createElement("div");
+  host.className = "my-submissions";
+
+  async function refresh() {
+    host.innerHTML = `<p class="tagline">Загружаем ваши предложения...</p>`;
+    try {
+      const res = await fantyApi.mySubmissions();
+      renderList(res);
+    } catch (e) {
+      host.innerHTML = `<p class="error-msg">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function renderList(res) {
+    host.innerHTML = "";
+
+    const heading = document.createElement("h2");
+    heading.className = "section-heading";
+    heading.textContent = "💡 Мои предложения";
+    host.appendChild(heading);
+
+    const counter = document.createElement("p");
+    counter.className = "tagline";
+    counter.textContent =
+      res.items.length === 0
+        ? "Вы пока ничего не предлагали."
+        : `Одобрено сервисом: ${res.approvedCount} из ${res.items.length}`;
+    host.appendChild(counter);
+
+    if (res.items.length === 0) return;
+
+    const list = document.createElement("div");
+    list.className = "submissions-list";
+    res.items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "submission-row";
+      const approved = item.status === "active";
+      const statusClass = approved ? "submission-status-approved" : "submission-status-pending";
+      const statusLabel = approved ? "✅ Одобрено" : "🕓 На проверке";
+      const typeLabel = item.type === "dare" ? "Фант" : "Вопрос";
+      row.innerHTML = `
+        <p class="submission-text">${escapeHtml(item.text)}</p>
+        <span class="submission-meta">${typeLabel} · <span class="${statusClass}">${statusLabel}</span></span>
+      `;
+      list.appendChild(row);
+    });
+    host.appendChild(list);
+  }
+
+  return { element: host, refresh };
 }
