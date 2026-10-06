@@ -639,7 +639,6 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn, onEd
       (p) => `
       <tr data-id="${p.id}">
         <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
-        <td>${p.uses > 0 ? `<span class="uses-pill">использован ${p.uses}×</span>` : ""}</td>
         <td>
           <div class="row-actions">
             ${onEdit ? `<button class="btn" data-edit="${p.id}">Редактировать</button>` : ""}
@@ -654,7 +653,7 @@ async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn, onEd
   tableHost.innerHTML = `
     <div class="table-scroll">
       <table>
-        <thead><tr><th>${textLabel}</th><th>Использований</th><th></th></tr></thead>
+        <thead><tr><th>${textLabel}</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>

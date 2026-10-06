@@ -166,15 +166,6 @@ th, td {
 th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
 tr:hover td { background: rgba(255, 255, 255, 0.03); }
 
-.uses-pill {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 210, 63, 0.15);
-  color: var(--accent);
-}
-
 .tag-pill {
   display: inline-block;
   font-size: 11px;
