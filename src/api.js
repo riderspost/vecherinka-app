@@ -55,6 +55,8 @@ export const authApi = {
   resetPassword: (token, password) => request("POST", "/api/auth/reset-password", { token, password }),
   verifyEmail: (email, code) => request("POST", "/api/auth/verify-email", { email, code }),
   resendCode: (email) => request("POST", "/api/auth/resend-code", { email }),
+  updateProfile: (name, avatarType, avatarValue) =>
+    request("POST", "/api/auth/profile", { name, avatarType, avatarValue }),
 };
 
 export const fantyApi = {

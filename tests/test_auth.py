@@ -145,3 +145,60 @@ def test_forgot_and_reset_password_flow(client, raw_db):
 def test_forgot_password_unknown_email_rejected(client):
     resp = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
     assert resp.status_code == 400
+
+
+def _register_and_verify(client, raw_db, email="profile@example.com", password="supersecret1"):
+    register(client, email, password)
+    code = get_code(raw_db, email)
+    client.post("/api/auth/verify-email", json={"email": email, "code": code})
+
+
+def test_session_reports_incomplete_profile_for_new_user(client, raw_db):
+    _register_and_verify(client, raw_db)
+    resp = client.get("/api/auth/session")
+    body = resp.get_json()
+    assert body["authenticated"] is True
+    assert body["profileComplete"] is False
+    assert body["name"] is None
+
+
+def test_update_profile_requires_login(client):
+    resp = client.post("/api/auth/profile", json={"name": "Аня", "avatarType": "emoji", "avatarValue": "🙂"})
+    assert resp.status_code == 401
+
+
+def test_update_profile_requires_name(client, raw_db):
+    _register_and_verify(client, raw_db)
+    resp = client.post("/api/auth/profile", json={"name": "  ", "avatarType": "emoji", "avatarValue": "🙂"})
+    assert resp.status_code == 400
+
+
+def test_update_profile_succeeds_and_marks_complete(client, raw_db):
+    _register_and_verify(client, raw_db)
+    resp = client.post(
+        "/api/auth/profile", json={"name": "Аня", "avatarType": "emoji", "avatarValue": "🥳"}
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["name"] == "Аня"
+    assert body["avatarValue"] == "🥳"
+
+    resp = client.get("/api/auth/session")
+    body = resp.get_json()
+    assert body["profileComplete"] is True
+    assert body["name"] == "Аня"
+    assert body["avatarType"] == "emoji"
+    assert body["avatarValue"] == "🥳"
+
+
+def test_update_profile_rejects_photo_without_uploaded_file(client, raw_db):
+    _register_and_verify(client, raw_db)
+    # avatarValue points at a file that was never actually uploaded —
+    # validate_avatar should fall back to the default emoji rather than
+    # accepting an arbitrary path.
+    resp = client.post(
+        "/api/auth/profile", json={"name": "Аня", "avatarType": "photo", "avatarValue": "nonexistent.jpg"}
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["avatarType"] == "emoji"

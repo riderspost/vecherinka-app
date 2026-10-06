@@ -2,14 +2,17 @@ import { navigate } from "../router.js";
 import { authApi } from "../api.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
 
-function renderAccountCorner() {
+function renderAccountCorner(sessionPromise) {
   const corner = document.createElement("div");
   corner.className = "account-corner";
   corner.innerHTML = `<button class="account-btn" disabled>...</button>`;
 
-  authApi
-    .session()
+  sessionPromise
     .then((res) => {
+      if (res.authenticated && !res.profileComplete) {
+        navigate("/profile");
+        return;
+      }
       corner.innerHTML = "";
       if (res.authenticated) {
         const label = document.createElement("span");
@@ -46,7 +49,7 @@ function renderAccountCorner() {
 
 export function renderGamePicker(container) {
   container.innerHTML = "";
-  container.appendChild(renderAccountCorner());
+  container.appendChild(renderAccountCorner(authApi.session()));
 
   const wrap = document.createElement("div");
   wrap.className = "screen home-screen";

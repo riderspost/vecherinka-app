@@ -56,6 +56,9 @@ def init_db():
     _ensure_column(
         db, "fanty_truths", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL"
     )
+    _ensure_column(db, "users", "name", "name TEXT")
+    _ensure_column(db, "users", "avatar_type", "avatar_type TEXT")
+    _ensure_column(db, "users", "avatar_value", "avatar_value TEXT")
     db.commit()
     db.close()
 

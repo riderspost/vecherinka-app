@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from .db import get_db
 from .mailer import send_email
+from .rooms_common import MAX_NAME_LEN, clean_str, validate_avatar
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -162,13 +163,47 @@ def logout():
     return jsonify({"ok": True})
 
 
+def _profile_complete(user):
+    return bool(user["name"]) and bool(user["avatar_value"])
+
+
 @auth_bp.route("/session")
 def get_session():
     db = get_db()
     user = get_current_user(db)
     if not user:
         return jsonify({"authenticated": False})
-    return jsonify({"authenticated": True, "email": user["email"]})
+    return jsonify(
+        {
+            "authenticated": True,
+            "email": user["email"],
+            "name": user["name"],
+            "avatarType": user["avatar_type"] or "emoji",
+            "avatarValue": user["avatar_value"],
+            "profileComplete": _profile_complete(user),
+        }
+    )
+
+
+@auth_bp.route("/profile", methods=["POST"])
+def update_profile():
+    db = get_db()
+    user = get_current_user(db)
+    if not user:
+        return error("Требуется вход", 401)
+
+    data = request.get_json(silent=True) or {}
+    name = clean_str(data.get("name"), MAX_NAME_LEN)
+    if not name:
+        return error("Введите имя")
+    avatar_type, avatar_value = validate_avatar(data.get("avatarType"), data.get("avatarValue"))
+
+    db.execute(
+        "UPDATE users SET name = ?, avatar_type = ?, avatar_value = ? WHERE id = ?",
+        (name, avatar_type, avatar_value, user["id"]),
+    )
+    db.commit()
+    return jsonify({"ok": True, "name": name, "avatarType": avatar_type, "avatarValue": avatar_value})
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])

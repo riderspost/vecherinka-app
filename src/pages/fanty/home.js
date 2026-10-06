@@ -1,4 +1,4 @@
-import { api, fantyApi } from "../../api.js";
+import { api, fantyApi, authApi } from "../../api.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
@@ -316,20 +316,33 @@ export function renderFantyHome(container) {
       });
     }
 
-    function renderPlayerStep() {
+    async function renderPlayerStep() {
       const minPlayers = MIN_PLAYERS_BY_MODE[formState.gameMode] || 2;
       stepHeading(
         "Игроки",
         `Вы — первый игрок и хост. Остальных добавите уже в комнате. Чтобы начать, нужно минимум ${minPlayers} игрока(ов).`
       );
 
+      let profile = null;
+      if (!formState.name) {
+        try {
+          const session = await authApi.session();
+          if (session.authenticated && session.profileComplete) profile = session;
+        } catch (e) {
+          // not logged in or session check failed — fall back to a blank form
+        }
+      }
+
       const nameInput = document.createElement("input");
       nameInput.className = "text-input";
       nameInput.placeholder = "Ваше имя";
       nameInput.maxLength = 30;
       if (formState.name) nameInput.value = formState.name;
+      else if (profile) nameInput.value = profile.name;
 
-      const picker = createAvatarPicker();
+      const picker = createAvatarPicker(
+        !formState.name && profile ? { avatarType: profile.avatarType, avatarValue: profile.avatarValue } : undefined
+      );
 
       const needsGender = formState.gameMode === "team" && formState.pairMode === "mixed";
       const genderLabel = document.createElement("label");

@@ -1,4 +1,4 @@
-import { api } from "../api.js";
+import { api, authApi } from "../api.js";
 import { saveSession } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker } from "../avatarPicker.js";
@@ -49,15 +49,26 @@ export function renderHome(container) {
     formHost.appendChild(cards);
   }
 
-  function showCreateForm() {
+  async function showCreateForm() {
     formHost.innerHTML = "";
+
+    let profile = null;
+    try {
+      const session = await authApi.session();
+      if (session.authenticated && session.profileComplete) profile = session;
+    } catch (e) {
+      // not logged in or session check failed — fall back to a blank form
+    }
 
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
     nameInput.maxLength = 30;
+    if (profile) nameInput.value = profile.name;
 
-    const picker = createAvatarPicker();
+    const picker = createAvatarPicker(
+      profile ? { avatarType: profile.avatarType, avatarValue: profile.avatarValue } : undefined
+    );
 
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";

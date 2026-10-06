@@ -3,6 +3,19 @@ import { navigate } from "../router.js";
 
 const RESEND_COOLDOWN_MS = 20000;
 
+async function navigateAfterAuth() {
+  try {
+    const session = await authApi.session();
+    if (session.authenticated && !session.profileComplete) {
+      navigate("/profile");
+      return;
+    }
+  } catch (e) {
+    // ignore and fall through to the normal destination
+  }
+  navigate("/");
+}
+
 function textInput(placeholder, type = "text") {
   const input = document.createElement("input");
   input.className = "text-input";
@@ -132,7 +145,7 @@ export function renderAccountPage(container) {
       msgEl.textContent = "";
       try {
         await authApi.verifyEmail(email, code);
-        navigate("/");
+        await navigateAfterAuth();
       } catch (e) {
         msgEl.className = "error-msg";
         msgEl.textContent = e.message;
@@ -185,7 +198,7 @@ export function renderAccountPage(container) {
       msgEl.textContent = "";
       try {
         await authApi.login(email, password);
-        navigate("/");
+        await navigateAfterAuth();
       } catch (e) {
         if (e.needsVerification) {
           showVerifyStep(e.email);
@@ -234,7 +247,7 @@ export function renderAccountPage(container) {
         if (res.needsVerification) {
           showVerifyStep(res.email);
         } else {
-          navigate("/");
+          await navigateAfterAuth();
         }
       } catch (e) {
         msgEl.className = "error-msg";
@@ -317,7 +330,7 @@ function renderResetForm(wrap, token) {
     msgEl.textContent = "";
     try {
       await authApi.resetPassword(token, password);
-      navigate("/");
+      await navigateAfterAuth();
     } catch (e) {
       msgEl.className = "error-msg";
       msgEl.textContent = e.message;
