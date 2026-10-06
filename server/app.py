@@ -31,6 +31,7 @@ from .rooms_common import (
     create_room_and_host,
     add_player,
     taken_emojis_for_room,
+    resize_and_save_image,
 )
 
 MAX_ANSWER_LEN = 300
@@ -102,6 +103,9 @@ def contact_developer():
     return jsonify({"ok": True})
 
 
+MAX_AVATAR_DIMENSION = 256
+
+
 @app.route("/api/upload-avatar", methods=["POST"])
 def upload_avatar():
     file = request.files.get("file")
@@ -111,7 +115,8 @@ def upload_avatar():
     if ext not in ALLOWED_IMAGE_EXT:
         return error("Недопустимый формат файла")
     filename = f"{uuid.uuid4().hex}.{ext}"
-    file.save(os.path.join(UPLOAD_DIR, secure_filename(filename)))
+    dest = os.path.join(UPLOAD_DIR, secure_filename(filename))
+    resize_and_save_image(file, dest, MAX_AVATAR_DIMENSION)
     return jsonify({"filename": filename})
 
 

@@ -17,6 +17,7 @@ from .rooms_common import (
     player_public,
     create_room_and_host,
     add_player,
+    resize_and_save_image,
 )
 
 fanty_bp = Blueprint("fanty", __name__, url_prefix="/api/fanty")
@@ -239,6 +240,9 @@ def resolve(code):
     return jsonify({"ok": True})
 
 
+MAX_ROUND_PHOTO_DIMENSION = 1600
+
+
 @fanty_bp.route("/rooms/<code>/upload-photo", methods=["POST"])
 def upload_photo(code):
     db = get_db()
@@ -252,7 +256,8 @@ def upload_photo(code):
     if ext not in ALLOWED_IMAGE_EXT:
         return error("Недопустимый формат файла")
     filename = f"{uuid.uuid4().hex}.{ext}"
-    file.save(os.path.join(UPLOAD_DIR, secure_filename(filename)))
+    dest = os.path.join(UPLOAD_DIR, secure_filename(filename))
+    resize_and_save_image(file, dest, MAX_ROUND_PHOTO_DIMENSION)
     return jsonify({"filename": filename})
 
 

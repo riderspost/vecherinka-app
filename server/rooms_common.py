@@ -1,6 +1,9 @@
+import io
 import os
 import random
 import uuid
+
+from PIL import Image, ImageOps
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
@@ -8,8 +11,50 @@ ALLOWED_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 ALLOWED_AUDIO_EXT = {"mp3", "ogg", "wav", "m4a"}
 MAX_NAME_LEN = 30
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no O/0/I/1
+JPEG_QUALITY = 85
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def resize_and_save_image(file_storage, dest_path, max_dimension):
+    """Downscales an uploaded image to fit within max_dimension on its
+    longest side before saving.
+
+    Phone cameras routinely produce multi-megapixel, multi-MB photos, and
+    the upload endpoints used to just save those verbatim — even for a
+    22px avatar circle. Decoding and repainting a full-resolution bitmap
+    at a tiny display size on every unrelated repaint is expensive enough
+    that it showed up as a visible flicker on iOS Safari. Falls back to
+    saving the raw bytes untouched if Pillow can't process the file (e.g.
+    an unusual format) rather than failing the upload outright.
+    """
+    raw = file_storage.read()
+    ext = dest_path.rsplit(".", 1)[-1].lower()
+
+    if ext == "gif":
+        # A naive Pillow re-save only keeps the first frame of an animated
+        # GIF. GIFs aren't what phone cameras produce anyway, so the
+        # oversized-image problem this function exists for doesn't apply.
+        with open(dest_path, "wb") as f:
+            f.write(raw)
+        return
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img = ImageOps.exif_transpose(img)  # re-saving drops orientation EXIF otherwise
+        img.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
+
+        if ext in ("jpg", "jpeg"):
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(dest_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
+        elif ext == "webp":
+            img.save(dest_path, "WEBP", quality=JPEG_QUALITY)
+        else:
+            img.save(dest_path, "PNG", optimize=True)
+    except Exception:
+        with open(dest_path, "wb") as f:
+            f.write(raw)
 
 
 class RoomError(Exception):
