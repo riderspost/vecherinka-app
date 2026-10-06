@@ -72,6 +72,10 @@ export function renderHome(container) {
         errorEl.textContent = "Введите имя";
         return;
       }
+      if (picker.isUploading()) {
+        errorEl.textContent = "Дождитесь загрузки фото";
+        return;
+      }
       btn.disabled = true;
       errorEl.textContent = "";
       try {
@@ -208,6 +212,10 @@ export function renderHome(container) {
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Введите имя";
+        return;
+      }
+      if (picker.isUploading()) {
+        errorEl.textContent = "Дождитесь загрузки фото";
         return;
       }
       btn.disabled = true;

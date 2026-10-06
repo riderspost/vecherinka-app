@@ -100,6 +100,33 @@ def admin_add_prompt():
     return jsonify({"id": cur.lastrowid, "text": text, "status": "active", "uses": 0})
 
 
+@admin_bp.route("/api/prompts/<int:prompt_id>", methods=["PUT"])
+@admin_required
+def admin_edit_prompt(prompt_id):
+    db = get_db()
+    existing = db.execute("SELECT * FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Вопрос не найден"}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "Введите текст вопроса"}), 400
+    if len(text) > MAX_PROMPT_LEN:
+        return jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400
+
+    dupe = db.execute("SELECT 1 FROM prompts WHERE text = ? AND id != ?", (text, prompt_id)).fetchone()
+    if dupe:
+        return jsonify({"error": "Такой вопрос уже есть в списке"}), 400
+
+    db.execute("UPDATE prompts SET text = ? WHERE id = ?", (text, prompt_id))
+    db.commit()
+    uses = db.execute(
+        "SELECT COUNT(*) AS c FROM round_prompts WHERE prompt_id = ?", (prompt_id,)
+    ).fetchone()["c"]
+    return jsonify({"id": prompt_id, "text": text, "status": existing["status"], "uses": uses})
+
+
 @admin_bp.route("/api/prompts/<int:prompt_id>", methods=["DELETE"])
 @admin_required
 def admin_delete_prompt(prompt_id):
@@ -261,9 +288,10 @@ def admin_list_dares():
     db = get_db()
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair,
-                  d.music_filename, d.has_timer, d.timer_seconds,
+                  d.music_filename, d.has_timer, d.timer_seconds, u.email AS created_by_email,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
-           FROM fanty_dares d ORDER BY d.id DESC"""
+           FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
+           ORDER BY d.id DESC"""
     ).fetchall()
     result = []
     for r in rows:
@@ -288,6 +316,7 @@ def admin_list_dares():
                 "musicUrl": f"/uploads/{r['music_filename']}" if r["music_filename"] else None,
                 "hasTimer": bool(r["has_timer"]),
                 "timerSeconds": r["timer_seconds"],
+                "createdByEmail": r["created_by_email"],
             }
         )
     return jsonify(result)
@@ -498,9 +527,10 @@ def admin_bulk_delete_dares():
 def admin_list_truths():
     db = get_db()
     rows = db.execute(
-        """SELECT t.id, t.text, t.status,
+        """SELECT t.id, t.text, t.status, u.email AS created_by_email,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.truth_id = t.id) AS uses
-           FROM fanty_truths t ORDER BY t.id DESC"""
+           FROM fanty_truths t LEFT JOIN users u ON u.id = t.created_by_user_id
+           ORDER BY t.id DESC"""
     ).fetchall()
     result = []
     for r in rows:
@@ -511,7 +541,14 @@ def admin_list_truths():
             ).fetchall()
         ]
         result.append(
-            {"id": r["id"], "text": r["text"], "status": r["status"], "uses": r["uses"], "categories": cats}
+            {
+                "id": r["id"],
+                "text": r["text"],
+                "status": r["status"],
+                "uses": r["uses"],
+                "categories": cats,
+                "createdByEmail": r["created_by_email"],
+            }
         )
     return jsonify(result)
 
@@ -542,6 +579,45 @@ def admin_add_truth():
     )
     db.commit()
     return jsonify({"id": truth_id, "text": text, "status": "active", "uses": 0, "categories": categories})
+
+
+@admin_bp.route("/api/fanty/truths/<int:truth_id>", methods=["PUT"])
+@admin_required
+def admin_edit_truth(truth_id):
+    db = get_db()
+    existing = db.execute("SELECT * FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Не найдено"}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        return jsonify({"error": "Введите текст вопроса"}), 400
+    if len(text) > MAX_PROMPT_LEN:
+        return jsonify({"error": f"Слишком длинный текст (макс. {MAX_PROMPT_LEN} символов)"}), 400
+    categories = list(dict.fromkeys(c for c in (data.get("categories") or []) if c in fanty_game.MOOD_CATEGORIES))
+    if not categories:
+        return jsonify({"error": "Выберите категорию"}), 400
+    if len(categories) > 1:
+        return jsonify({"error": "Для вопроса можно выбрать только одну категорию"}), 400
+
+    dupe = db.execute("SELECT 1 FROM fanty_truths WHERE text = ? AND id != ?", (text, truth_id)).fetchone()
+    if dupe:
+        return jsonify({"error": "Такой вопрос уже есть"}), 400
+
+    db.execute("UPDATE fanty_truths SET text = ? WHERE id = ?", (text, truth_id))
+    db.execute("DELETE FROM fanty_truth_categories WHERE truth_id = ?", (truth_id,))
+    db.executemany(
+        "INSERT OR IGNORE INTO fanty_truth_categories (truth_id, category) VALUES (?, ?)",
+        [(truth_id, c) for c in categories],
+    )
+    db.commit()
+    uses = db.execute(
+        "SELECT COUNT(*) AS c FROM fanty_rounds WHERE truth_id = ?", (truth_id,)
+    ).fetchone()["c"]
+    return jsonify(
+        {"id": truth_id, "text": text, "status": existing["status"], "uses": uses, "categories": categories}
+    )
 
 
 @admin_bp.route("/api/fanty/truths/<int:truth_id>", methods=["DELETE"])

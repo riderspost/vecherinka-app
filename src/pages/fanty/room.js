@@ -116,6 +116,10 @@ export function mountFantyRoomPage(container, code, opts) {
         errorEl.textContent = "Выберите пол";
         return;
       }
+      if (picker.isUploading()) {
+        errorEl.textContent = "Дождитесь загрузки фото";
+        return;
+      }
       btn.disabled = true;
       errorEl.textContent = "";
       try {
@@ -325,6 +329,10 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
         addErr.textContent = "Выберите пол";
         return;
       }
+      if (picker.isUploading()) {
+        addErr.textContent = "Дождитесь загрузки фото";
+        return;
+      }
       addBtn.disabled = true;
       addErr.textContent = "";
       try {
@@ -472,6 +480,13 @@ function renderBottleCircle(players, fanty, ctrl) {
 
     const nameEl = document.createElement("span");
     nameEl.textContent = p.name;
+    if (p.isHost) {
+      const hostBadge = document.createElement("span");
+      hostBadge.className = "host-badge seat-host-badge";
+      hostBadge.textContent = "хост";
+      nameEl.appendChild(document.createElement("br"));
+      nameEl.appendChild(hostBadge);
+    }
 
     seat.appendChild(avatarWrap);
     seat.appendChild(nameEl);

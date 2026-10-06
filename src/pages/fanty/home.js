@@ -362,6 +362,10 @@ export function renderFantyHome(container) {
           errorEl.textContent = "Выберите пол";
           return;
         }
+        if (picker.isUploading()) {
+          errorEl.textContent = "Дождитесь загрузки фото";
+          return;
+        }
         nextBtn.disabled = true;
         errorEl.textContent = "";
         try {
@@ -528,6 +532,10 @@ export function renderFantyHome(container) {
       const gender = requireGender ? genderGroup.getValue() : null;
       if (requireGender && !gender) {
         errorEl.textContent = "Выберите пол";
+        return;
+      }
+      if (picker.isUploading()) {
+        errorEl.textContent = "Дождитесь загрузки фото";
         return;
       }
       btn.disabled = true;

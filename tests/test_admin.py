@@ -159,3 +159,73 @@ def test_admin_bulk_activate_prompts(client, raw_db):
     for prompt_id in ids:
         row = raw_db.execute("SELECT status FROM prompts WHERE id = ?", (prompt_id,)).fetchone()
         assert row["status"] == "active"
+
+
+def test_admin_edit_prompt(client):
+    admin_login(client)
+    created = client.post("/admin/api/prompts", json={"text": "Исходный текст вопроса"}).get_json()
+
+    resp = client.put(f"/admin/api/prompts/{created['id']}", json={"text": "Отредактированный текст"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["text"] == "Отредактированный текст"
+    assert body["status"] == "active"
+
+    resp = client.put("/admin/api/prompts/999999", json={"text": "Не найдено"})
+    assert resp.status_code == 404
+
+
+def test_admin_edit_prompt_rejects_duplicate_text(client):
+    admin_login(client)
+    first = client.post("/admin/api/prompts", json={"text": "Первый уникальный вопрос"}).get_json()
+    second = client.post("/admin/api/prompts", json={"text": "Второй уникальный вопрос"}).get_json()
+
+    resp = client.put(f"/admin/api/prompts/{second['id']}", json={"text": "Первый уникальный вопрос"})
+    assert resp.status_code == 400
+
+
+def test_admin_edit_truth(client):
+    admin_login(client)
+    created = client.post(
+        "/admin/api/fanty/truths", json={"text": "Исходный вопрос правды", "categories": ["basic"]}
+    ).get_json()
+
+    resp = client.put(
+        f"/admin/api/fanty/truths/{created['id']}",
+        json={"text": "Отредактированный вопрос правды", "categories": ["flirt"]},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["text"] == "Отредактированный вопрос правды"
+    assert body["categories"] == ["flirt"]
+
+    resp = client.put("/admin/api/fanty/truths/999999", json={"text": "x", "categories": ["basic"]})
+    assert resp.status_code == 404
+
+
+def test_admin_dares_and_truths_list_show_submitter_email(client, raw_db):
+    raw_db.execute(
+        "INSERT INTO users (id, email, password_hash) VALUES ('u1', 'submitter@example.com', 'x')"
+    )
+    raw_db.execute(
+        "INSERT INTO fanty_dares (text, kind, status, created_by_user_id) VALUES (?, 'solo', 'pending', 'u1')",
+        ("Фант от пользователя",),
+    )
+    raw_db.execute(
+        "INSERT INTO fanty_truths (text, status, created_by_user_id) VALUES (?, 'pending', 'u1')",
+        ("Вопрос от пользователя",),
+    )
+    raw_db.commit()
+
+    admin_login(client)
+    dares = client.get("/admin/api/fanty/dares").get_json()
+    truths = client.get("/admin/api/fanty/truths").get_json()
+
+    dare = next(d for d in dares if d["text"] == "Фант от пользователя")
+    truth = next(t for t in truths if t["text"] == "Вопрос от пользователя")
+    assert dare["createdByEmail"] == "submitter@example.com"
+    assert truth["createdByEmail"] == "submitter@example.com"
+
+    # Admin-added items (no submitter) should come back with no email.
+    admin_dare = next(d for d in dares if d["text"] != "Фант от пользователя")
+    assert admin_dare["createdByEmail"] is None

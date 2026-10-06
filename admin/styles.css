@@ -194,6 +194,12 @@ tr:hover td { background: rgba(255, 255, 255, 0.03); }
   color: var(--text-muted);
 }
 
+.tag-author {
+  background: rgba(111, 184, 255, 0.15);
+  color: #6fb8ff;
+  font-weight: 600;
+}
+
 .tag-mixed {
   background: rgba(126, 231, 135, 0.15);
   color: #7ee787;

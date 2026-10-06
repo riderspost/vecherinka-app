@@ -13,6 +13,7 @@ export function createAvatarPicker(initial, takenEmojis) {
   const state = {
     avatarType: (initial && initial.avatarType) || "emoji",
     avatarValue: (initial && initial.avatarValue) || fallback,
+    uploading: false,
   };
 
   const wrap = document.createElement("div");
@@ -57,6 +58,7 @@ export function createAvatarPicker(initial, takenEmojis) {
   uploadInput.addEventListener("change", async () => {
     const file = uploadInput.files[0];
     if (!file) return;
+    state.uploading = true;
     uploadLabelText.textContent = "Загрузка...";
     try {
       const res = await api.uploadAvatar(file);
@@ -66,6 +68,7 @@ export function createAvatarPicker(initial, takenEmojis) {
     } catch (e) {
       alert("Не удалось загрузить фото: " + e.message);
     } finally {
+      state.uploading = false;
       uploadLabelText.textContent = state.avatarType === "photo" ? CHANGE_UPLOAD_TEXT : DEFAULT_UPLOAD_TEXT;
       uploadInput.value = "";
     }
@@ -86,6 +89,7 @@ export function createAvatarPicker(initial, takenEmojis) {
   return {
     element: wrap,
     getValue: () => ({ avatarType: state.avatarType, avatarValue: state.avatarValue }),
+    isUploading: () => state.uploading,
   };
 }
 

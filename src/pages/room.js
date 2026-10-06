@@ -72,6 +72,10 @@ export function mountRoomPage(container, code, opts) {
         errorEl.textContent = "Введите имя";
         return;
       }
+      if (picker.isUploading()) {
+        errorEl.textContent = "Дождитесь загрузки фото";
+        return;
+      }
       btn.disabled = true;
       errorEl.textContent = "";
       try {

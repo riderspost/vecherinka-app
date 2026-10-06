@@ -139,12 +139,15 @@ async function renderDashboard() {
 
     <div id="section-prompts">
       <div class="card">
-        <h2 style="margin-top:0">Добавить вручную</h2>
+        <h2 style="margin-top:0" id="prompt-form-heading">Добавить вручную</h2>
         <form id="add-form">
           <label>Текст фразы (начало предложения)</label>
           <textarea name="text" maxlength="300" placeholder="Если бы я был..." required></textarea>
           <div class="error-box" id="add-error"></div>
-          <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+          <div class="row-actions" style="margin-top:8px">
+            <button type="submit" class="btn" id="prompt-submit-btn">Добавить</button>
+            <button type="button" class="btn secondary" id="prompt-cancel-edit-btn" style="display:none">Отмена</button>
+          </div>
         </form>
       </div>
 
@@ -230,14 +233,17 @@ async function renderDashboard() {
 
       <div id="fanty-subsection-truths" style="display:none">
         <div class="card">
-          <h2 style="margin-top:0">Добавить вручную</h2>
+          <h2 style="margin-top:0" id="truth-form-heading">Добавить вручную</h2>
           <form id="add-truth-form">
             <label>Текст вопроса</label>
             <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
             <label>Категория</label>
             <div class="row" id="truth-category"></div>
             <div class="error-box" id="add-truth-error"></div>
-            <button type="submit" class="btn" style="margin-top:8px">Добавить</button>
+            <div class="row-actions" style="margin-top:8px">
+              <button type="submit" class="btn" id="truth-submit-btn">Добавить</button>
+              <button type="button" class="btn secondary" id="truth-cancel-edit-btn" style="display:none">Отмена</button>
+            </div>
           </form>
         </div>
 
@@ -266,7 +272,32 @@ async function renderDashboard() {
     truths: document.getElementById("fanty-subsection-truths"),
   });
 
-  document.getElementById("add-form").addEventListener("submit", async (e) => {
+  const promptForm = document.getElementById("add-form");
+  const promptFormHeading = document.getElementById("prompt-form-heading");
+  const promptSubmitBtn = document.getElementById("prompt-submit-btn");
+  const promptCancelEditBtn = document.getElementById("prompt-cancel-edit-btn");
+  let editingPromptId = null;
+
+  function resetPromptForm() {
+    promptForm.reset();
+    editingPromptId = null;
+    promptFormHeading.textContent = "Добавить вручную";
+    promptSubmitBtn.textContent = "Добавить";
+    promptCancelEditBtn.style.display = "none";
+  }
+
+  window.startEditingPrompt = function (prompt) {
+    editingPromptId = prompt.id;
+    promptForm.elements.text.value = prompt.text;
+    promptFormHeading.textContent = `Редактировать вопрос #${prompt.id}`;
+    promptSubmitBtn.textContent = "Сохранить изменения";
+    promptCancelEditBtn.style.display = "";
+    promptForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  promptCancelEditBtn.addEventListener("click", resetPromptForm);
+
+  promptForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const textarea = e.target.elements.text;
     const errorEl = document.getElementById("add-error");
@@ -274,8 +305,12 @@ async function renderDashboard() {
     const text = textarea.value.trim();
     if (!text) return;
     try {
-      await api("/prompts", { method: "POST", body: JSON.stringify({ text }) });
-      textarea.value = "";
+      if (editingPromptId) {
+        await api(`/prompts/${editingPromptId}`, { method: "PUT", body: JSON.stringify({ text }) });
+      } else {
+        await api("/prompts", { method: "POST", body: JSON.stringify({ text }) });
+      }
+      resetPromptForm();
       await refreshPrompts();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -441,7 +476,34 @@ async function renderDashboard() {
     }
   });
 
-  document.getElementById("add-truth-form").addEventListener("submit", async (e) => {
+  const truthForm = document.getElementById("add-truth-form");
+  const truthFormHeading = document.getElementById("truth-form-heading");
+  const truthSubmitBtn = document.getElementById("truth-submit-btn");
+  const truthCancelEditBtn = document.getElementById("truth-cancel-edit-btn");
+  let editingTruthId = null;
+
+  function resetTruthForm() {
+    truthForm.reset();
+    editingTruthId = null;
+    truthFormHeading.textContent = "Добавить вручную";
+    truthSubmitBtn.textContent = "Добавить";
+    truthCancelEditBtn.style.display = "none";
+  }
+
+  window.startEditingTruth = function (truth) {
+    editingTruthId = truth.id;
+    truthForm.elements.text.value = truth.text;
+    const moodValue = MOOD_CATEGORIES.find((m) => truth.categories.includes(m.value))?.value || "basic";
+    truthForm.querySelector(`input[name="category"][value="${moodValue}"]`).checked = true;
+    truthFormHeading.textContent = `Редактировать вопрос #${truth.id}`;
+    truthSubmitBtn.textContent = "Сохранить изменения";
+    truthCancelEditBtn.style.display = "";
+    truthForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  truthCancelEditBtn.addEventListener("click", resetTruthForm);
+
+  truthForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
     const text = form.elements.text.value.trim();
@@ -450,8 +512,12 @@ async function renderDashboard() {
     errorEl.textContent = "";
     if (!text) return;
     try {
-      await api("/fanty/truths", { method: "POST", body: JSON.stringify({ text, categories }) });
-      form.reset();
+      if (editingTruthId) {
+        await api(`/fanty/truths/${editingTruthId}`, { method: "PUT", body: JSON.stringify({ text, categories }) });
+      } else {
+        await api("/fanty/truths", { method: "POST", body: JSON.stringify({ text, categories }) });
+      }
+      resetTruthForm();
       await refreshTruths();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -465,6 +531,9 @@ async function renderDashboard() {
 
 function tagsHtml(item) {
   const parts = [];
+  if (item.createdByEmail) {
+    parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdByEmail)}</span>`);
+  }
   if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
   if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
   if (item.musicUrl) parts.push('<span class="tag-pill tag-music">🎵 музыка</span>');
@@ -669,6 +738,7 @@ function refreshPrompts() {
     idPrefix: "prompts",
     textLabel: "Фраза",
     refreshFn: refreshPrompts,
+    onEdit: startEditingPrompt,
   });
 }
 
@@ -688,6 +758,7 @@ function refreshTruths() {
     idPrefix: "truths",
     textLabel: "Текст",
     refreshFn: refreshTruths,
+    onEdit: startEditingTruth,
   });
 }
 
