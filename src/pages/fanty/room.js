@@ -661,6 +661,13 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
         uploadLabelText.textContent = `📷 Добавить фото (${photosState.files.length}/${MAX_PHOTOS})`;
         uploadInput.disabled = full;
         uploadLabel.classList.toggle("disabled", full);
+        uploadLabel.classList.remove("uploading");
+      }
+
+      function setUploading(current, total) {
+        uploadLabelText.textContent = `⏳ Загрузка фото ${current}/${total}...`;
+        uploadInput.disabled = true;
+        uploadLabel.classList.add("disabled", "uploading");
       }
 
       function renderPreviews() {
@@ -694,17 +701,18 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       uploadInput.addEventListener("change", async () => {
         const remaining = MAX_PHOTOS - photosState.files.length;
         const files = Array.from(uploadInput.files || []).slice(0, remaining);
-        for (const file of files) {
+        for (let i = 0; i < files.length; i++) {
+          setUploading(i + 1, files.length);
           try {
-            const res = await fantyApi.uploadPhoto(code, file);
+            const res = await fantyApi.uploadPhoto(code, files[i]);
             photosState.files.push(res.filename);
+            renderPreviews();
           } catch (e) {
             alert(e.message);
           }
         }
         uploadInput.value = "";
         updateUploadButtonState();
-        renderPreviews();
       });
       uploadLabel.appendChild(uploadLabelText);
       uploadLabel.appendChild(uploadInput);
