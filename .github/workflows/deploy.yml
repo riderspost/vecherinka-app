@@ -19,6 +19,10 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Requires a "production" environment configured in repo Settings ->
+    # Environments with "Required reviewers" turned on — otherwise this does
+    # nothing (an environment with no protection rules doesn't block anyone).
+    environment: production
     steps:
       # appleboy/ssh-action is a Docker container action, so a file written to
       # /tmp by a plain `run:` step (which executes on the runner host) isn't
