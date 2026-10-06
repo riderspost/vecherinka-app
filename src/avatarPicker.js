@@ -38,6 +38,7 @@ export function createAvatarPicker(initial, takenEmojis) {
       state.avatarType = "emoji";
       state.avatarValue = emoji;
       renderPreview();
+      uploadLabelText.textContent = DEFAULT_UPLOAD_TEXT;
     });
     grid.appendChild(btn);
   });
@@ -45,7 +46,10 @@ export function createAvatarPicker(initial, takenEmojis) {
 
   const uploadLabel = document.createElement("label");
   uploadLabel.className = "upload-label";
-  uploadLabel.textContent = "📷 Загрузить своё фото";
+  const uploadLabelText = document.createElement("span");
+  const DEFAULT_UPLOAD_TEXT = "📷 Загрузить своё фото";
+  const CHANGE_UPLOAD_TEXT = "📷 Изменить фото";
+  uploadLabelText.textContent = state.avatarType === "photo" ? CHANGE_UPLOAD_TEXT : DEFAULT_UPLOAD_TEXT;
   const uploadInput = document.createElement("input");
   uploadInput.type = "file";
   uploadInput.accept = "image/*";
@@ -53,7 +57,7 @@ export function createAvatarPicker(initial, takenEmojis) {
   uploadInput.addEventListener("change", async () => {
     const file = uploadInput.files[0];
     if (!file) return;
-    uploadLabel.textContent = "Загрузка...";
+    uploadLabelText.textContent = "Загрузка...";
     try {
       const res = await api.uploadAvatar(file);
       state.avatarType = "photo";
@@ -62,9 +66,11 @@ export function createAvatarPicker(initial, takenEmojis) {
     } catch (e) {
       alert("Не удалось загрузить фото: " + e.message);
     } finally {
-      uploadLabel.textContent = "📷 Загрузить своё фото";
+      uploadLabelText.textContent = state.avatarType === "photo" ? CHANGE_UPLOAD_TEXT : DEFAULT_UPLOAD_TEXT;
+      uploadInput.value = "";
     }
   });
+  uploadLabel.appendChild(uploadLabelText);
   uploadLabel.appendChild(uploadInput);
   wrap.appendChild(uploadLabel);
 
