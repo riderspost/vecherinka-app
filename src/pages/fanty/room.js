@@ -42,6 +42,9 @@ export function mountFantyRoomPage(container, code, opts) {
   let currentAudio = null;
   let persistentMeBadgeEl = null;
   let persistentCircleWrap = null;
+  let persistentPage = null;
+  let persistentWrap = null;
+  let persistentStatus = null;
 
   function stop() {
     stopped = true;
@@ -169,32 +172,51 @@ export function mountFantyRoomPage(container, code, opts) {
         currentAudio.pause();
         currentAudio = null;
       }
-      container.innerHTML = "";
-      const page = document.createElement("div");
-      page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
+      // Rebuilding `page`/`wrap` from scratch on every poll-detected change
+      // meant the bottle circle (seats, avatars, bottle) got detached and
+      // reattached every single time too, even once its own contents were
+      // made fully reusable — on iOS Safari that detach/reattach cycle
+      // itself was apparently enough to force a repaint of the photo
+      // avatars inside it. So now `page`/`wrap` are only rebuilt when the
+      // room's status actually changes (lobby -> playing -> finished,
+      // which happens a handful of times per game) — for every other
+      // update within "playing", the existing wrap is reused untouched and
+      // renderPlaying only patches the parts that actually need to change.
+      const statusChanged = state.room.status !== persistentStatus;
+      persistentStatus = state.room.status;
 
-      if (!state.me.isDisplay) {
-        // The badge's own avatar/name never change mid-game, so reuse the
-        // whole thing as one block instead of rebuilding (and reparenting
-        // its <img>) on every poll tick — see renderBottleCircle for the
-        // same reasoning, which is where this actually mattered visibly.
-        if (!persistentMeBadgeEl || persistentMeBadgeEl.__playerId !== state.me.id) {
-          const meBadge = document.createElement("div");
-          meBadge.className = "me-badge";
-          meBadge.__playerId = state.me.id;
-          meBadge.appendChild(createAvatarElement(state.me));
-          const meName = document.createElement("span");
-          meName.textContent = state.me.name;
-          meBadge.appendChild(meName);
-          persistentMeBadgeEl = meBadge;
+      if (statusChanged || !persistentPage) {
+        container.innerHTML = "";
+        const page = document.createElement("div");
+        page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
+
+        if (!state.me.isDisplay) {
+          // The badge's own avatar/name never change mid-game, so reuse the
+          // whole thing as one block instead of rebuilding (and
+          // reparenting its <img>) on every poll tick.
+          if (!persistentMeBadgeEl || persistentMeBadgeEl.__playerId !== state.me.id) {
+            const meBadge = document.createElement("div");
+            meBadge.className = "me-badge";
+            meBadge.__playerId = state.me.id;
+            meBadge.appendChild(createAvatarElement(state.me));
+            const meName = document.createElement("span");
+            meName.textContent = state.me.name;
+            meBadge.appendChild(meName);
+            persistentMeBadgeEl = meBadge;
+          }
+          page.appendChild(persistentMeBadgeEl);
         }
-        page.appendChild(persistentMeBadgeEl);
+
+        const wrap = document.createElement("div");
+        wrap.className = "screen room-screen" + (state.me.isDisplay ? " display-mode" : "");
+        page.appendChild(wrap);
+        container.appendChild(page);
+
+        persistentPage = page;
+        persistentWrap = wrap;
       }
 
-      const wrap = document.createElement("div");
-      wrap.className = "screen room-screen" + (state.me.isDisplay ? " display-mode" : "");
-      page.appendChild(wrap);
-      container.appendChild(page);
+      const wrap = persistentWrap;
 
       const ctrl = {
         setAnimating: (v) => (animating = v),
@@ -484,10 +506,30 @@ function renderPlaying(wrap, state, token, code, ctrl) {
   const fanty = state.fanty;
 
   const displayRound = fanty.phase === "ready_to_spin" ? fanty.roundNumber + 1 : fanty.roundNumber;
-  wrap.innerHTML = `<p class="round-label">Раунд ${displayRound}</p>`;
+
+  // No wrap.innerHTML reset here on purpose — wrap now persists across the
+  // whole "playing" session (see the outer render()), and wiping it would
+  // detach/reattach the bottle circle on every single poll tick again,
+  // which is what caused the flicker even after its own contents became
+  // fully reusable. Only the round-label text and the panel are rebuilt;
+  // the circle is appended once and then never touched again.
+  let roundLabel = wrap.querySelector(".round-label");
+  if (!roundLabel) {
+    roundLabel = document.createElement("p");
+    roundLabel.className = "round-label";
+    wrap.insertBefore(roundLabel, wrap.firstChild);
+  }
+  roundLabel.textContent = `Раунд ${displayRound}`;
 
   const { circleWrap, bottle } = renderBottleCircle(players, fanty, ctrl);
-  wrap.appendChild(circleWrap);
+  if (circleWrap.parentNode !== wrap) {
+    wrap.appendChild(circleWrap);
+  }
+
+  const oldPanel = wrap.querySelector(".fanty-panel");
+  if (oldPanel) oldPanel.remove();
+  const oldEndBtn = wrap.querySelector(".end-game-btn");
+  if (oldEndBtn) oldEndBtn.remove();
 
   const panel = document.createElement("div");
   panel.className = "fanty-panel";
@@ -597,7 +639,7 @@ function renderPlaying(wrap, state, token, code, ctrl) {
 
   if (state.me.isHost && fanty.phase === "ready_to_spin") {
     const endBtn = document.createElement("button");
-    endBtn.className = "btn danger";
+    endBtn.className = "btn danger end-game-btn";
     endBtn.style.marginTop = "16px";
     endBtn.textContent = "Завершить игру";
     endBtn.addEventListener("click", async () => {
