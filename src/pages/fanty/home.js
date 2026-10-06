@@ -13,7 +13,7 @@ import {
   MIN_PLAYERS_BY_MODE,
 } from "./constants.js";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 4;
 
 function optionRow(labelEl, hint) {
   const row = document.createElement("div");
@@ -154,7 +154,7 @@ export function renderFantyHome(container) {
       attributes: [],
       pickMode: "fair",
       pairMode: "any",
-      deviceMode: "remote",
+      deviceMode: "local",
       name: "",
       gender: null,
     };
@@ -285,6 +285,8 @@ export function renderFantyHome(container) {
       });
     }
 
+    // Hidden from the wizard for now (renderStep never calls this) — fanty
+    // always creates "local" rooms. Kept intact in case remote mode comes back.
     function renderDeviceStep() {
       stepHeading(
         "На каком устройстве",
@@ -414,7 +416,6 @@ export function renderFantyHome(container) {
       if (stepIndex === 0) renderGameModeStep();
       else if (stepIndex === 1) renderLocationStep();
       else if (stepIndex === 2) renderSettingsStep();
-      else if (stepIndex === 3) renderDeviceStep();
       else renderPlayerStep();
     }
 
