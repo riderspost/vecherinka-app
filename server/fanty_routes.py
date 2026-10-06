@@ -241,6 +241,7 @@ def resolve(code):
 
 
 MAX_ROUND_PHOTO_DIMENSION = 1600
+ROUND_PHOTO_THUMB_DIMENSION = 240
 
 
 @fanty_bp.route("/rooms/<code>/upload-photo", methods=["POST"])
@@ -255,9 +256,17 @@ def upload_photo(code):
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ALLOWED_IMAGE_EXT:
         return error("Недопустимый формат файла")
-    filename = f"{uuid.uuid4().hex}.{ext}"
+    base = uuid.uuid4().hex
+    filename = f"{base}.{ext}"
+    # Thumb filename follows a fixed "<base>_thumb.<ext>" convention — the
+    # frontend derives it from the full filename by string replacement, so
+    # there's no need to track it separately in the DB or the API response.
+    thumb_filename = f"{base}_thumb.{ext}"
     dest = os.path.join(UPLOAD_DIR, secure_filename(filename))
-    resize_and_save_image(file, dest, MAX_ROUND_PHOTO_DIMENSION)
+    thumb_dest = os.path.join(UPLOAD_DIR, secure_filename(thumb_filename))
+    resize_and_save_image(
+        file, dest, MAX_ROUND_PHOTO_DIMENSION, thumb_path=thumb_dest, thumb_dimension=ROUND_PHOTO_THUMB_DIMENSION
+    )
     return jsonify({"filename": filename})
 
 

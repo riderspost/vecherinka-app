@@ -2,8 +2,9 @@ import { api, fantyApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
-import { escapeHtml } from "../../utils.js";
+import { escapeHtml, thumbUrl } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
+import { createPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
@@ -796,9 +797,8 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
           const item = document.createElement("div");
           item.className = "photo-preview-item";
 
-          const img = document.createElement("img");
-          img.src = `/uploads/${filename}`;
-          img.className = "summary-photo";
+          const fullSrc = `/uploads/${filename}`;
+          const { wrap, img } = createPhotoThumb(thumbUrl(fullSrc), fullSrc, "summary-photo");
           img.addEventListener("click", () => openLightbox(photosState.files.map((f) => `/uploads/${f}`), idx));
 
           const removeBtn = document.createElement("button");
@@ -812,7 +812,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
             renderPreviews();
           });
 
-          item.appendChild(img);
+          item.appendChild(wrap);
           item.appendChild(removeBtn);
           previewRow.appendChild(item);
         });
@@ -910,11 +910,9 @@ function renderFinished(wrap, state) {
       const photoRow = document.createElement("div");
       photoRow.className = "photo-row";
       r.photos.forEach((src) => {
-        const img = document.createElement("img");
-        img.src = src;
-        img.className = "summary-photo";
+        const { wrap: thumbWrap, img } = createPhotoThumb(thumbUrl(src), src, "summary-photo");
         img.addEventListener("click", () => openLightbox(allPhotos, allPhotos.indexOf(src)));
-        photoRow.appendChild(img);
+        photoRow.appendChild(thumbWrap);
       });
       card.appendChild(photoRow);
     }

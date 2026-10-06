@@ -56,6 +56,16 @@ def test_fanty_round_photo_upload_is_downscaled(client):
         # Aspect ratio should survive the resize (3:2 in, 3:2 out).
         assert abs(img.size[0] / img.size[1] - 1.5) < 0.01
 
+    # A much smaller thumbnail is generated alongside the full photo, named
+    # by convention (base + "_thumb" + extension) so the frontend can derive
+    # its URL without any extra API round-trip.
+    thumb_filename = filename.replace(".jpg", "_thumb.jpg")
+    thumb_path = os.path.join(os.environ["UPLOAD_DIR"], thumb_filename)
+    assert os.path.isfile(thumb_path)
+    with Image.open(thumb_path) as thumb:
+        assert max(thumb.size) <= 240
+    assert os.path.getsize(thumb_path) < os.path.getsize(saved_path)
+
 
 def test_avatar_upload_rejects_bad_extension(client):
     resp = client.post(
