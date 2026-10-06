@@ -30,7 +30,20 @@ export function renderProfilePage(container) {
     });
 
   function renderForm(session) {
+    const isEditing = session.profileComplete;
     formHost.innerHTML = "";
+
+    if (isEditing) {
+      const backLink = document.createElement("a");
+      backLink.className = "link-btn";
+      backLink.href = "/";
+      backLink.textContent = "← На главную";
+      backLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        navigate("/");
+      });
+      formHost.appendChild(backLink);
+    }
 
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
@@ -44,7 +57,7 @@ export function renderProfilePage(container) {
 
     const btn = document.createElement("button");
     btn.className = "btn btn-primary";
-    btn.textContent = "Сохранить и продолжить";
+    btn.textContent = isEditing ? "Сохранить" : "Сохранить и продолжить";
 
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
@@ -71,23 +84,25 @@ export function renderProfilePage(container) {
       }
     });
 
-    const logoutLink = document.createElement("button");
-    logoutLink.className = "link-btn";
-    logoutLink.textContent = "Выйти из аккаунта";
-    logoutLink.addEventListener("click", async () => {
-      logoutLink.disabled = true;
-      try {
-        await authApi.logout();
-        navigate("/account");
-      } catch (e) {
-        logoutLink.disabled = false;
-      }
-    });
-
     formHost.appendChild(nameInput);
     formHost.appendChild(picker.element);
     formHost.appendChild(errorEl);
     formHost.appendChild(btn);
-    formHost.appendChild(logoutLink);
+
+    if (!isEditing) {
+      const logoutLink = document.createElement("button");
+      logoutLink.className = "link-btn";
+      logoutLink.textContent = "Выйти из аккаунта";
+      logoutLink.addEventListener("click", async () => {
+        logoutLink.disabled = true;
+        try {
+          await authApi.logout();
+          navigate("/account");
+        } catch (e) {
+          logoutLink.disabled = false;
+        }
+      });
+      formHost.appendChild(logoutLink);
+    }
   }
 }

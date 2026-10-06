@@ -32,3 +32,16 @@ export function createPhotoThumb(thumbSrc, fullSrc, imgClassName) {
 
   return { wrap, img };
 }
+
+// A spinner placeholder with no image yet — for a photo that's still
+// uploading, before there's any URL to show at all.
+export function createPendingPhotoThumb() {
+  const wrap = document.createElement("div");
+  wrap.className = "photo-thumb-wrap";
+
+  const spinner = document.createElement("div");
+  spinner.className = "photo-thumb-spinner";
+  wrap.appendChild(spinner);
+
+  return wrap;
+}

@@ -84,6 +84,22 @@ export function openLightbox(sources, startIndex = 0) {
   img.className = "lightbox-img";
   img.addEventListener("click", (e) => e.stopPropagation());
 
+  const spinner = document.createElement("div");
+  spinner.className = "lightbox-spinner";
+
+  // The same <img> element is reused for every photo, so just swapping
+  // `src` leaves the previous bitmap on screen until the new one decodes —
+  // the counter updates on swipe but the picture doesn't. Hide it behind a
+  // spinner until the new image actually finishes loading.
+  img.addEventListener("load", () => {
+    img.classList.add("loaded");
+    spinner.classList.add("hidden");
+  });
+  img.addEventListener("error", () => {
+    img.classList.add("loaded");
+    spinner.classList.add("hidden");
+  });
+
   const closeBtn = document.createElement("button");
   closeBtn.className = "lightbox-close";
   closeBtn.textContent = "✕";
@@ -98,6 +114,8 @@ export function openLightbox(sources, startIndex = 0) {
   let counter = null;
 
   function render() {
+    img.classList.remove("loaded");
+    spinner.classList.remove("hidden");
     img.src = list[index];
   }
 
@@ -177,6 +195,7 @@ export function openLightbox(sources, startIndex = 0) {
   }
 
   overlay.appendChild(img);
+  overlay.appendChild(spinner);
   overlay.appendChild(closeBtn);
   overlay.appendChild(shareBtn);
 

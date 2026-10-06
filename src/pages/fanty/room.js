@@ -4,7 +4,7 @@ import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
 import { escapeHtml, thumbUrl } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
-import { createPhotoThumb } from "../../photoThumb.js";
+import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 
 const POLL_MS = 1500;
@@ -481,13 +481,6 @@ function renderBottleCircle(players, fanty, ctrl) {
 
     const nameEl = document.createElement("span");
     nameEl.textContent = p.name;
-    if (p.isHost) {
-      const hostBadge = document.createElement("span");
-      hostBadge.className = "host-badge seat-host-badge";
-      hostBadge.textContent = "хост";
-      nameEl.appendChild(document.createElement("br"));
-      nameEl.appendChild(hostBadge);
-    }
 
     seat.appendChild(avatarWrap);
     seat.appendChild(nameEl);
@@ -761,7 +754,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   }
 
   if (fanty.canResolve) {
-    const photosState = { files: [] };
+    const photosState = { files: [], pendingCount: 0 };
 
     if (fanty.contentType === "dare") {
       const MAX_PHOTOS = 5;
@@ -816,20 +809,29 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
           item.appendChild(removeBtn);
           previewRow.appendChild(item);
         });
+        for (let i = 0; i < photosState.pendingCount; i++) {
+          const item = document.createElement("div");
+          item.className = "photo-preview-item";
+          item.appendChild(createPendingPhotoThumb());
+          previewRow.appendChild(item);
+        }
       }
 
       uploadInput.addEventListener("change", async () => {
         const remaining = MAX_PHOTOS - photosState.files.length;
         const files = Array.from(uploadInput.files || []).slice(0, remaining);
+        photosState.pendingCount = files.length;
+        renderPreviews();
         for (let i = 0; i < files.length; i++) {
           setUploading(i + 1, files.length);
           try {
             const res = await fantyApi.uploadPhoto(code, files[i]);
             photosState.files.push(res.filename);
-            renderPreviews();
           } catch (e) {
             alert(e.message);
           }
+          photosState.pendingCount -= 1;
+          renderPreviews();
         }
         uploadInput.value = "";
         updateUploadButtonState();

@@ -18,6 +18,10 @@ function renderAccountCorner(sessionPromise) {
         const label = document.createElement("span");
         label.className = "account-email";
         label.textContent = res.email;
+        const profileBtn = document.createElement("button");
+        profileBtn.className = "account-btn";
+        profileBtn.textContent = "Профиль";
+        profileBtn.addEventListener("click", () => navigate("/profile"));
         const logoutBtn = document.createElement("button");
         logoutBtn.className = "account-btn";
         logoutBtn.textContent = "Выйти";
@@ -31,6 +35,7 @@ function renderAccountCorner(sessionPromise) {
           }
         });
         corner.appendChild(label);
+        corner.appendChild(profileBtn);
         corner.appendChild(logoutBtn);
       } else {
         const loginBtn = document.createElement("button");
