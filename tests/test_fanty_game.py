@@ -194,3 +194,75 @@ def test_local_mode_host_adds_local_players(client):
 
     resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
     assert resp.status_code == 200
+
+
+def test_discard_requires_finished_status(client):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+
+    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 400
+
+    client.post(f"/api/fanty/rooms/{code}/end", json={"token": host_token})
+    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 200
+
+
+def test_discard_requires_host(client):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶").get_json()
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/end", json={"token": host_token})
+
+    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": bob["token"]})
+    assert resp.status_code == 400
+
+
+def test_discard_deletes_room_and_photo_files(client, raw_db):
+    import io
+    import os
+
+    from PIL import Image
+
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), (10, 20, 30)).save(buf, "JPEG")
+    buf.seek(0)
+    resp = client.post(
+        f"/api/fanty/rooms/{code}/upload-photo",
+        data={"file": (buf, "photo.jpg")},
+        content_type="multipart/form-data",
+    )
+    filename = resp.get_json()["filename"]
+    full_path = os.path.join(os.environ["UPLOAD_DIR"], filename)
+    thumb_path = full_path.replace(".jpg", "_thumb.jpg")
+    assert os.path.isfile(full_path)
+    assert os.path.isfile(thumb_path)
+
+    client.post(
+        f"/api/fanty/rooms/{code}/resolve",
+        json={"token": host_token, "counted": True, "photoFilenames": [filename]},
+    )
+    client.post(f"/api/fanty/rooms/{code}/end", json={"token": host_token})
+
+    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 200
+
+    assert not os.path.isfile(full_path)
+    assert not os.path.isfile(thumb_path)
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
+
+    # Discarding an already-gone room is a harmless no-op, not an error.
+    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 200

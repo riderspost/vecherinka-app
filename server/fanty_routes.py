@@ -285,6 +285,50 @@ def end_room(code):
     return jsonify({"ok": True})
 
 
+@fanty_bp.route("/rooms/<code>/discard", methods=["POST"])
+def discard_room(code):
+    # Called when the host leaves the finished-game summary screen — fanty
+    # rooms are single-device now, so that's the one clear "we're done"
+    # signal. Deletes the room (cascades to rounds/photos rows) and the
+    # uploaded round-photo files themselves, so nothing from this party
+    # lingers on disk once nobody is looking at the summary any more.
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return jsonify({"ok": True})
+    data = request.get_json(silent=True) or {}
+    player = get_player_or_404(db, room["id"], data.get("token"))
+    if not player or not player["is_host"]:
+        return error("Только хост может завершить игру")
+    if room["status"] != "finished":
+        return error("Можно удалить только завершённую игру")
+
+    photo_rows = db.execute(
+        """SELECT frp.filename FROM fanty_round_photos frp
+           JOIN fanty_rounds fr ON fr.id = frp.round_id
+           WHERE fr.room_id = ?""",
+        (room["id"],),
+    ).fetchall()
+    filenames = []
+    for row in photo_rows:
+        filename = row["filename"]
+        base, ext = os.path.splitext(filename)
+        filenames.append(filename)
+        filenames.append(f"{base}_thumb{ext}")
+
+    db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
+    db.commit()
+
+    for filename in filenames:
+        path = os.path.join(UPLOAD_DIR, secure_filename(filename))
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    return jsonify({"ok": True})
+
+
 def _build_summary(db, room):
     rounds = db.execute(
         "SELECT * FROM fanty_rounds WHERE room_id = ? ORDER BY round_number", (room["id"],)

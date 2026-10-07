@@ -78,6 +78,7 @@ export const fantyApi = {
     return request("POST", `/api/fanty/rooms/${code}/upload-photo`, form);
   },
   end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
+  discard: (code, token) => request("POST", `/api/fanty/rooms/${code}/discard`, { token }),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
 };

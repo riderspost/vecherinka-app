@@ -242,7 +242,7 @@ export function mountFantyRoomPage(container, code, opts) {
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
       else if (state.room.status === "playing") renderPlaying(wrap, state, token, code, ctrl);
-      else if (state.room.status === "finished") renderFinished(wrap, state);
+      else if (state.room.status === "finished") renderFinished(wrap, state, token, code);
     }
 
     function switchPlayer() {
@@ -877,7 +877,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   }
 }
 
-function renderFinished(wrap, state) {
+function renderFinished(wrap, state, token, code) {
   wrap.innerHTML = `<h1 class="logo">🏁 Игра окончена!</h1>`;
   const summary = state.summary || [];
   if (summary.length === 0) {
@@ -925,7 +925,17 @@ function renderFinished(wrap, state) {
     const homeBtn = document.createElement("button");
     homeBtn.className = "btn btn-primary";
     homeBtn.textContent = "На главную";
-    homeBtn.addEventListener("click", () => navigate("/"));
+    homeBtn.addEventListener("click", async () => {
+      homeBtn.disabled = true;
+      if (state.me.isHost) {
+        try {
+          await fantyApi.discard(code, token);
+        } catch (e) {
+          // best-effort cleanup — still leave even if this fails
+        }
+      }
+      navigate("/");
+    });
     wrap.appendChild(homeBtn);
   }
 }
