@@ -128,3 +128,37 @@ def test_full_round_cycle_reaches_round_results(client):
     assert state["room"]["status"] == "round_results"
     assert state["roundResults"]["roundNumber"] == 1
     assert len(state["roundResults"]["roundScores"]) == 4
+
+
+def test_discard_requires_final_results_status(client):
+    code, tokens = make_room_with_players(client, n=2)
+    host_token = tokens[0][1]
+
+    resp = client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 400
+
+
+def test_discard_requires_host(client, raw_db):
+    code, tokens = make_room_with_players(client, n=2)
+    non_host_token = tokens[1][1]
+    raw_db.execute("UPDATE rooms SET status = 'final_results' WHERE code = ?", (code,))
+    raw_db.commit()
+
+    resp = client.post(f"/api/rooms/{code}/discard", json={"token": non_host_token})
+    assert resp.status_code == 400
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is not None
+
+
+def test_discard_deletes_finished_room(client, raw_db):
+    code, tokens = make_room_with_players(client, n=2)
+    host_token = tokens[0][1]
+    raw_db.execute("UPDATE rooms SET status = 'final_results' WHERE code = ?", (code,))
+    raw_db.commit()
+
+    resp = client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 200
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
+
+    # Discarding an already-gone room is a harmless no-op, not an error.
+    resp = client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
+    assert resp.status_code == 200

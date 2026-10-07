@@ -44,6 +44,7 @@ export const api = {
     return request("POST", "/api/upload-avatar", form);
   },
   contact: (email, message) => request("POST", "/api/contact", { email, message }),
+  discardRoom: (code, token) => request("POST", `/api/rooms/${code}/discard`, { token }),
 };
 
 export const authApi = {

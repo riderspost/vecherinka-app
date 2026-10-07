@@ -427,6 +427,28 @@ def advance_room(code):
     return jsonify({"ok": True})
 
 
+@app.route("/api/rooms/<code>/discard", methods=["POST"])
+def discard_room(code):
+    # Called when the host leaves the final-results screen. Players can join
+    # from their own devices in this game, so only the host's own exit counts
+    # as "we're done" — a non-host leaving shouldn't yank results away from
+    # everyone else who might still be looking at their screen.
+    db = get_db()
+    room = get_room_or_404(db, code)
+    if not room:
+        return jsonify({"ok": True})
+    data = request.get_json(silent=True) or {}
+    player = get_player_or_404(db, room["id"], data.get("token"))
+    if not player or not player["is_host"]:
+        return error("Только хост может завершить игру")
+    if room["status"] != "final_results":
+        return error("Можно удалить только завершённую игру")
+
+    db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/rooms/<code>/submit", methods=["POST"])
 def submit_answer(code):
     db = get_db()

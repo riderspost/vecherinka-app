@@ -155,7 +155,7 @@ export function mountRoomPage(container, code, opts) {
     else if (status === "voting_results") renderVotingResults(wrap, state, token, code);
     else if (status === "round_results") renderRoundResults(wrap, state, token, code);
     else if (status === "overall_results") renderOverallResults(wrap, state, token, code);
-    else if (status === "final_results") renderFinalResults(wrap, state);
+    else if (status === "final_results") renderFinalResults(wrap, state, token, code);
   }
 }
 
@@ -501,7 +501,7 @@ function renderOverallResults(wrap, state, token, code) {
   renderHostNextButton(wrap, state, token, code, isLastRound ? "Показать победителя" : "Следующий раунд");
 }
 
-function renderFinalResults(wrap, state) {
+function renderFinalResults(wrap, state, token, code) {
   const r = state.finalResults;
   const winner = r.leaderboard[0];
   wrap.innerHTML = `<h1 class="logo">🏆 Игра окончена!</h1>`;
@@ -517,7 +517,17 @@ function renderFinalResults(wrap, state) {
     const homeBtn = document.createElement("button");
     homeBtn.className = "btn btn-primary";
     homeBtn.textContent = "На главную";
-    homeBtn.addEventListener("click", () => navigate("/"));
+    homeBtn.addEventListener("click", async () => {
+      homeBtn.disabled = true;
+      if (state.me.isHost) {
+        try {
+          await api.discardRoom(code, token);
+        } catch (e) {
+          // best-effort cleanup — still leave even if this fails
+        }
+      }
+      navigate("/");
+    });
     wrap.appendChild(homeBtn);
   }
 }
