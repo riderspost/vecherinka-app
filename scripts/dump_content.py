@@ -27,7 +27,8 @@ def main():
 
     dares = []
     for r in db.execute(
-        "SELECT id, text, kind, status, mixed_pair, music_filename, has_timer, timer_seconds "
+        "SELECT id, text, kind, status, mixed_pair, music_filename, music_original_name, "
+        "music_start_seconds, has_timer, timer_seconds "
         "FROM fanty_dares"
     ).fetchall():
         categories = [
@@ -49,6 +50,8 @@ def main():
                 "status": r["status"],
                 "mixed_pair": bool(r["mixed_pair"]),
                 "music_filename": r["music_filename"],
+                "music_original_name": r["music_original_name"],
+                "music_start_seconds": r["music_start_seconds"],
                 "has_timer": bool(r["has_timer"]),
                 "timer_seconds": r["timer_seconds"],
                 "categories": categories,

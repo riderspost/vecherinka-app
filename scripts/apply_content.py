@@ -64,16 +64,22 @@ def upsert_dare(db, d, upload_dir):
         )
         music_filename = None
 
+    music_original_name = d.get("music_original_name") if music_filename else None
+    music_start_seconds = d.get("music_start_seconds", 0) if music_filename else 0
+
     if row:
         dare_id = row[0]
         db.execute(
             """UPDATE fanty_dares SET kind=?, status=?, mixed_pair=?, music_filename=?,
+               music_original_name=?, music_start_seconds=?,
                has_timer=?, timer_seconds=? WHERE id=?""",
             (
                 d["kind"],
                 d["status"],
                 int(d["mixed_pair"]),
                 music_filename,
+                music_original_name,
+                music_start_seconds,
                 int(d["has_timer"]),
                 d["timer_seconds"],
                 dare_id,
@@ -85,13 +91,16 @@ def upsert_dare(db, d, upload_dir):
     else:
         cur = db.execute(
             """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename,
-               has_timer, timer_seconds) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               music_original_name, music_start_seconds, has_timer, timer_seconds)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 d["text"],
                 d["kind"],
                 d["status"],
                 int(d["mixed_pair"]),
                 music_filename,
+                music_original_name,
+                music_start_seconds,
                 int(d["has_timer"]),
                 d["timer_seconds"],
             ),
