@@ -135,6 +135,8 @@ async function renderDashboard() {
     <div class="tabs" id="main-tabs">
       <button class="tab-btn active" data-target="prompts">Продолжи предложение</button>
       <button class="tab-btn" data-target="fanty">Фанты</button>
+      <button class="tab-btn" data-target="users">Пользователи</button>
+      <button class="tab-btn" data-target="rooms">Комнаты</button>
     </div>
 
     <div id="section-prompts">
@@ -256,6 +258,24 @@ async function renderDashboard() {
         </div>
       </div>
     </div>
+
+    <div id="section-users" style="display:none">
+      <div class="card">
+        <h2 style="margin-top:0">Зарегистрированные пользователи</h2>
+        <div id="users-table"></div>
+      </div>
+    </div>
+
+    <div id="section-rooms" style="display:none">
+      <div class="card">
+        <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h2 style="margin:0">Открытые комнаты</h2>
+          <button class="btn secondary" id="rooms-refresh-btn">Обновить</button>
+        </div>
+        <p class="hint">Комнаты закрываются автоматически через час без активности. Удаление здесь — принудительное и сразу.</p>
+        <div id="rooms-table"></div>
+      </div>
+    </div>
   `;
 
   document.getElementById("logout-btn").addEventListener("click", async () => {
@@ -266,6 +286,8 @@ async function renderDashboard() {
   setupTabs(document.querySelectorAll("#main-tabs .tab-btn"), {
     prompts: document.getElementById("section-prompts"),
     fanty: document.getElementById("section-fanty"),
+    users: document.getElementById("section-users"),
+    rooms: document.getElementById("section-rooms"),
   });
   setupTabs(document.querySelectorAll("#fanty-tabs .tab-btn"), {
     dares: document.getElementById("fanty-subsection-dares"),
@@ -524,9 +546,13 @@ async function renderDashboard() {
     }
   });
 
+  document.getElementById("rooms-refresh-btn").addEventListener("click", refreshRooms);
+
   await refreshPrompts();
   await refreshDares();
   await refreshTruths();
+  await refreshUsers();
+  await refreshRooms();
 }
 
 function tagsHtml(item) {
@@ -762,6 +788,92 @@ function refreshTruths() {
     textLabel: "Текст",
     refreshFn: refreshTruths,
     onEdit: startEditingTruth,
+  });
+}
+
+async function refreshUsers() {
+  const users = await api("/users");
+  const host = document.getElementById("users-table");
+  if (users.length === 0) {
+    host.innerHTML = `<p class="hint">Пока нет зарегистрированных пользователей.</p>`;
+    return;
+  }
+  const rows = users
+    .map(
+      (u) => `
+      <tr>
+        <td>${escapeHtml(u.email)}${
+        u.emailVerified ? "" : ' <span class="tag-pill tag-pending">не подтверждён</span>'
+      }</td>
+        <td>${escapeHtml(u.name || "—")}</td>
+        <td>${u.gamesCreated}</td>
+        <td>${escapeHtml(u.createdAt)}</td>
+      </tr>
+    `
+    )
+    .join("");
+  host.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Email</th><th>Имя</th><th>Игр создано</th><th>Регистрация</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+const ROOM_GAME_TYPE_LABEL = { fanty: "Фанты", sentence: "Продолжи предложение" };
+
+async function refreshRooms() {
+  const rooms = await api("/rooms");
+  const host = document.getElementById("rooms-table");
+  if (rooms.length === 0) {
+    host.innerHTML = `<p class="hint">Нет открытых комнат.</p>`;
+    return;
+  }
+  const rows = rooms
+    .map(
+      (r) => `
+      <tr>
+        <td>${escapeHtml(r.code)}</td>
+        <td>${escapeHtml(ROOM_GAME_TYPE_LABEL[r.gameType] || r.gameType)}</td>
+        <td>${escapeHtml(r.status)}</td>
+        <td>${escapeHtml(r.hostName || "—")}</td>
+        <td>${r.playerCount}</td>
+        <td>${r.roundsPlayed}</td>
+        <td>${escapeHtml(r.createdAt)}</td>
+        <td>${r.idleMinutes} мин</td>
+        <td><button class="btn danger" data-delete-room="${r.code}">Удалить</button></td>
+      </tr>
+    `
+    )
+    .join("");
+  host.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Код</th><th>Игра</th><th>Статус</th><th>Хост</th><th>Игроков</th>
+            <th>Раундов</th><th>Создана</th><th>Простой</th><th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+
+  host.querySelectorAll("[data-delete-room]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(`Удалить комнату ${btn.dataset.deleteRoom}? Это необратимо.`)) return;
+      btn.disabled = true;
+      try {
+        await api(`/rooms/${btn.dataset.deleteRoom}`, { method: "DELETE" });
+        await refreshRooms();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
   });
 }
 

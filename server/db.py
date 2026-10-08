@@ -63,6 +63,7 @@ def init_db():
     _ensure_column(db, "fanty_dares", "likes", "likes INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "fanty_truths", "likes", "likes INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "rooms", "last_active_at", "last_active_at TEXT NOT NULL DEFAULT (datetime('now'))")
+    _ensure_column(db, "users", "games_created_count", "games_created_count INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 

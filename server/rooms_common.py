@@ -196,6 +196,15 @@ def create_room_and_host(
         "INSERT INTO rooms (id, code, status, game_type, device_mode, created_by_user_id) VALUES (?, ?, 'lobby', ?, ?, ?)",
         (room_id, code, game_type, device_mode, created_by_user_id),
     )
+    if created_by_user_id:
+        # A running tally, not a COUNT(*) over rooms — rooms themselves get
+        # deleted (abandoned-room sweep, manual discard) once a game's over,
+        # so this is the only place "how many games has this user ever
+        # created" survives that cleanup.
+        db.execute(
+            "UPDATE users SET games_created_count = games_created_count + 1 WHERE id = ?",
+            (created_by_user_id,),
+        )
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(

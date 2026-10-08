@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from .db import get_db
 from . import ai_prompts
 from . import fanty_game
-from .rooms_common import UPLOAD_DIR, ALLOWED_AUDIO_EXT
+from .rooms_common import UPLOAD_DIR, ALLOWED_AUDIO_EXT, delete_room_and_files
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADMIN_DIR = os.path.join(BASE_DIR, "admin")
@@ -64,6 +64,79 @@ def admin_logout():
 @admin_bp.route("/api/session")
 def admin_session():
     return jsonify({"authenticated": is_admin()})
+
+
+@admin_bp.route("/api/users")
+@admin_required
+def admin_list_users():
+    db = get_db()
+    rows = db.execute(
+        """SELECT id, email, name, email_verified, games_created_count, created_at
+           FROM users
+           ORDER BY games_created_count DESC, created_at DESC"""
+    ).fetchall()
+    return jsonify(
+        [
+            {
+                "id": r["id"],
+                "email": r["email"],
+                "name": r["name"],
+                "emailVerified": bool(r["email_verified"]),
+                "gamesCreated": r["games_created_count"],
+                "createdAt": r["created_at"],
+            }
+            for r in rows
+        ]
+    )
+
+
+@admin_bp.route("/api/rooms")
+@admin_required
+def admin_list_rooms():
+    db = get_db()
+    rooms = db.execute("SELECT * FROM rooms ORDER BY created_at DESC").fetchall()
+    result = []
+    for r in rooms:
+        host = db.execute(
+            "SELECT name FROM players WHERE room_id = ? AND is_host = 1 LIMIT 1", (r["id"],)
+        ).fetchone()
+        player_count = db.execute(
+            "SELECT COUNT(*) AS c FROM players WHERE room_id = ? AND is_display = 0", (r["id"],)
+        ).fetchone()["c"]
+        if r["game_type"] == "fanty":
+            rounds_played = db.execute(
+                "SELECT COUNT(*) AS c FROM fanty_rounds WHERE room_id = ?", (r["id"],)
+            ).fetchone()["c"]
+        else:
+            rounds_played = r["current_round"]
+        idle_minutes = db.execute(
+            "SELECT CAST((julianday('now') - julianday(?)) * 24 * 60 AS INTEGER) AS m",
+            (r["last_active_at"],),
+        ).fetchone()["m"]
+        result.append(
+            {
+                "code": r["code"],
+                "gameType": r["game_type"],
+                "status": r["status"],
+                "hostName": host["name"] if host else None,
+                "playerCount": player_count,
+                "roundsPlayed": rounds_played,
+                "createdAt": r["created_at"],
+                "idleMinutes": idle_minutes,
+            }
+        )
+    return jsonify(result)
+
+
+@admin_bp.route("/api/rooms/<code>", methods=["DELETE"])
+@admin_required
+def admin_delete_room(code):
+    db = get_db()
+    room = db.execute("SELECT * FROM rooms WHERE code = ?", (code.upper(),)).fetchone()
+    if not room:
+        return jsonify({"error": "Комната не найдена"}), 404
+    delete_room_and_files(db, room)
+    return jsonify({"ok": True})
 
 
 @admin_bp.route("/api/prompts")

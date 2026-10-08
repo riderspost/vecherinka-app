@@ -1,6 +1,7 @@
 import io
 import os
 
+from tests.test_auth import register, get_code
 from tests.test_fanty_game import create_fanty_room, join_fanty
 
 ADMIN_USERNAME = os.environ["ADMIN_USERNAME"]
@@ -332,3 +333,51 @@ def test_admin_bulk_delete_excludes_currently_live_dare(client, raw_db):
     assert body["deleted"] == 0
     assert body["blocked"] == 1
     assert raw_db.execute("SELECT 1 FROM fanty_dares WHERE id = ?", (live_dare_id,)).fetchone() is not None
+
+
+def test_admin_users_requires_login(client):
+    resp = client.get("/admin/api/users")
+    assert resp.status_code == 401
+
+
+def test_admin_list_users_shows_games_created_count(client, raw_db):
+    register(client, email="gamer@example.com", password="supersecret1")
+    code = get_code(raw_db, "gamer@example.com")
+    client.post("/api/auth/verify-email", json={"email": "gamer@example.com", "code": code})
+
+    client.post("/api/rooms", json={"name": "Хост", "avatarType": "emoji", "avatarValue": "🙂"})
+    create_fanty_room(client, game_mode="solo", name="Хост2", avatar_value="😎")
+
+    admin_login(client)
+    users = client.get("/admin/api/users").get_json()
+    user = next(u for u in users if u["email"] == "gamer@example.com")
+    assert user["gamesCreated"] == 2
+    assert user["emailVerified"] is True
+
+
+def test_admin_list_rooms_and_force_delete(client, raw_db):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/resolve", json={"token": host_token, "counted": True})
+
+    admin_login(client)
+    rooms = client.get("/admin/api/rooms").get_json()
+    room = next(r for r in rooms if r["code"] == code)
+    assert room["gameType"] == "fanty"
+    assert room["status"] == "playing"
+    assert room["hostName"] == "Host"
+    assert room["playerCount"] == 2
+    assert room["roundsPlayed"] == 1
+    assert room["idleMinutes"] == 0
+
+    # Force-delete bypasses the host-only/finished-only rules /discard enforces.
+    resp = client.delete(f"/admin/api/rooms/{code}")
+    assert resp.status_code == 200
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
+
+    resp = client.delete(f"/admin/api/rooms/{code}")
+    assert resp.status_code == 404
