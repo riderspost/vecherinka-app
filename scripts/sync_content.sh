@@ -3,12 +3,17 @@
 # Merges by text (see apply_content.py) — never deletes, so it's safe even
 # if you also edit content directly on the target's admin panel.
 #
-# Usage: scripts/sync_content.sh staging|prod
+# Pass --replace as a third arg to make the target match local exactly,
+# removing anything there that isn't in the local set too (skips anything
+# still referenced by game history, same as the admin panel would).
+#
+# Usage: scripts/sync_content.sh staging|prod [--replace]
 set -e
 
 TARGET="$1"
+REPLACE_FLAG="$2"
 if [ "$TARGET" != "staging" ] && [ "$TARGET" != "prod" ]; then
-  echo "usage: $0 staging|prod" >&2
+  echo "usage: $0 staging|prod [--replace]" >&2
   exit 1
 fi
 
@@ -30,8 +35,8 @@ rsync -az --ignore-existing -e ssh uploads/ "$HOST:$REMOTE_DIR/uploads/"
 echo "Uploading content dump..."
 scp -q "$DUMP" "$HOST:$REMOTE_DIR/content_dump.json"
 
-echo "Merging on $TARGET..."
-ssh "$HOST" "cd $REMOTE_DIR && ./venv/bin/python scripts/apply_content.py content_dump.json && rm content_dump.json"
+echo "Applying on $TARGET${REPLACE_FLAG:+ (full replace)}..."
+ssh "$HOST" "cd $REMOTE_DIR && ./venv/bin/python scripts/apply_content.py content_dump.json $REPLACE_FLAG && rm content_dump.json"
 
 rm "$DUMP"
 echo "Done."

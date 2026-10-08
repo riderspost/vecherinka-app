@@ -2,11 +2,17 @@
 """Merge a content dump (from dump_content.py) into this environment's DB.
 
 Upserts by unique text: a matching row gets its fields/categories/locations
-updated, new text gets inserted. Never deletes — content added directly on
-this environment that isn't in the dump is left untouched, so it's safe to
-run against an environment that's also edited by hand.
+updated, new text gets inserted. By default never deletes — content added
+directly on this environment that isn't in the dump is left untouched, so
+it's safe to run against an environment that's also edited by hand.
 
-Usage: python scripts/apply_content.py content.json
+Pass --replace to additionally remove anything on this environment whose
+text isn't in the dump at all, so the result matches the dump exactly. A
+row still referenced by game history (fanty_rounds/round_prompts) can't be
+deleted (same rule as the admin panel) — those are skipped and reported,
+not silently left in a half-replaced state.
+
+Usage: python scripts/apply_content.py content.json [--replace]
 """
 import json
 import os
@@ -104,12 +110,32 @@ def upsert_dare(db, d, upload_dir):
     return action
 
 
+def _remove_missing(db, table, text_column, id_column, keep_texts, label, counts):
+    removed = 0
+    blocked = 0
+    rows = db.execute(f"SELECT {id_column}, {text_column} FROM {table}").fetchall()
+    for row in rows:
+        if row[1] in keep_texts:
+            continue
+        try:
+            db.execute(f"DELETE FROM {table} WHERE {id_column} = ?", (row[0],))
+            removed += 1
+        except sqlite3.IntegrityError:
+            # Still referenced by game history — same rule the admin panel
+            # enforces, so a --replace run can't silently nuke content a
+            # finished game's "Итоги игры" summary still points to.
+            blocked += 1
+    counts[label] = {"removed": removed, "blocked": blocked}
+
+
 def main():
-    if len(sys.argv) != 2:
-        print("usage: apply_content.py <dump.json>", file=sys.stderr)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    replace = "--replace" in sys.argv
+    if len(args) != 1:
+        print("usage: apply_content.py <dump.json> [--replace]", file=sys.stderr)
         sys.exit(1)
 
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
+    with open(args[0], "r", encoding="utf-8") as f:
         dump = json.load(f)
 
     upload_dir = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
@@ -127,6 +153,15 @@ def main():
         counts["truths"][upsert_truth(db, t)] += 1
     for d in dump["dares"]:
         counts["dares"][upsert_dare(db, d, upload_dir)] += 1
+
+    if replace:
+        _remove_missing(db, "prompts", "text", "id", {p["text"] for p in dump["prompts"]}, "promptsRemoved", counts)
+        _remove_missing(
+            db, "fanty_dares", "text", "id", {d["text"] for d in dump["dares"]}, "daresRemoved", counts
+        )
+        _remove_missing(
+            db, "fanty_truths", "text", "id", {t["text"] for t in dump["truths"]}, "truthsRemoved", counts
+        )
 
     db.commit()
     db.close()
