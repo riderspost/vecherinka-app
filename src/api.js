@@ -45,7 +45,6 @@ export const api = {
   },
   contact: (email, message) => request("POST", "/api/contact", { email, message }),
   discardRoom: (code, token) => request("POST", `/api/rooms/${code}/discard`, { token }),
-  likePrompt: (promptId) => request("POST", `/api/prompts/${promptId}/like`),
 };
 
 export const authApi = {

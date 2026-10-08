@@ -241,9 +241,7 @@ def _build_state(db, room, player):
             current = remaining[0] if remaining else None
             state["answering"] = {
                 "currentPrompt": (
-                    {"id": current["id"], "promptId": current["prompt_id"], "text": current["prompt_text"]}
-                    if current
-                    else None
+                    {"id": current["id"], "text": current["prompt_text"]} if current else None
                 ),
                 "answeredCount": len(rows) - len(remaining),
                 "totalCount": len(rows),
@@ -273,7 +271,6 @@ def _build_state(db, room, player):
             state["voting"] = {
                 "index": room["voting_index"] + 1,
                 "total": total,
-                "promptId": rp["prompt_id"],
                 "promptText": prompt_text,
                 "submissions": [
                     {"id": s["id"], "text": s["answer_text"], "votesCount": s["votes_count"]}
@@ -535,17 +532,6 @@ def submit_vote(code):
     db.commit()
     game.tick(db, room)
     return jsonify({"ok": True})
-
-
-@app.route("/api/prompts/<int:prompt_id>/like", methods=["POST"])
-def like_prompt(prompt_id):
-    db = get_db()
-    if not db.execute("SELECT 1 FROM prompts WHERE id = ?", (prompt_id,)).fetchone():
-        return error("Вопрос не найден", 404)
-    db.execute("UPDATE prompts SET likes = likes + 1 WHERE id = ?", (prompt_id,))
-    db.commit()
-    likes = db.execute("SELECT likes FROM prompts WHERE id = ?", (prompt_id,)).fetchone()["likes"]
-    return jsonify({"likes": likes})
 
 
 @app.route("/uploads/<path:filename>")
