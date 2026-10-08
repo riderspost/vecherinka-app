@@ -18,8 +18,6 @@ const ATTRIBUTES = [
   { value: "food", label: "Еда" },
 ];
 
-const ALL_DARE_CATEGORIES = [...MOOD_CATEGORIES, ...ATTRIBUTES];
-
 function checkboxRow(options, name) {
   return options
     .map((o) => `<label><input type="checkbox" name="${name}" value="${o.value}" /> ${o.label}</label>`)
@@ -272,7 +270,9 @@ async function renderDashboard() {
               <option value="team">Командный</option>
             </select>
             <select id="dares-filter-location" class="filter-input">${selectOptions(LOCATIONS, "Место: все")}</select>
-            <select id="dares-filter-category" class="filter-input">${selectOptions(ALL_DARE_CATEGORIES, "Категория: все")}</select>
+            <select id="dares-filter-category" class="filter-input">${selectOptions(MOOD_CATEGORIES, "Категория: все")}</select>
+            <select id="dares-filter-attribute" class="filter-input">${selectOptions(ATTRIBUTES, "Атрибут: все")}</select>
+            <label class="filter-checkbox"><input type="checkbox" id="dares-filter-mixed" /> Только М+Ж</label>
             <label class="filter-checkbox"><input type="checkbox" id="dares-filter-timer" /> С таймером</label>
             <label class="filter-checkbox"><input type="checkbox" id="dares-filter-music" /> С музыкой</label>
           </div>
@@ -739,7 +739,16 @@ async function renderDashboard() {
   wireFilterInputs("prompts", ["prompts-filter-search"], refreshPromptsTable);
   wireFilterInputs(
     "dares",
-    ["dares-filter-search", "dares-filter-kind", "dares-filter-location", "dares-filter-category", "dares-filter-timer", "dares-filter-music"],
+    [
+      "dares-filter-search",
+      "dares-filter-kind",
+      "dares-filter-location",
+      "dares-filter-category",
+      "dares-filter-attribute",
+      "dares-filter-mixed",
+      "dares-filter-timer",
+      "dares-filter-music",
+    ],
     refreshDaresTable
   );
   wireFilterInputs("truths", ["truths-filter-search", "truths-filter-category"], refreshTruthsTable);
@@ -1009,6 +1018,8 @@ function refreshDaresTable() {
   const kindFilter = document.getElementById("dares-filter-kind").value;
   const locationFilter = document.getElementById("dares-filter-location").value;
   const categoryFilter = document.getElementById("dares-filter-category").value;
+  const attributeFilter = document.getElementById("dares-filter-attribute").value;
+  const mixedOnly = document.getElementById("dares-filter-mixed").checked;
   const timerOnly = document.getElementById("dares-filter-timer").checked;
   const musicOnly = document.getElementById("dares-filter-music").checked;
 
@@ -1016,6 +1027,8 @@ function refreshDaresTable() {
   if (kindFilter) active = active.filter((d) => d.kind === kindFilter);
   if (locationFilter) active = active.filter((d) => d.locations.includes(locationFilter));
   if (categoryFilter) active = active.filter((d) => d.categories.includes(categoryFilter));
+  if (attributeFilter) active = active.filter((d) => d.categories.includes(attributeFilter));
+  if (mixedOnly) active = active.filter((d) => d.mixedPair);
   if (timerOnly) active = active.filter((d) => d.hasTimer);
   if (musicOnly) active = active.filter((d) => Boolean(d.musicUrl));
 
@@ -1029,7 +1042,14 @@ function refreshDaresTable() {
       render: (d) => (d.kind === "team" ? "Командный" + (d.mixedPair ? " (М+Ж)" : "") : "Один"),
     },
     { label: "Места", render: (d) => pillsHtml(d.locations, LOCATIONS, "tag-location") },
-    { label: "Категории", render: (d) => pillsHtml(d.categories, ALL_DARE_CATEGORIES, "tag-category") },
+    {
+      label: "Категория",
+      render: (d) => pillsHtml(d.categories.filter((c) => MOOD_CATEGORIES.some((m) => m.value === c)), MOOD_CATEGORIES, "tag-category"),
+    },
+    {
+      label: "Атрибуты",
+      render: (d) => pillsHtml(d.categories.filter((c) => ATTRIBUTES.some((a) => a.value === c)), ATTRIBUTES, "tag-attribute"),
+    },
     { label: "Таймер", render: (d) => (d.hasTimer ? `⏱ ${d.timerSeconds}с` : `<span class="hint">—</span>`) },
     {
       label: "Музыка",
