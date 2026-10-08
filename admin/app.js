@@ -231,14 +231,17 @@ async function renderDashboard() {
             <input type="file" id="dare-audio-input" accept="audio/*" />
             <div id="dare-audio-status" class="hint"></div>
             <div id="dare-music-editor" style="display:none;margin-top:8px">
-              <audio id="dare-music-preview" controls style="width:100%"></audio>
-              <div class="row" style="align-items:center;gap:10px;margin-top:8px">
-                <label style="flex:1;margin:0">Начало отрывка
-                  <input type="range" id="dare-music-start" min="0" max="0" value="0" step="1" style="width:100%" />
-                </label>
-                <button type="button" class="btn secondary" id="dare-music-preview-clip-btn">▶️ Отрывок</button>
+              <audio id="dare-music-preview"></audio>
+              <div class="music-timeline" id="dare-music-timeline">
+                <div class="music-timeline-fog music-timeline-fog-left" id="dare-music-fog-left"></div>
+                <div class="music-timeline-window" id="dare-music-window"></div>
+                <div class="music-timeline-fog music-timeline-fog-right" id="dare-music-fog-right"></div>
+                <div class="music-timeline-playhead" id="dare-music-playhead"></div>
               </div>
-              <div class="hint" id="dare-music-range-label"></div>
+              <div class="row-actions" style="margin-top:8px;align-items:center">
+                <button type="button" class="btn secondary" id="dare-music-play-btn">▶️ Прослушать отрывок</button>
+                <span class="hint" id="dare-music-range-label"></span>
+              </div>
             </div>
             <div class="row">
               <label><input type="checkbox" id="dare-has-timer" /> Таймер</label>
@@ -460,14 +463,21 @@ async function renderDashboard() {
   let uploadedAudioOriginalName = null;
   let musicStartSeconds = 0;
   let musicDuration = 0;
-  let musicPreviewStopTimer = null;
+  let musicStopTimer = null;
+  let musicIsPlaying = false;
+  let musicRafId = null;
+  let musicDragAnchorOffset = null;
   const audioInput = document.getElementById("dare-audio-input");
   const audioStatus = document.getElementById("dare-audio-status");
   const musicEditor = document.getElementById("dare-music-editor");
   const musicPreviewEl = document.getElementById("dare-music-preview");
-  const musicStartSlider = document.getElementById("dare-music-start");
+  const musicTimeline = document.getElementById("dare-music-timeline");
+  const musicFogLeft = document.getElementById("dare-music-fog-left");
+  const musicWindowEl = document.getElementById("dare-music-window");
+  const musicFogRight = document.getElementById("dare-music-fog-right");
+  const musicPlayhead = document.getElementById("dare-music-playhead");
   const musicRangeLabel = document.getElementById("dare-music-range-label");
-  const musicPreviewClipBtn = document.getElementById("dare-music-preview-clip-btn");
+  const musicPlayBtn = document.getElementById("dare-music-play-btn");
 
   function updateTimerSecondsVisibility() {
     const show = hasTimerCheckbox.checked || Boolean(uploadedAudioFilename);
@@ -483,68 +493,144 @@ async function renderDashboard() {
     return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
   }
 
-  function updateMusicRangeLabel() {
-    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
-    const end = Math.min(musicDuration, musicStartSeconds + timerSeconds);
-    musicRangeLabel.textContent = musicDuration
-      ? `Будет проигрываться: ${formatTime(musicStartSeconds)}–${formatTime(end)} ` +
-        `(${timerSeconds} сек из ${formatTime(musicDuration)})`
-      : "";
+  function currentTimerSeconds() {
+    return parseInt(timerSecondsInput.value, 10) || 60;
   }
 
-  function updateMusicSliderBounds() {
-    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
-    const maxStart = Math.max(0, Math.floor(musicDuration - timerSeconds));
-    musicStartSlider.max = String(maxStart);
-    if (musicStartSeconds > maxStart) musicStartSeconds = maxStart;
-    musicStartSlider.value = String(musicStartSeconds);
-    updateMusicRangeLabel();
+  function updateTimelineUI() {
+    if (!musicDuration) {
+      musicRangeLabel.textContent = "";
+      return;
+    }
+    const timerSeconds = currentTimerSeconds();
+    const maxStart = Math.max(0, musicDuration - timerSeconds);
+    musicStartSeconds = Math.min(maxStart, Math.max(0, musicStartSeconds));
+    const end = Math.min(musicDuration, musicStartSeconds + timerSeconds);
+    const startPct = (musicStartSeconds / musicDuration) * 100;
+    const endPct = (end / musicDuration) * 100;
+    musicFogLeft.style.width = `${startPct}%`;
+    musicWindowEl.style.left = `${startPct}%`;
+    musicWindowEl.style.width = `${Math.max(0, endPct - startPct)}%`;
+    musicFogRight.style.left = `${endPct}%`;
+    musicFogRight.style.width = `${Math.max(0, 100 - endPct)}%`;
+    musicRangeLabel.textContent =
+      `${formatTime(musicStartSeconds)}–${formatTime(end)} (${timerSeconds} сек из ${formatTime(musicDuration)})`;
   }
+
+  function updatePlayheadPosition() {
+    if (!musicDuration) return;
+    const pct = Math.min(100, Math.max(0, (musicPreviewEl.currentTime / musicDuration) * 100));
+    musicPlayhead.style.left = `${pct}%`;
+  }
+
+  function trackPlayhead() {
+    updatePlayheadPosition();
+    if (musicIsPlaying) musicRafId = requestAnimationFrame(trackPlayhead);
+  }
+
+  function setPlayingState(isPlaying) {
+    musicIsPlaying = isPlaying;
+    musicPlayBtn.textContent = isPlaying ? "⏸ Остановить" : "▶️ Прослушать отрывок";
+    musicPlayhead.style.opacity = isPlaying ? "1" : "0";
+  }
+
+  function stopPreview() {
+    if (musicRafId) {
+      cancelAnimationFrame(musicRafId);
+      musicRafId = null;
+    }
+    if (musicStopTimer) {
+      clearTimeout(musicStopTimer);
+      musicStopTimer = null;
+    }
+    musicPreviewEl.pause();
+    setPlayingState(false);
+  }
+
+  function playPreview() {
+    const timerSeconds = currentTimerSeconds();
+    stopPreview();
+    musicPreviewEl.currentTime = musicStartSeconds;
+    musicPreviewEl.play().catch(() => {});
+    setPlayingState(true);
+    trackPlayhead();
+    musicStopTimer = setTimeout(stopPreview, timerSeconds * 1000);
+  }
+
+  musicPlayBtn.addEventListener("click", () => {
+    if (musicIsPlaying) stopPreview();
+    else playPreview();
+  });
+  musicPreviewEl.addEventListener("ended", stopPreview);
+
+  function timeFromClientX(clientX) {
+    const rect = musicTimeline.getBoundingClientRect();
+    const ratio = rect.width ? Math.min(1, Math.max(0, (clientX - rect.left) / rect.width)) : 0;
+    return ratio * musicDuration;
+  }
+
+  musicTimeline.addEventListener("pointerdown", (e) => {
+    if (!musicDuration) return;
+    musicTimeline.setPointerCapture(e.pointerId);
+    const timerSeconds = currentTimerSeconds();
+    const clickTime = timeFromClientX(e.clientX);
+    const windowEnd = musicStartSeconds + timerSeconds;
+    musicDragAnchorOffset =
+      clickTime >= musicStartSeconds && clickTime <= windowEnd ? clickTime - musicStartSeconds : timerSeconds / 2;
+    const maxStart = Math.max(0, musicDuration - timerSeconds);
+    musicStartSeconds = Math.min(maxStart, Math.max(0, clickTime - musicDragAnchorOffset));
+    updateTimelineUI();
+  });
+
+  musicTimeline.addEventListener("pointermove", (e) => {
+    if (musicDragAnchorOffset === null) return;
+    const timerSeconds = currentTimerSeconds();
+    const clickTime = timeFromClientX(e.clientX);
+    const maxStart = Math.max(0, musicDuration - timerSeconds);
+    musicStartSeconds = Math.min(maxStart, Math.max(0, clickTime - musicDragAnchorOffset));
+    updateTimelineUI();
+  });
+
+  function endMusicDrag(e) {
+    if (musicDragAnchorOffset === null) return;
+    musicDragAnchorOffset = null;
+    try {
+      musicTimeline.releasePointerCapture(e.pointerId);
+    } catch (err) {
+      /* pointer already released */
+    }
+  }
+  musicTimeline.addEventListener("pointerup", endMusicDrag);
+  musicTimeline.addEventListener("pointercancel", endMusicDrag);
 
   function showMusicEditor(url, startSeconds) {
     musicStartSeconds = startSeconds || 0;
     musicDuration = 0;
     musicEditor.style.display = "";
+    musicPlayhead.style.opacity = "0";
     musicPreviewEl.src = url;
     musicPreviewEl.addEventListener(
       "loadedmetadata",
       () => {
         musicDuration = musicPreviewEl.duration || 0;
-        updateMusicSliderBounds();
+        updateTimelineUI();
       },
       { once: true }
     );
   }
 
   function hideMusicEditor() {
-    if (musicPreviewStopTimer) {
-      clearTimeout(musicPreviewStopTimer);
-      musicPreviewStopTimer = null;
-    }
+    stopPreview();
     musicEditor.style.display = "none";
-    musicPreviewEl.pause();
     musicPreviewEl.removeAttribute("src");
     musicPreviewEl.load();
     musicStartSeconds = 0;
     musicDuration = 0;
   }
 
-  musicStartSlider.addEventListener("input", () => {
-    musicStartSeconds = parseInt(musicStartSlider.value, 10) || 0;
-    updateMusicRangeLabel();
-  });
-
   timerSecondsInput.addEventListener("input", () => {
-    if (uploadedAudioFilename) updateMusicSliderBounds();
+    if (uploadedAudioFilename) updateTimelineUI();
     updateTimerSecondsVisibility();
-  });
-
-  musicPreviewClipBtn.addEventListener("click", () => {
-    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
-    if (musicPreviewStopTimer) clearTimeout(musicPreviewStopTimer);
-    musicPreviewEl.currentTime = musicStartSeconds;
-    musicPreviewEl.play().catch(() => {});
-    musicPreviewStopTimer = setTimeout(() => musicPreviewEl.pause(), timerSeconds * 1000);
   });
 
   audioInput.addEventListener("change", async () => {

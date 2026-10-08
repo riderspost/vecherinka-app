@@ -301,3 +301,49 @@ input.filter-input[type=text] { width: 220px; }
 .icon-btn-danger:hover { border-color: #ff8a8a; background: rgba(255, 138, 138, 0.15); }
 
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
+
+.music-timeline {
+  position: relative;
+  height: 44px;
+  border-radius: 8px;
+  background: #16101c;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.music-timeline-fog {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+}
+
+.music-timeline-fog-left { left: 0; }
+.music-timeline-fog-right { right: 0; }
+
+.music-timeline-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 93, 162, 0.25);
+  border-left: 2px solid var(--primary);
+  border-right: 2px solid var(--primary);
+  cursor: grab;
+  pointer-events: none;
+}
+
+.music-timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
