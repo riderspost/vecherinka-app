@@ -1053,7 +1053,7 @@ function refreshDaresTable() {
     { label: "Таймер", render: (d) => (d.hasTimer ? `⏱ ${d.timerSeconds}с` : `<span class="hint">—</span>`) },
     {
       label: "Музыка",
-      render: (d) => (d.musicUrl ? `🎵 ${escapeHtml(d.musicOriginalName || "файл")}` : `<span class="hint">—</span>`),
+      render: (d) => (d.musicUrl ? `🎵` : `<span class="hint">—</span>`),
     },
     { label: "🔥", render: (d) => d.likes || 0 },
     { label: "Исп.", render: (d) => d.uses },
