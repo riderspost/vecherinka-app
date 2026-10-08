@@ -402,8 +402,10 @@ def _build_state(db, room, player):
     players = db.execute(
         "SELECT * FROM players WHERE room_id = ? ORDER BY joined_at", (room["id"],)
     ).fetchall()
-    active_count = sum(1 for p in players if not p["is_display"])
+    active_players = [p for p in players if not p["is_display"]]
     settings = fg.get_settings(db, room["id"])
+    has_min_players = len(active_players) >= fg.min_players_for(settings["game_mode"])
+    needs_both_genders = fg.gender_required(settings) and not fg.has_both_genders(active_players)
 
     state = {
         "room": {"code": room["code"], "status": room["status"], "deviceMode": room["device_mode"]},
@@ -416,8 +418,9 @@ def _build_state(db, room, player):
         },
         "players": [player_public(p) for p in players],
         "me": player_public(player),
-        "canStart": room["status"] == "lobby" and active_count >= fg.min_players_for(settings["game_mode"]),
+        "canStart": room["status"] == "lobby" and has_min_players and not needs_both_genders,
         "minPlayers": fg.min_players_for(settings["game_mode"]),
+        "needsBothGenders": needs_both_genders,
     }
 
     if room["status"] == "finished":

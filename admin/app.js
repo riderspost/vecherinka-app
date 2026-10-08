@@ -531,8 +531,8 @@ async function renderDashboard() {
 
 function tagsHtml(item) {
   const parts = [];
-  if (item.createdByEmail) {
-    parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdByEmail)}</span>`);
+  if (item.createdBy) {
+    parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdBy)}</span>`);
   }
   if (item.likes) {
     parts.push(`<span class="tag-pill tag-likes">🔥 ${item.likes}</span>`);

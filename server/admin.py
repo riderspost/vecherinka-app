@@ -285,13 +285,31 @@ def _bulk_delete(table, ids, used_ids):
     return jsonify({"deleted": deleted, "blocked": len(used_ids)})
 
 
+def _fanty_content_is_live(db, column, content_id):
+    # Is this dare/truth the one currently showing on someone's screen right
+    # now, in a room that's still actually playing? Editing or deleting it
+    # out from under a live round would change or vanish the text a player
+    # is mid-performing — distinct from the historical-use check on DELETE,
+    # which only cares whether it was *ever* played, not right now.
+    return (
+        db.execute(
+            f"""SELECT 1 FROM fanty_state fs
+                JOIN rooms r ON r.id = fs.room_id
+                WHERE r.status = 'playing' AND fs.{column} = ?""",
+            (content_id,),
+        ).fetchone()
+        is not None
+    )
+
+
 @admin_bp.route("/api/fanty/dares")
 @admin_required
 def admin_list_dares():
     db = get_db()
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair, d.likes,
-                  d.music_filename, d.has_timer, d.timer_seconds, u.email AS created_by_email,
+                  d.music_filename, d.has_timer, d.timer_seconds,
+                  COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
            ORDER BY d.id DESC"""
@@ -320,7 +338,7 @@ def admin_list_dares():
                 "musicUrl": f"/uploads/{r['music_filename']}" if r["music_filename"] else None,
                 "hasTimer": bool(r["has_timer"]),
                 "timerSeconds": r["timer_seconds"],
-                "createdByEmail": r["created_by_email"],
+                "createdBy": r["created_by"],
             }
         )
     return jsonify(result)
@@ -438,6 +456,8 @@ def admin_edit_dare(dare_id):
     existing = db.execute("SELECT * FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone()
     if not existing:
         return jsonify({"error": "Не найдено"}), 404
+    if _fanty_content_is_live(db, "current_dare_id", dare_id):
+        return jsonify({"error": "Этот фант сейчас выполняется в активной игре — подождите, пока раунд закончится"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     fields, categories, locations, err = _parse_dare_payload(data)
@@ -486,6 +506,8 @@ def admin_delete_dare(dare_id):
     db = get_db()
     if not db.execute("SELECT 1 FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone():
         return jsonify({"error": "Не найдено"}), 404
+    if _fanty_content_is_live(db, "current_dare_id", dare_id):
+        return jsonify({"error": "Этот фант сейчас выполняется в активной игре — подождите, пока раунд закончится"}), 400
     try:
         db.execute("DELETE FROM fanty_dares WHERE id = ?", (dare_id,))
         db.commit()
@@ -523,6 +545,7 @@ def admin_bulk_delete_dares():
                 f"SELECT DISTINCT dare_id FROM fanty_rounds WHERE dare_id IN ({placeholders})", ids
             ).fetchall()
         }
+        used_ids |= {i for i in ids if _fanty_content_is_live(db, "current_dare_id", i)}
     return _bulk_delete("fanty_dares", ids, used_ids)
 
 
@@ -531,7 +554,8 @@ def admin_bulk_delete_dares():
 def admin_list_truths():
     db = get_db()
     rows = db.execute(
-        """SELECT t.id, t.text, t.status, t.likes, u.email AS created_by_email,
+        """SELECT t.id, t.text, t.status, t.likes,
+                  COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.truth_id = t.id) AS uses
            FROM fanty_truths t LEFT JOIN users u ON u.id = t.created_by_user_id
            ORDER BY t.id DESC"""
@@ -552,7 +576,7 @@ def admin_list_truths():
                 "likes": r["likes"],
                 "uses": r["uses"],
                 "categories": cats,
-                "createdByEmail": r["created_by_email"],
+                "createdBy": r["created_by"],
             }
         )
     return jsonify(result)
@@ -593,6 +617,8 @@ def admin_edit_truth(truth_id):
     existing = db.execute("SELECT * FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone()
     if not existing:
         return jsonify({"error": "Не найдено"}), 404
+    if _fanty_content_is_live(db, "current_truth_id", truth_id):
+        return jsonify({"error": "Этот вопрос сейчас используется в активной игре — подождите, пока раунд закончится"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     text = (data.get("text") or "").strip()
@@ -631,6 +657,8 @@ def admin_delete_truth(truth_id):
     db = get_db()
     if not db.execute("SELECT 1 FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone():
         return jsonify({"error": "Не найдено"}), 404
+    if _fanty_content_is_live(db, "current_truth_id", truth_id):
+        return jsonify({"error": "Этот вопрос сейчас используется в активной игре — подождите, пока раунд закончится"}), 400
     try:
         db.execute("DELETE FROM fanty_truths WHERE id = ?", (truth_id,))
         db.commit()
@@ -668,6 +696,7 @@ def admin_bulk_delete_truths():
                 f"SELECT DISTINCT truth_id FROM fanty_rounds WHERE truth_id IN ({placeholders})", ids
             ).fetchall()
         }
+        used_ids |= {i for i in ids if _fanty_content_is_live(db, "current_truth_id", i)}
     return _bulk_delete("fanty_truths", ids, used_ids)
 
 

@@ -1,6 +1,8 @@
 import io
 import os
 
+from tests.test_fanty_game import create_fanty_room, join_fanty
+
 ADMIN_USERNAME = os.environ["ADMIN_USERNAME"]
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 
@@ -223,9 +225,99 @@ def test_admin_dares_and_truths_list_show_submitter_email(client, raw_db):
 
     dare = next(d for d in dares if d["text"] == "Фант от пользователя")
     truth = next(t for t in truths if t["text"] == "Вопрос от пользователя")
-    assert dare["createdByEmail"] == "submitter@example.com"
-    assert truth["createdByEmail"] == "submitter@example.com"
+    assert dare["createdBy"] == "submitter@example.com"
+    assert truth["createdBy"] == "submitter@example.com"
 
-    # Admin-added items (no submitter) should come back with no email.
+    # Admin-added items (no submitter) should come back labeled "admin".
     admin_dare = next(d for d in dares if d["text"] != "Фант от пользователя")
-    assert admin_dare["createdByEmail"] is None
+    assert admin_dare["createdBy"] == "admin"
+
+
+def test_admin_cannot_edit_or_delete_dare_currently_live_in_a_game(client, raw_db):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    live_dare_id = state["fanty"]["contentId"]
+
+    admin_login(client)
+    resp = client.put(
+        f"/admin/api/fanty/dares/{live_dare_id}",
+        json={"text": "Изменённый во время игры", "categories": ["basic"], "locations": ["apartment"]},
+    )
+    assert resp.status_code == 400
+
+    resp = client.delete(f"/admin/api/fanty/dares/{live_dare_id}")
+    assert resp.status_code == 400
+
+    # A dare that isn't the one currently in play is unaffected.
+    other_dare_id = raw_db.execute(
+        "SELECT id FROM fanty_dares WHERE id != ?", (live_dare_id,)
+    ).fetchone()[0]
+    resp = client.put(
+        f"/admin/api/fanty/dares/{other_dare_id}",
+        json={"text": f"Не задействован в игре {other_dare_id}", "categories": ["basic"], "locations": ["apartment"]},
+    )
+    assert resp.status_code == 200
+
+    # Once the round moves on, editing the formerly-live dare works again.
+    client.post(f"/api/fanty/rooms/{code}/resolve", json={"token": host_token, "counted": True})
+    resp = client.put(
+        f"/admin/api/fanty/dares/{live_dare_id}",
+        json={"text": "Изменено после раунда", "categories": ["basic"], "locations": ["apartment"]},
+    )
+    assert resp.status_code == 200
+
+
+def test_admin_cannot_edit_or_delete_truth_currently_live_in_a_game(client, raw_db):
+    resp = create_fanty_room(client, game_mode="truth_or_dare")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+
+    # Which specific truth ends up "live" depends on random pool selection
+    # that choose() would do — set it directly instead, since this test only
+    # cares that a room mid-game with a given truth as current_truth_id
+    # blocks admin edits to that truth, not the selection logic itself.
+    room_id = raw_db.execute("SELECT id FROM rooms WHERE code = ?", (code,)).fetchone()[0]
+    live_truth_id = raw_db.execute("SELECT id FROM fanty_truths LIMIT 1").fetchone()[0]
+    raw_db.execute(
+        "UPDATE fanty_state SET current_truth_id = ?, current_content_type = 'truth' WHERE room_id = ?",
+        (live_truth_id, room_id),
+    )
+    raw_db.commit()
+
+    admin_login(client)
+    resp = client.put(
+        f"/admin/api/fanty/truths/{live_truth_id}",
+        json={"text": "Изменённый вопрос во время игры", "categories": ["basic"]},
+    )
+    assert resp.status_code == 400
+
+    resp = client.delete(f"/admin/api/fanty/truths/{live_truth_id}")
+    assert resp.status_code == 400
+
+
+def test_admin_bulk_delete_excludes_currently_live_dare(client, raw_db):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    join_fanty(client, code, "Bob", "🐶")
+    client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
+    client.post(f"/api/fanty/rooms/{code}/spin", json={"token": host_token})
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    live_dare_id = state["fanty"]["contentId"]
+
+    admin_login(client)
+    resp = client.post("/admin/api/fanty/dares/bulk-delete", json={"ids": [live_dare_id]})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["deleted"] == 0
+    assert body["blocked"] == 1
+    assert raw_db.execute("SELECT 1 FROM fanty_dares WHERE id = ?", (live_dare_id,)).fetchone() is not None

@@ -36,10 +36,20 @@ def test_mixed_team_requires_gender_on_join_and_both_genders_to_start(client):
     assert resp.status_code == 400
 
     join_fanty(client, code, "Bob", "🐶", gender="m")
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["canStart"] is False
+    assert state["needsBothGenders"] is True
+
     resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
     assert resp.status_code == 400
 
     join_fanty(client, code, "Carol", "🐱", gender="f")
+
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert state["canStart"] is True
+    assert state["needsBothGenders"] is False
+
     resp = client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
     assert resp.status_code == 200
 

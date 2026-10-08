@@ -388,7 +388,11 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
   if (state.me.isHost) {
     const startBtn = document.createElement("button");
     startBtn.className = "btn btn-primary";
-    startBtn.textContent = state.canStart ? "Начать игру" : `Нужно ещё игроков (мин. ${state.minPlayers})`;
+    startBtn.textContent = state.canStart
+      ? "Начать игру"
+      : state.needsBothGenders
+      ? "Нужен хотя бы один игрок каждого пола"
+      : `Нужно ещё игроков (мин. ${state.minPlayers})`;
     startBtn.disabled = !state.canStart;
     startBtn.addEventListener("click", async () => {
       startBtn.disabled = true;
