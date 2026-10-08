@@ -81,7 +81,7 @@ export const fantyApi = {
   end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
   discard: (code, token) => request("POST", `/api/fanty/rooms/${code}/discard`, { token }),
   likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),
-  likeTruth: (truthId) => request("POST", `/api/fanty/truths/${truthId}/like`),
+  unlikeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/unlike`),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
 };

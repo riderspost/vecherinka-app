@@ -17,25 +17,40 @@ export function thumbUrl(fullUrl) {
   return `${match[1]}_thumb${match[2]}`;
 }
 
-// A tappable 🔥 reaction for a question/dare, so the admin can later see
-// which content players actually liked. `onLike` is called once per click;
-// the button disables itself right after so one tap can't be spammed into
-// many likes. Not tracked per-player server-side — a lightweight "people in
-// the room liked this" signal, not a strict one-vote-per-person tally.
-export function createFireButton(onLike) {
+// A tappable 🔥 reaction for a dare, so the admin can later see which ones
+// players actually enjoyed. Toggles on/off — `onToggle(nextLiked)` is
+// called with the new state and must call the matching like/unlike API;
+// the button reverts its visual state if that call fails. Not tracked
+// per-player server-side — a lightweight "people in the room liked this"
+// signal, not a strict one-vote-per-person tally.
+export function createFireButton(initiallyLiked, onToggle) {
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "fire-btn";
-  btn.textContent = "🔥";
-  btn.setAttribute("aria-label", "Нравится");
+  btn.className = "btn fire-btn";
+
+  const label = document.createElement("span");
+  label.textContent = "🔥 Классный фант!";
+  btn.appendChild(label);
+
+  let liked = Boolean(initiallyLiked);
+  btn.classList.toggle("fire-btn-liked", liked);
+  btn.setAttribute("aria-pressed", String(liked));
+
   btn.addEventListener("click", async () => {
     if (btn.disabled) return;
+    const next = !liked;
     btn.disabled = true;
-    btn.classList.add("fire-btn-liked");
+    btn.classList.toggle("fire-btn-liked", next);
+    btn.setAttribute("aria-pressed", String(next));
     try {
-      await onLike();
+      await onToggle(next);
+      liked = next;
     } catch (e) {
-      // Non-critical reaction — leave it marked liked even if the request failed.
+      // Revert the visual state — the toggle didn't actually take.
+      btn.classList.toggle("fire-btn-liked", liked);
+      btn.setAttribute("aria-pressed", String(liked));
+    } finally {
+      btn.disabled = false;
     }
   });
   return btn;

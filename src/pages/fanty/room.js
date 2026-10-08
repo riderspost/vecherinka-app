@@ -694,21 +694,6 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   text.textContent = fanty.contentText || "…";
   panel.appendChild(text);
 
-  if (fanty.contentId) {
-    const likeKey = `${fanty.contentType}:${fanty.contentId}`;
-    const fireBtn = createFireButton(() => {
-      ctrl.likedContentIds.add(likeKey);
-      return fanty.contentType === "truth"
-        ? fantyApi.likeTruth(fanty.contentId)
-        : fantyApi.likeDare(fanty.contentId);
-    });
-    if (ctrl.likedContentIds.has(likeKey)) {
-      fireBtn.disabled = true;
-      fireBtn.classList.add("fire-btn-liked");
-    }
-    panel.appendChild(fireBtn);
-  }
-
   const needsStart = Boolean(fanty.hasTimer || fanty.musicUrl);
   const started = !needsStart || Boolean(fanty.performanceStartedAt);
 
@@ -861,6 +846,20 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       panel.appendChild(uploadLabel);
       panel.appendChild(previewRow);
       updateUploadButtonState();
+    }
+
+    if (fanty.contentType === "dare" && fanty.contentId) {
+      const likeKey = `dare:${fanty.contentId}`;
+      const fireBtn = createFireButton(ctrl.likedContentIds.has(likeKey), async (nextLiked) => {
+        if (nextLiked) {
+          await fantyApi.likeDare(fanty.contentId);
+          ctrl.likedContentIds.add(likeKey);
+        } else {
+          await fantyApi.unlikeDare(fanty.contentId);
+          ctrl.likedContentIds.delete(likeKey);
+        }
+      });
+      panel.appendChild(fireBtn);
     }
 
     const row = document.createElement("div");

@@ -340,14 +340,14 @@ def like_dare(dare_id):
     return jsonify({"likes": likes})
 
 
-@fanty_bp.route("/truths/<int:truth_id>/like", methods=["POST"])
-def like_truth(truth_id):
+@fanty_bp.route("/dares/<int:dare_id>/unlike", methods=["POST"])
+def unlike_dare(dare_id):
     db = get_db()
-    if not db.execute("SELECT 1 FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone():
-        return error("Вопрос не найден", 404)
-    db.execute("UPDATE fanty_truths SET likes = likes + 1 WHERE id = ?", (truth_id,))
+    if not db.execute("SELECT 1 FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone():
+        return error("Фант не найден", 404)
+    db.execute("UPDATE fanty_dares SET likes = MAX(likes - 1, 0) WHERE id = ?", (dare_id,))
     db.commit()
-    likes = db.execute("SELECT likes FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone()["likes"]
+    likes = db.execute("SELECT likes FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone()["likes"]
     return jsonify({"likes": likes})
 
 

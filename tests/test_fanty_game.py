@@ -268,9 +268,17 @@ def test_discard_deletes_room_and_photo_files(client, raw_db):
     assert resp.status_code == 200
 
 
-def test_like_dare_and_truth_increments_count(client, raw_db):
+def _reset_dare_likes(raw_db, dare_id):
+    # fanty_dares is seed content, not wiped between tests (see conftest.py)
+    # — its `likes` column would otherwise carry over counts left by
+    # whichever other like/unlike test ran first in this session.
+    raw_db.execute("UPDATE fanty_dares SET likes = 0 WHERE id = ?", (dare_id,))
+    raw_db.commit()
+
+
+def test_like_dare_increments_count(client, raw_db):
     dare_id = raw_db.execute("SELECT id FROM fanty_dares LIMIT 1").fetchone()[0]
-    truth_id = raw_db.execute("SELECT id FROM fanty_truths LIMIT 1").fetchone()[0]
+    _reset_dare_likes(raw_db, dare_id)
 
     resp = client.post(f"/api/fanty/dares/{dare_id}/like")
     assert resp.status_code == 200
@@ -278,9 +286,19 @@ def test_like_dare_and_truth_increments_count(client, raw_db):
     resp = client.post(f"/api/fanty/dares/{dare_id}/like")
     assert resp.get_json()["likes"] == 2
 
-    resp = client.post(f"/api/fanty/truths/{truth_id}/like")
+
+def test_unlike_dare_decrements_count_and_floors_at_zero(client, raw_db):
+    dare_id = raw_db.execute("SELECT id FROM fanty_dares LIMIT 1").fetchone()[0]
+    _reset_dare_likes(raw_db, dare_id)
+
+    client.post(f"/api/fanty/dares/{dare_id}/like")
+    resp = client.post(f"/api/fanty/dares/{dare_id}/unlike")
     assert resp.status_code == 200
-    assert resp.get_json()["likes"] == 1
+    assert resp.get_json()["likes"] == 0
+
+    # Doesn't go negative if unliked again with nothing left to remove.
+    resp = client.post(f"/api/fanty/dares/{dare_id}/unlike")
+    assert resp.get_json()["likes"] == 0
 
 
 def test_like_dare_unknown_id_404(client):
@@ -288,6 +306,6 @@ def test_like_dare_unknown_id_404(client):
     assert resp.status_code == 404
 
 
-def test_like_truth_unknown_id_404(client):
-    resp = client.post("/api/fanty/truths/999999/like")
+def test_unlike_dare_unknown_id_404(client):
+    resp = client.post("/api/fanty/dares/999999/unlike")
     assert resp.status_code == 404
