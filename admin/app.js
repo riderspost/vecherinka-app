@@ -534,6 +534,9 @@ function tagsHtml(item) {
   if (item.createdByEmail) {
     parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdByEmail)}</span>`);
   }
+  if (item.likes) {
+    parts.push(`<span class="tag-pill tag-likes">🔥 ${item.likes}</span>`);
+  }
   if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
   if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
   if (item.musicUrl) parts.push('<span class="tag-pill tag-music">🎵 музыка</span>');

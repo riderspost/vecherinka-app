@@ -329,6 +329,28 @@ def discard_room(code):
     return jsonify({"ok": True})
 
 
+@fanty_bp.route("/dares/<int:dare_id>/like", methods=["POST"])
+def like_dare(dare_id):
+    db = get_db()
+    if not db.execute("SELECT 1 FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone():
+        return error("Фант не найден", 404)
+    db.execute("UPDATE fanty_dares SET likes = likes + 1 WHERE id = ?", (dare_id,))
+    db.commit()
+    likes = db.execute("SELECT likes FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone()["likes"]
+    return jsonify({"likes": likes})
+
+
+@fanty_bp.route("/truths/<int:truth_id>/like", methods=["POST"])
+def like_truth(truth_id):
+    db = get_db()
+    if not db.execute("SELECT 1 FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone():
+        return error("Вопрос не найден", 404)
+    db.execute("UPDATE fanty_truths SET likes = likes + 1 WHERE id = ?", (truth_id,))
+    db.commit()
+    likes = db.execute("SELECT likes FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone()["likes"]
+    return jsonify({"likes": likes})
+
+
 def _build_summary(db, room):
     rounds = db.execute(
         "SELECT * FROM fanty_rounds WHERE room_id = ? ORDER BY round_number", (room["id"],)
@@ -451,6 +473,7 @@ def _build_state(db, room, player):
             text = row["text"] if row else None
         fanty["contentType"] = fstate["current_content_type"]
         fanty["contentText"] = text
+        fanty["contentId"] = fstate["current_dare_id"] or fstate["current_truth_id"]
         fanty["canResolve"] = bool(player["is_host"])
 
     state["fanty"] = fanty

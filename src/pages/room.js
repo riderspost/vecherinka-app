@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { loadSession, saveSession, clearSession } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker, avatarHtml } from "../avatarPicker.js";
-import { escapeHtml } from "../utils.js";
+import { escapeHtml, createFireButton } from "../utils.js";
 
 const POLL_MS = 1500;
 
@@ -11,6 +11,11 @@ export function mountRoomPage(container, code, opts) {
   let pollTimer = null;
   let lastAnsweringKey = null;
   let stopped = false;
+  // The screen re-renders from scratch on every poll tick, which would
+  // otherwise reset the fire button back to clickable a second and a half
+  // after tapping it — track what's already been liked this visit so it
+  // stays disabled across re-renders.
+  const likedPromptIds = new Set();
 
   function stop() {
     stopped = true;
@@ -151,7 +156,7 @@ export function mountRoomPage(container, code, opts) {
 
     if (status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
     else if (status === "answering") renderAnswering(wrap, state, token, code);
-    else if (status === "voting") renderVoting(wrap, state, token, code);
+    else if (status === "voting") renderVoting(wrap, state, token, code, likedPromptIds);
     else if (status === "voting_results") renderVotingResults(wrap, state, token, code);
     else if (status === "round_results") renderRoundResults(wrap, state, token, code);
     else if (status === "overall_results") renderOverallResults(wrap, state, token, code);
@@ -350,7 +355,7 @@ function renderAnswering(wrap, state, token, code) {
   textarea.focus();
 }
 
-function renderVoting(wrap, state, token, code) {
+function renderVoting(wrap, state, token, code, likedPromptIds) {
   const v = state.voting;
   if (!v) {
     wrap.innerHTML = `<p class="tagline">Голосование завершается...</p>`;
@@ -360,6 +365,18 @@ function renderVoting(wrap, state, token, code) {
     <p class="round-label">Раунд ${state.room.currentRound} · Голосование ${v.index}/${v.total}</p>
     <h2 class="prompt-text">${escapeHtml(v.promptText)}</h2>
   `;
+
+  if (!state.me.isDisplay) {
+    const fireBtn = createFireButton(() => {
+      likedPromptIds.add(v.promptId);
+      return api.likePrompt(v.promptId);
+    });
+    if (likedPromptIds.has(v.promptId)) {
+      fireBtn.disabled = true;
+      fireBtn.classList.add("fire-btn-liked");
+    }
+    wrap.appendChild(fireBtn);
+  }
 
   if (state.me.isDisplay) {
     wrap.appendChild(optionsWithCounts(v.submissions));

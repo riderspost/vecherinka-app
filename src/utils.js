@@ -16,3 +16,27 @@ export function thumbUrl(fullUrl) {
   if (!match) return fullUrl;
   return `${match[1]}_thumb${match[2]}`;
 }
+
+// A tappable 🔥 reaction for a question/dare, so the admin can later see
+// which content players actually liked. `onLike` is called once per click;
+// the button disables itself right after so one tap can't be spammed into
+// many likes. Not tracked per-player server-side — a lightweight "people in
+// the room liked this" signal, not a strict one-vote-per-person tally.
+export function createFireButton(onLike) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "fire-btn";
+  btn.textContent = "🔥";
+  btn.setAttribute("aria-label", "Нравится");
+  btn.addEventListener("click", async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add("fire-btn-liked");
+    try {
+      await onLike();
+    } catch (e) {
+      // Non-critical reaction — leave it marked liked even if the request failed.
+    }
+  });
+  return btn;
+}

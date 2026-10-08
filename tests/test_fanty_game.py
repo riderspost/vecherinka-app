@@ -266,3 +266,28 @@ def test_discard_deletes_room_and_photo_files(client, raw_db):
     # Discarding an already-gone room is a harmless no-op, not an error.
     resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
     assert resp.status_code == 200
+
+
+def test_like_dare_and_truth_increments_count(client, raw_db):
+    dare_id = raw_db.execute("SELECT id FROM fanty_dares LIMIT 1").fetchone()[0]
+    truth_id = raw_db.execute("SELECT id FROM fanty_truths LIMIT 1").fetchone()[0]
+
+    resp = client.post(f"/api/fanty/dares/{dare_id}/like")
+    assert resp.status_code == 200
+    assert resp.get_json()["likes"] == 1
+    resp = client.post(f"/api/fanty/dares/{dare_id}/like")
+    assert resp.get_json()["likes"] == 2
+
+    resp = client.post(f"/api/fanty/truths/{truth_id}/like")
+    assert resp.status_code == 200
+    assert resp.get_json()["likes"] == 1
+
+
+def test_like_dare_unknown_id_404(client):
+    resp = client.post("/api/fanty/dares/999999/like")
+    assert resp.status_code == 404
+
+
+def test_like_truth_unknown_id_404(client):
+    resp = client.post("/api/fanty/truths/999999/like")
+    assert resp.status_code == 404

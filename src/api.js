@@ -45,6 +45,7 @@ export const api = {
   },
   contact: (email, message) => request("POST", "/api/contact", { email, message }),
   discardRoom: (code, token) => request("POST", `/api/rooms/${code}/discard`, { token }),
+  likePrompt: (promptId) => request("POST", `/api/prompts/${promptId}/like`),
 };
 
 export const authApi = {
@@ -80,6 +81,8 @@ export const fantyApi = {
   },
   end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
   discard: (code, token) => request("POST", `/api/fanty/rooms/${code}/discard`, { token }),
+  likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),
+  likeTruth: (truthId) => request("POST", `/api/fanty/truths/${truthId}/like`),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
 };

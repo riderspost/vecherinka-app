@@ -162,3 +162,19 @@ def test_discard_deletes_finished_room(client, raw_db):
     # Discarding an already-gone room is a harmless no-op, not an error.
     resp = client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
     assert resp.status_code == 200
+
+
+def test_like_prompt_increments_count(client, raw_db):
+    prompt_id = raw_db.execute("SELECT id FROM prompts LIMIT 1").fetchone()[0]
+
+    resp = client.post(f"/api/prompts/{prompt_id}/like")
+    assert resp.status_code == 200
+    assert resp.get_json()["likes"] == 1
+
+    resp = client.post(f"/api/prompts/{prompt_id}/like")
+    assert resp.get_json()["likes"] == 2
+
+
+def test_like_prompt_unknown_id_404(client):
+    resp = client.post("/api/prompts/999999/like")
+    assert resp.status_code == 404

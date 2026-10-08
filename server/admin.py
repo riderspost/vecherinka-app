@@ -71,13 +71,16 @@ def admin_session():
 def admin_list_prompts():
     db = get_db()
     rows = db.execute(
-        """SELECT p.id, p.text, p.status,
+        """SELECT p.id, p.text, p.status, p.likes,
                   (SELECT COUNT(*) FROM round_prompts rp WHERE rp.prompt_id = p.id) AS uses
            FROM prompts p
            ORDER BY p.id DESC"""
     ).fetchall()
     return jsonify(
-        [{"id": r["id"], "text": r["text"], "status": r["status"], "uses": r["uses"]} for r in rows]
+        [
+            {"id": r["id"], "text": r["text"], "status": r["status"], "uses": r["uses"], "likes": r["likes"]}
+            for r in rows
+        ]
     )
 
 
@@ -97,7 +100,7 @@ def admin_add_prompt():
 
     cur = db.execute("INSERT INTO prompts (text, status) VALUES (?, 'active')", (text,))
     db.commit()
-    return jsonify({"id": cur.lastrowid, "text": text, "status": "active", "uses": 0})
+    return jsonify({"id": cur.lastrowid, "text": text, "status": "active", "uses": 0, "likes": 0})
 
 
 @admin_bp.route("/api/prompts/<int:prompt_id>", methods=["PUT"])
@@ -124,7 +127,7 @@ def admin_edit_prompt(prompt_id):
     uses = db.execute(
         "SELECT COUNT(*) AS c FROM round_prompts WHERE prompt_id = ?", (prompt_id,)
     ).fetchone()["c"]
-    return jsonify({"id": prompt_id, "text": text, "status": existing["status"], "uses": uses})
+    return jsonify({"id": prompt_id, "text": text, "status": existing["status"], "uses": uses, "likes": existing["likes"]})
 
 
 @admin_bp.route("/api/prompts/<int:prompt_id>", methods=["DELETE"])
@@ -287,7 +290,7 @@ def _bulk_delete(table, ids, used_ids):
 def admin_list_dares():
     db = get_db()
     rows = db.execute(
-        """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair,
+        """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair, d.likes,
                   d.music_filename, d.has_timer, d.timer_seconds, u.email AS created_by_email,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
@@ -310,6 +313,7 @@ def admin_list_dares():
                 "kind": r["kind"],
                 "status": r["status"],
                 "uses": r["uses"],
+                "likes": r["likes"],
                 "categories": cats,
                 "locations": locs,
                 "mixedPair": bool(r["mixed_pair"]),
@@ -527,7 +531,7 @@ def admin_bulk_delete_dares():
 def admin_list_truths():
     db = get_db()
     rows = db.execute(
-        """SELECT t.id, t.text, t.status, u.email AS created_by_email,
+        """SELECT t.id, t.text, t.status, t.likes, u.email AS created_by_email,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.truth_id = t.id) AS uses
            FROM fanty_truths t LEFT JOIN users u ON u.id = t.created_by_user_id
            ORDER BY t.id DESC"""
@@ -545,6 +549,7 @@ def admin_list_truths():
                 "id": r["id"],
                 "text": r["text"],
                 "status": r["status"],
+                "likes": r["likes"],
                 "uses": r["uses"],
                 "categories": cats,
                 "createdByEmail": r["created_by_email"],

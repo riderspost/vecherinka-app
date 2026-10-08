@@ -635,6 +635,31 @@ label {
   letter-spacing: 1px;
 }
 
+.fire-btn {
+  display: block;
+  margin: 10px auto 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.fire-btn:active {
+  transform: scale(0.9);
+}
+
+.fire-btn-liked {
+  background: rgba(255, 140, 0, 0.25);
+  transform: scale(1.1);
+  opacity: 0.9;
+  cursor: default;
+}
+
 .prompt-text {
   text-align: center;
   font-size: 22px;

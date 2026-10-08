@@ -200,6 +200,12 @@ tr:hover td { background: rgba(255, 255, 255, 0.03); }
   font-weight: 600;
 }
 
+.tag-likes {
+  background: rgba(255, 140, 0, 0.15);
+  color: #ff9f3f;
+  font-weight: 600;
+}
+
 .tag-mixed {
   background: rgba(126, 231, 135, 0.15);
   color: #7ee787;

@@ -2,7 +2,7 @@ import { api, fantyApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
-import { escapeHtml, thumbUrl } from "../../utils.js";
+import { escapeHtml, thumbUrl, createFireButton } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
@@ -46,6 +46,10 @@ export function mountFantyRoomPage(container, code, opts) {
   let persistentPage = null;
   let persistentWrap = null;
   let persistentStatus = null;
+  // The "playing" panel (where the dare/truth text lives) is rebuilt on
+  // every poll tick, which would otherwise reset the fire button back to
+  // clickable a second and a half after tapping it.
+  const likedContentIds = new Set();
 
   function stop() {
     stopped = true;
@@ -238,6 +242,7 @@ export function mountFantyRoomPage(container, code, opts) {
             currentAudio = null;
           }
         },
+        likedContentIds,
       };
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
@@ -688,6 +693,21 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   text.className = "prompt-text";
   text.textContent = fanty.contentText || "…";
   panel.appendChild(text);
+
+  if (fanty.contentId) {
+    const likeKey = `${fanty.contentType}:${fanty.contentId}`;
+    const fireBtn = createFireButton(() => {
+      ctrl.likedContentIds.add(likeKey);
+      return fanty.contentType === "truth"
+        ? fantyApi.likeTruth(fanty.contentId)
+        : fantyApi.likeDare(fanty.contentId);
+    });
+    if (ctrl.likedContentIds.has(likeKey)) {
+      fireBtn.disabled = true;
+      fireBtn.classList.add("fire-btn-liked");
+    }
+    panel.appendChild(fireBtn);
+  }
 
   const needsStart = Boolean(fanty.hasTimer || fanty.musicUrl);
   const started = !needsStart || Boolean(fanty.performanceStartedAt);

@@ -59,6 +59,9 @@ def init_db():
     _ensure_column(db, "users", "name", "name TEXT")
     _ensure_column(db, "users", "avatar_type", "avatar_type TEXT")
     _ensure_column(db, "users", "avatar_value", "avatar_value TEXT")
+    _ensure_column(db, "prompts", "likes", "likes INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_dares", "likes", "likes INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_truths", "likes", "likes INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 
