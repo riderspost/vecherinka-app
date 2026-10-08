@@ -21,9 +21,9 @@ html, body {
 }
 
 #admin-app {
-  max-width: 900px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 32px 24px 80px;
+  padding: 32px 32px 80px;
 }
 
 .admin-header {
@@ -234,3 +234,70 @@ tr:hover td { background: rgba(255, 255, 255, 0.03); }
   font-size: 13px;
   margin-bottom: 10px;
 }
+
+.col-text { min-width: 260px; max-width: 420px; }
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-input {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  background: #16101c;
+  color: var(--text);
+  font-family: inherit;
+  width: auto;
+}
+
+input.filter-input[type=text] { width: 220px; }
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-checkbox input { margin: 0; }
+
+.icon-btn-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-btn:hover { border-color: var(--primary); background: rgba(255, 93, 162, 0.15); }
+
+.icon-btn-danger:hover { border-color: #ff8a8a; background: rgba(255, 138, 138, 0.15); }
+
+.icon-btn:disabled { opacity: 0.5; cursor: default; }

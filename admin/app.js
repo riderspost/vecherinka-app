@@ -18,6 +18,8 @@ const ATTRIBUTES = [
   { value: "food", label: "Еда" },
 ];
 
+const ALL_DARE_CATEGORIES = [...MOOD_CATEGORIES, ...ATTRIBUTES];
+
 function checkboxRow(options, name) {
   return options
     .map((o) => `<label><input type="checkbox" name="${name}" value="${o.value}" /> ${o.label}</label>`)
@@ -33,6 +35,13 @@ function radioRow(options, name, defaultValue) {
         } /> ${o.label}</label>`
     )
     .join(" ");
+}
+
+function selectOptions(options, placeholder) {
+  return (
+    `<option value="">${placeholder}</option>` +
+    options.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")
+  );
 }
 
 function labelFor(list, value) {
@@ -141,14 +150,18 @@ async function renderDashboard() {
 
     <div id="section-prompts">
       <div class="card">
-        <h2 style="margin-top:0" id="prompt-form-heading">Добавить вручную</h2>
-        <form id="add-form">
+        <div class="row-actions" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">Вопросы</h2>
+          <button class="btn" id="prompt-add-btn">+ Добавить новый</button>
+        </div>
+        <form id="add-form" style="display:none;margin-top:16px">
+          <h3 style="margin-top:0" id="prompt-form-heading">Добавить вручную</h3>
           <label>Текст фразы (начало предложения)</label>
           <textarea name="text" maxlength="300" placeholder="Если бы я был..." required></textarea>
           <div class="error-box" id="add-error"></div>
           <div class="row-actions" style="margin-top:8px">
             <button type="submit" class="btn" id="prompt-submit-btn">Добавить</button>
-            <button type="button" class="btn secondary" id="prompt-cancel-edit-btn" style="display:none">Отмена</button>
+            <button type="button" class="btn secondary" id="prompt-cancel-edit-btn">Отмена</button>
           </div>
         </form>
       </div>
@@ -175,8 +188,13 @@ async function renderDashboard() {
       ${pendingReviewCard("prompts", "На проверке (сгенерировано AI)")}
 
       <div class="card">
-        <h2 style="margin-top:0">Активные вопросы</h2>
-        <div class="prompt-count" id="prompts-count"></div>
+        <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2 style="margin:0">Активные вопросы</h2>
+          <div class="prompt-count" id="prompts-count"></div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="prompts-filter-search" class="filter-input" placeholder="Поиск по тексту..." />
+        </div>
         <div id="prompts-table"></div>
       </div>
     </div>
@@ -189,8 +207,12 @@ async function renderDashboard() {
 
       <div id="fanty-subsection-dares">
         <div class="card">
-          <h2 style="margin-top:0" id="dare-form-heading">Добавить вручную</h2>
-          <form id="add-dare-form">
+          <div class="row-actions" style="justify-content:space-between;align-items:center">
+            <h2 style="margin:0">Фанты</h2>
+            <button class="btn" id="dare-add-btn">+ Добавить новый</button>
+          </div>
+          <form id="add-dare-form" style="display:none;margin-top:16px">
+            <h3 style="margin-top:0" id="dare-form-heading">Добавить вручную</h3>
             <label>Текст фанта</label>
             <textarea name="text" maxlength="300" placeholder="Выпей стакан воды без использования рук." required></textarea>
             <label>Тип</label>
@@ -230,7 +252,7 @@ async function renderDashboard() {
             <div class="error-box" id="add-dare-error"></div>
             <div class="row-actions" style="margin-top:8px">
               <button type="submit" class="btn" id="dare-submit-btn">Добавить</button>
-              <button type="button" class="btn secondary" id="dare-cancel-edit-btn" style="display:none">Отмена</button>
+              <button type="button" class="btn secondary" id="dare-cancel-edit-btn">Отмена</button>
             </div>
           </form>
         </div>
@@ -238,16 +260,34 @@ async function renderDashboard() {
         ${pendingReviewCard("dares", "На проверке (предложено игроками)")}
 
         <div class="card">
-          <h2 style="margin-top:0">Активные фанты</h2>
-          <div class="prompt-count" id="dares-count"></div>
+          <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h2 style="margin:0">Активные фанты</h2>
+            <div class="prompt-count" id="dares-count"></div>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="dares-filter-search" class="filter-input" placeholder="Поиск по тексту..." />
+            <select id="dares-filter-kind" class="filter-input">
+              <option value="">Тип: все</option>
+              <option value="solo">Один</option>
+              <option value="team">Командный</option>
+            </select>
+            <select id="dares-filter-location" class="filter-input">${selectOptions(LOCATIONS, "Место: все")}</select>
+            <select id="dares-filter-category" class="filter-input">${selectOptions(ALL_DARE_CATEGORIES, "Категория: все")}</select>
+            <label class="filter-checkbox"><input type="checkbox" id="dares-filter-timer" /> С таймером</label>
+            <label class="filter-checkbox"><input type="checkbox" id="dares-filter-music" /> С музыкой</label>
+          </div>
           <div id="dares-table"></div>
         </div>
       </div>
 
       <div id="fanty-subsection-truths" style="display:none">
         <div class="card">
-          <h2 style="margin-top:0" id="truth-form-heading">Добавить вручную</h2>
-          <form id="add-truth-form">
+          <div class="row-actions" style="justify-content:space-between;align-items:center">
+            <h2 style="margin:0">Вопросы (правда)</h2>
+            <button class="btn" id="truth-add-btn">+ Добавить новый</button>
+          </div>
+          <form id="add-truth-form" style="display:none;margin-top:16px">
+            <h3 style="margin-top:0" id="truth-form-heading">Добавить вручную</h3>
             <label>Текст вопроса</label>
             <textarea name="text" maxlength="300" placeholder="Бил ли ты когда-нибудь животное?" required></textarea>
             <label>Категория</label>
@@ -255,7 +295,7 @@ async function renderDashboard() {
             <div class="error-box" id="add-truth-error"></div>
             <div class="row-actions" style="margin-top:8px">
               <button type="submit" class="btn" id="truth-submit-btn">Добавить</button>
-              <button type="button" class="btn secondary" id="truth-cancel-edit-btn" style="display:none">Отмена</button>
+              <button type="button" class="btn secondary" id="truth-cancel-edit-btn">Отмена</button>
             </div>
           </form>
         </div>
@@ -263,8 +303,14 @@ async function renderDashboard() {
         ${pendingReviewCard("truths", "На проверке (предложено игроками)")}
 
         <div class="card">
-          <h2 style="margin-top:0">Активные вопросы</h2>
-          <div class="prompt-count" id="truths-count"></div>
+          <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h2 style="margin:0">Активные вопросы</h2>
+            <div class="prompt-count" id="truths-count"></div>
+          </div>
+          <div class="filter-bar">
+            <input type="text" id="truths-filter-search" class="filter-input" placeholder="Поиск по тексту..." />
+            <select id="truths-filter-category" class="filter-input">${selectOptions(MOOD_CATEGORIES, "Категория: все")}</select>
+          </div>
           <div id="truths-table"></div>
         </div>
       </div>
@@ -309,6 +355,7 @@ async function renderDashboard() {
   const promptFormHeading = document.getElementById("prompt-form-heading");
   const promptSubmitBtn = document.getElementById("prompt-submit-btn");
   const promptCancelEditBtn = document.getElementById("prompt-cancel-edit-btn");
+  const promptAddBtn = document.getElementById("prompt-add-btn");
   let editingPromptId = null;
 
   function resetPromptForm() {
@@ -316,19 +363,27 @@ async function renderDashboard() {
     editingPromptId = null;
     promptFormHeading.textContent = "Добавить вручную";
     promptSubmitBtn.textContent = "Добавить";
-    promptCancelEditBtn.style.display = "none";
   }
+
+  promptAddBtn.addEventListener("click", () => {
+    resetPromptForm();
+    promptForm.style.display = "";
+    promptForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   window.startEditingPrompt = function (prompt) {
     editingPromptId = prompt.id;
     promptForm.elements.text.value = prompt.text;
     promptFormHeading.textContent = `Редактировать вопрос #${prompt.id}`;
     promptSubmitBtn.textContent = "Сохранить изменения";
-    promptCancelEditBtn.style.display = "";
+    promptForm.style.display = "";
     promptForm.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  promptCancelEditBtn.addEventListener("click", resetPromptForm);
+  promptCancelEditBtn.addEventListener("click", () => {
+    resetPromptForm();
+    promptForm.style.display = "none";
+  });
 
   promptForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -344,6 +399,7 @@ async function renderDashboard() {
         await api("/prompts", { method: "POST", body: JSON.stringify({ text }) });
       }
       resetPromptForm();
+      promptForm.style.display = "none";
       await refreshPrompts();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -387,6 +443,7 @@ async function renderDashboard() {
   document.getElementById("truth-category").innerHTML = radioRow(MOOD_CATEGORIES, "category", "basic");
 
   const dareForm = document.getElementById("add-dare-form");
+  const dareAddBtn = document.getElementById("dare-add-btn");
   const mixedPairRow = document.getElementById("dare-mixed-pair-row");
   function updateMixedPairVisibility() {
     mixedPairRow.style.display = dareForm.elements.kind.value === "team" ? "" : "none";
@@ -529,8 +586,13 @@ async function renderDashboard() {
     editingDareId = null;
     dareFormHeading.textContent = "Добавить вручную";
     dareSubmitBtn.textContent = "Добавить";
-    dareCancelEditBtn.style.display = "none";
   }
+
+  dareAddBtn.addEventListener("click", () => {
+    resetDareForm();
+    dareForm.style.display = "";
+    dareForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   window.startEditingDare = function (dare) {
     editingDareId = dare.id;
@@ -565,11 +627,14 @@ async function renderDashboard() {
 
     dareFormHeading.textContent = `Редактировать фант #${dare.id}`;
     dareSubmitBtn.textContent = "Сохранить изменения";
-    dareCancelEditBtn.style.display = "";
+    dareForm.style.display = "";
     dareForm.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  dareCancelEditBtn.addEventListener("click", resetDareForm);
+  dareCancelEditBtn.addEventListener("click", () => {
+    resetDareForm();
+    dareForm.style.display = "none";
+  });
 
   dareForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -604,6 +669,7 @@ async function renderDashboard() {
         await api("/fanty/dares", { method: "POST", body: JSON.stringify(payload) });
       }
       resetDareForm();
+      dareForm.style.display = "none";
       await refreshDares();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -611,6 +677,7 @@ async function renderDashboard() {
   });
 
   const truthForm = document.getElementById("add-truth-form");
+  const truthAddBtn = document.getElementById("truth-add-btn");
   const truthFormHeading = document.getElementById("truth-form-heading");
   const truthSubmitBtn = document.getElementById("truth-submit-btn");
   const truthCancelEditBtn = document.getElementById("truth-cancel-edit-btn");
@@ -621,8 +688,13 @@ async function renderDashboard() {
     editingTruthId = null;
     truthFormHeading.textContent = "Добавить вручную";
     truthSubmitBtn.textContent = "Добавить";
-    truthCancelEditBtn.style.display = "none";
   }
+
+  truthAddBtn.addEventListener("click", () => {
+    resetTruthForm();
+    truthForm.style.display = "";
+    truthForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 
   window.startEditingTruth = function (truth) {
     editingTruthId = truth.id;
@@ -631,11 +703,14 @@ async function renderDashboard() {
     truthForm.querySelector(`input[name="category"][value="${moodValue}"]`).checked = true;
     truthFormHeading.textContent = `Редактировать вопрос #${truth.id}`;
     truthSubmitBtn.textContent = "Сохранить изменения";
-    truthCancelEditBtn.style.display = "";
+    truthForm.style.display = "";
     truthForm.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  truthCancelEditBtn.addEventListener("click", resetTruthForm);
+  truthCancelEditBtn.addEventListener("click", () => {
+    resetTruthForm();
+    truthForm.style.display = "none";
+  });
 
   truthForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -652,6 +727,7 @@ async function renderDashboard() {
         await api("/fanty/truths", { method: "POST", body: JSON.stringify({ text, categories }) });
       }
       resetTruthForm();
+      truthForm.style.display = "none";
       await refreshTruths();
     } catch (err) {
       errorEl.textContent = err.message;
@@ -660,6 +736,14 @@ async function renderDashboard() {
 
   document.getElementById("rooms-refresh-btn").addEventListener("click", refreshRooms);
 
+  wireFilterInputs("prompts", ["prompts-filter-search"], refreshPromptsTable);
+  wireFilterInputs(
+    "dares",
+    ["dares-filter-search", "dares-filter-kind", "dares-filter-location", "dares-filter-category", "dares-filter-timer", "dares-filter-music"],
+    refreshDaresTable
+  );
+  wireFilterInputs("truths", ["truths-filter-search", "truths-filter-category"], refreshTruthsTable);
+
   await refreshPrompts();
   await refreshDares();
   await refreshTruths();
@@ -667,14 +751,17 @@ async function renderDashboard() {
   await refreshRooms();
 }
 
-function tagsHtml(item) {
+function wireFilterInputs(idPrefix, ids, onChange) {
+  ids.forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener(el.tagName === "SELECT" || el.type === "checkbox" ? "change" : "input", onChange);
+  });
+}
+
+function pendingTagsHtml(item) {
   const parts = [];
-  if (item.createdBy) {
-    parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdBy)}</span>`);
-  }
-  if (item.likes) {
-    parts.push(`<span class="tag-pill tag-likes">🔥 ${item.likes}</span>`);
-  }
+  if (item.createdBy) parts.push(`<span class="tag-pill tag-author">👤 ${escapeHtml(item.createdBy)}</span>`);
+  if (item.likes) parts.push(`<span class="tag-pill tag-likes">🔥 ${item.likes}</span>`);
   if (item.kind === "team") parts.push('<span class="tag-pill tag-kind">командный</span>');
   if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
   if (item.musicUrl) parts.push('<span class="tag-pill tag-music">🎵 музыка</span>');
@@ -689,6 +776,15 @@ function tagsHtml(item) {
     parts.push(`<span class="tag-pill ${cls}">${escapeHtml(labelFor(list, c))}</span>`);
   });
   return parts.join(" ");
+}
+
+function iconActionsHtml(id, onEdit) {
+  return `
+    <div class="icon-btn-row">
+      ${onEdit ? `<button class="icon-btn" data-edit="${id}" title="Редактировать" aria-label="Редактировать">✏️</button>` : ""}
+      <button class="icon-btn icon-btn-danger" data-delete="${id}" title="Удалить" aria-label="Удалить">🗑️</button>
+    </div>
+  `;
 }
 
 function wireBulkToolbar(host, apiBase, refreshFn) {
@@ -772,136 +868,212 @@ function wireEditButtons(host, all, onEdit) {
   });
 }
 
-async function refreshEntityList({ apiBase, idPrefix, textLabel, refreshFn, onEdit }) {
-  const all = await api(apiBase);
-  const pending = all.filter((p) => p.status === "pending");
-  const active = all.filter((p) => p.status !== "pending");
-
+function renderPendingSection(idPrefix, apiBase, pending, all, onEdit, refreshFn, textLabel) {
   const pendingCard = document.getElementById(`${idPrefix}-pending-card`);
   const pendingHost = document.getElementById(`${idPrefix}-pending-table`);
   if (pending.length === 0) {
     pendingCard.style.display = "none";
-  } else {
-    pendingCard.style.display = "";
-    const rows = pending
-      .map(
-        (p) => `
-        <tr data-id="${p.id}">
-          <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
-          <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
-          <td>
-            <div class="row-actions">
-              <button class="btn" data-activate="${p.id}">Активировать</button>
-              ${onEdit ? `<button class="btn" data-edit="${p.id}">Редактировать</button>` : ""}
-              <button class="btn danger" data-delete="${p.id}">Удалить</button>
-            </div>
-          </td>
-        </tr>
-      `
-      )
-      .join("");
-    pendingHost.innerHTML = `
-      <div class="row-actions" style="margin-bottom:10px">
-        <button class="btn secondary bulk-activate-btn" disabled>Активировать выбранные (0)</button>
-        <button class="btn danger bulk-delete-btn" disabled>Удалить выбранные (0)</button>
-      </div>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th><input type="checkbox" class="select-all-pending" /></th>
-              <th>${textLabel}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-
-    wireBulkToolbar(pendingHost, apiBase, refreshFn);
-
-    pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          await api(`${apiBase}/${btn.dataset.activate}/activate`, { method: "POST" });
-          await refreshFn();
-        } catch (err) {
-          alert(err.message);
-          btn.disabled = false;
-        }
-      });
-    });
-    wireDeleteButtons(pendingHost, apiBase, refreshFn);
-    wireEditButtons(pendingHost, all, onEdit);
-  }
-
-  document.getElementById(`${idPrefix}-count`).textContent = `Всего: ${active.length}`;
-  const tableHost = document.getElementById(`${idPrefix}-table`);
-  if (active.length === 0) {
-    tableHost.innerHTML = `<p class="hint">Пока нет ни одного активного элемента.</p>`;
     return;
   }
-
-  const rows = active
+  pendingCard.style.display = "";
+  const rows = pending
     .map(
       (p) => `
       <tr data-id="${p.id}">
-        <td>${escapeHtml(p.text)}${tagsHtml(p) ? `<br/>${tagsHtml(p)}` : ""}</td>
+        <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
+        <td>${escapeHtml(p.text)}${pendingTagsHtml(p) ? `<br/>${pendingTagsHtml(p)}` : ""}</td>
         <td>
           <div class="row-actions">
-            ${onEdit ? `<button class="btn" data-edit="${p.id}">Редактировать</button>` : ""}
-            <button class="btn danger" data-delete="${p.id}">Удалить</button>
+            <button class="btn" data-activate="${p.id}">Активировать</button>
+            ${iconActionsHtml(p.id, onEdit)}
           </div>
         </td>
       </tr>
     `
     )
     .join("");
-
-  tableHost.innerHTML = `
+  pendingHost.innerHTML = `
+    <div class="row-actions" style="margin-bottom:10px">
+      <button class="btn secondary bulk-activate-btn" disabled>Активировать выбранные (0)</button>
+      <button class="btn danger bulk-delete-btn" disabled>Удалить выбранные (0)</button>
+    </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>${textLabel}</th><th></th></tr></thead>
+        <thead>
+          <tr>
+            <th><input type="checkbox" class="select-all-pending" /></th>
+            <th>${textLabel}</th>
+            <th></th>
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
   `;
 
-  wireDeleteButtons(tableHost, apiBase, refreshFn);
-  wireEditButtons(tableHost, all, onEdit);
+  wireBulkToolbar(pendingHost, apiBase, refreshFn);
+
+  pendingHost.querySelectorAll("[data-activate]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await api(`${apiBase}/${btn.dataset.activate}/activate`, { method: "POST" });
+        await refreshFn();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+  wireDeleteButtons(pendingHost, apiBase, refreshFn);
+  wireEditButtons(pendingHost, all, onEdit);
 }
 
-function refreshPrompts() {
-  return refreshEntityList({
-    apiBase: "/prompts",
-    idPrefix: "prompts",
-    textLabel: "Фраза",
-    refreshFn: refreshPrompts,
-    onEdit: startEditingPrompt,
-  });
+function renderColumnTable(host, apiBase, items, columns, onEdit, refreshFn) {
+  if (items.length === 0) {
+    host.innerHTML = `<p class="hint">Ничего не найдено.</p>`;
+    return;
+  }
+  const headRow = columns.map((c) => `<th>${c.label}</th>`).join("") + "<th></th>";
+  const rows = items
+    .map(
+      (item) => `
+      <tr data-id="${item.id}">
+        ${columns.map((c) => `<td class="${c.cellClass || ""}">${c.render(item)}</td>`).join("")}
+        <td>${iconActionsHtml(item.id, onEdit)}</td>
+      </tr>
+    `
+    )
+    .join("");
+  host.innerHTML = `
+    <div class="table-scroll">
+      <table>
+        <thead><tr>${headRow}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  wireDeleteButtons(host, apiBase, refreshFn);
+  wireEditButtons(host, items, onEdit);
 }
 
-function refreshDares() {
-  return refreshEntityList({
-    apiBase: "/fanty/dares",
-    idPrefix: "dares",
-    textLabel: "Текст",
-    refreshFn: refreshDares,
-    onEdit: startEditingDare,
-  });
+function pillsHtml(values, list, cls) {
+  if (!values || values.length === 0) return `<span class="hint">—</span>`;
+  return values.map((v) => `<span class="tag-pill ${cls}">${escapeHtml(labelFor(list, v))}</span>`).join(" ");
 }
 
-function refreshTruths() {
-  return refreshEntityList({
-    apiBase: "/fanty/truths",
-    idPrefix: "truths",
-    textLabel: "Текст",
-    refreshFn: refreshTruths,
-    onEdit: startEditingTruth,
-  });
+// ---- Prompts ("Продолжи предложение") ----
+
+let allPrompts = [];
+
+async function refreshPrompts() {
+  allPrompts = await api("/prompts");
+  refreshPromptsTable();
 }
+
+function refreshPromptsTable() {
+  const pending = allPrompts.filter((p) => p.status === "pending");
+  let active = allPrompts.filter((p) => p.status !== "pending");
+
+  renderPendingSection("prompts", "/prompts", pending, allPrompts, startEditingPrompt, refreshPrompts, "Фраза");
+
+  const search = document.getElementById("prompts-filter-search").value.trim().toLowerCase();
+  if (search) active = active.filter((p) => p.text.toLowerCase().includes(search));
+
+  document.getElementById("prompts-count").textContent = `Показано: ${active.length} из ${allPrompts.filter((p) => p.status !== "pending").length}`;
+
+  const columns = [
+    { label: "Текст", cellClass: "col-text", render: (p) => escapeHtml(p.text) },
+    { label: "🔥", render: (p) => p.likes || 0 },
+    { label: "Исп.", render: (p) => p.uses },
+  ];
+  renderColumnTable(document.getElementById("prompts-table"), "/prompts", active, columns, startEditingPrompt, refreshPrompts);
+}
+
+// ---- Fanty dares ----
+
+let allDares = [];
+
+async function refreshDares() {
+  allDares = await api("/fanty/dares");
+  refreshDaresTable();
+}
+
+function refreshDaresTable() {
+  const pending = allDares.filter((p) => p.status === "pending");
+  let active = allDares.filter((p) => p.status !== "pending");
+
+  renderPendingSection("dares", "/fanty/dares", pending, allDares, startEditingDare, refreshDares, "Текст");
+
+  const search = document.getElementById("dares-filter-search").value.trim().toLowerCase();
+  const kindFilter = document.getElementById("dares-filter-kind").value;
+  const locationFilter = document.getElementById("dares-filter-location").value;
+  const categoryFilter = document.getElementById("dares-filter-category").value;
+  const timerOnly = document.getElementById("dares-filter-timer").checked;
+  const musicOnly = document.getElementById("dares-filter-music").checked;
+
+  if (search) active = active.filter((d) => d.text.toLowerCase().includes(search));
+  if (kindFilter) active = active.filter((d) => d.kind === kindFilter);
+  if (locationFilter) active = active.filter((d) => d.locations.includes(locationFilter));
+  if (categoryFilter) active = active.filter((d) => d.categories.includes(categoryFilter));
+  if (timerOnly) active = active.filter((d) => d.hasTimer);
+  if (musicOnly) active = active.filter((d) => Boolean(d.musicUrl));
+
+  document.getElementById("dares-count").textContent = `Показано: ${active.length} из ${allDares.filter((p) => p.status !== "pending").length}`;
+
+  const columns = [
+    { label: "Текст", cellClass: "col-text", render: (d) => escapeHtml(d.text) },
+    { label: "Автор", render: (d) => escapeHtml(d.createdBy || "—") },
+    {
+      label: "Тип",
+      render: (d) => (d.kind === "team" ? "Командный" + (d.mixedPair ? " (М+Ж)" : "") : "Один"),
+    },
+    { label: "Места", render: (d) => pillsHtml(d.locations, LOCATIONS, "tag-location") },
+    { label: "Категории", render: (d) => pillsHtml(d.categories, ALL_DARE_CATEGORIES, "tag-category") },
+    { label: "Таймер", render: (d) => (d.hasTimer ? `⏱ ${d.timerSeconds}с` : `<span class="hint">—</span>`) },
+    {
+      label: "Музыка",
+      render: (d) => (d.musicUrl ? `🎵 ${escapeHtml(d.musicOriginalName || "файл")}` : `<span class="hint">—</span>`),
+    },
+    { label: "🔥", render: (d) => d.likes || 0 },
+    { label: "Исп.", render: (d) => d.uses },
+  ];
+  renderColumnTable(document.getElementById("dares-table"), "/fanty/dares", active, columns, startEditingDare, refreshDares);
+}
+
+// ---- Fanty truths ----
+
+let allTruths = [];
+
+async function refreshTruths() {
+  allTruths = await api("/fanty/truths");
+  refreshTruthsTable();
+}
+
+function refreshTruthsTable() {
+  const pending = allTruths.filter((p) => p.status === "pending");
+  let active = allTruths.filter((p) => p.status !== "pending");
+
+  renderPendingSection("truths", "/fanty/truths", pending, allTruths, startEditingTruth, refreshTruths, "Текст");
+
+  const search = document.getElementById("truths-filter-search").value.trim().toLowerCase();
+  const categoryFilter = document.getElementById("truths-filter-category").value;
+  if (search) active = active.filter((t) => t.text.toLowerCase().includes(search));
+  if (categoryFilter) active = active.filter((t) => t.categories.includes(categoryFilter));
+
+  document.getElementById("truths-count").textContent = `Показано: ${active.length} из ${allTruths.filter((p) => p.status !== "pending").length}`;
+
+  const columns = [
+    { label: "Текст", cellClass: "col-text", render: (t) => escapeHtml(t.text) },
+    { label: "Автор", render: (t) => escapeHtml(t.createdBy || "—") },
+    { label: "Категория", render: (t) => pillsHtml(t.categories, MOOD_CATEGORIES, "tag-category") },
+    { label: "🔥", render: (t) => t.likes || 0 },
+    { label: "Исп.", render: (t) => t.uses },
+  ];
+  renderColumnTable(document.getElementById("truths-table"), "/fanty/truths", active, columns, startEditingTruth, refreshTruths);
+}
+
+// ---- Users ----
 
 async function refreshUsers() {
   const users = await api("/users");
@@ -955,7 +1127,7 @@ async function refreshRooms() {
         <td>${r.roundsPlayed}</td>
         <td>${escapeHtml(r.createdAt)}</td>
         <td>${r.idleMinutes} мин</td>
-        <td><button class="btn danger" data-delete-room="${r.code}">Удалить</button></td>
+        <td><button class="icon-btn icon-btn-danger" data-delete-room="${r.code}" title="Удалить" aria-label="Удалить">🗑️</button></td>
       </tr>
     `
     )
