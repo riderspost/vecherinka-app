@@ -97,7 +97,14 @@ def clean_str(value, max_len):
 
 
 def get_room_or_404(db, code):
-    return db.execute("SELECT * FROM rooms WHERE code = ?", (code.upper(),)).fetchone()
+    room = db.execute("SELECT * FROM rooms WHERE code = ?", (code.upper(),)).fetchone()
+    if room:
+        # Every lookup — state polls included — counts as activity, so an
+        # abandoned room (tab closed, nobody polling any more) stops getting
+        # touched and becomes eligible for the auto-close sweep below.
+        db.execute("UPDATE rooms SET last_active_at = datetime('now') WHERE id = ?", (room["id"],))
+        db.commit()
+    return room
 
 
 def get_player_or_404(db, room_id, token):

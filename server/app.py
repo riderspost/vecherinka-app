@@ -79,6 +79,31 @@ def error(message, status=400):
     return jsonify({"error": message}), status
 
 
+ABANDONED_ROOM_CUTOFF = "-1 hour"
+
+
+def _sweep_abandoned_rooms(db):
+    # A room nobody has touched in over an hour (no state poll, no action)
+    # is treated the same as if its game had actually ended — otherwise it
+    # sits in "playing" forever, permanently locking any fanty content it
+    # used from admin edits. Lobby rooms are left alone: nothing's been
+    # played in them yet, so there's nothing for them to be locking.
+    db.execute(
+        """UPDATE rooms
+           SET status = CASE WHEN game_type = 'fanty' THEN 'finished' ELSE 'final_results' END
+           WHERE status NOT IN ('finished', 'final_results', 'lobby')
+             AND last_active_at < datetime('now', ?)""",
+        (ABANDONED_ROOM_CUTOFF,),
+    )
+    db.commit()
+
+
+@app.before_request
+def _sweep_before_request():
+    if request.path.startswith("/api") or request.path.startswith("/admin/api"):
+        _sweep_abandoned_rooms(get_db())
+
+
 @app.route("/api/contact", methods=["POST"])
 def contact_developer():
     data = request.get_json(silent=True) or {}
