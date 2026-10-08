@@ -34,6 +34,47 @@ def test_admin_login_rejects_wrong_credentials(client):
     assert resp.get_json()["authenticated"] is False
 
 
+def test_admin_dare_timer_seconds_respected_without_has_timer(client):
+    # timerSeconds also controls music-clip length, so it must be parsed
+    # and stored even when the on-screen timer itself is off — a dare can
+    # trim its music without showing a countdown.
+    admin_login(client)
+    resp = client.post(
+        "/admin/api/fanty/dares",
+        json={
+            "text": "Фант без таймера, но с заданной длиной отрывка",
+            "kind": "solo",
+            "categories": ["basic"],
+            "locations": ["apartment"],
+            "hasTimer": False,
+            "timerSeconds": 90,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["hasTimer"] is False
+    assert body["timerSeconds"] == 90
+
+
+def test_admin_dare_music_start_seconds_forced_to_zero_without_music(client):
+    admin_login(client)
+    resp = client.post(
+        "/admin/api/fanty/dares",
+        json={
+            "text": "Фант без музыки с переданным смещением",
+            "kind": "solo",
+            "categories": ["basic"],
+            "locations": ["apartment"],
+            "musicStartSeconds": 30,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["musicUrl"] is None
+    assert body["musicOriginalName"] is None
+    assert body["musicStartSeconds"] == 0
+
+
 def test_admin_add_edit_delete_dare(client):
     admin_login(client)
 

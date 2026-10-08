@@ -210,11 +210,22 @@ async function renderDashboard() {
             <label>Музыка (необязательно)</label>
             <input type="file" id="dare-audio-input" accept="audio/*" />
             <div id="dare-audio-status" class="hint"></div>
+            <div id="dare-music-editor" style="display:none;margin-top:8px">
+              <audio id="dare-music-preview" controls style="width:100%"></audio>
+              <div class="row" style="align-items:center;gap:10px;margin-top:8px">
+                <label style="flex:1;margin:0">Начало отрывка
+                  <input type="range" id="dare-music-start" min="0" max="0" value="0" step="1" style="width:100%" />
+                </label>
+                <button type="button" class="btn secondary" id="dare-music-preview-clip-btn">▶️ Отрывок</button>
+              </div>
+              <div class="hint" id="dare-music-range-label"></div>
+            </div>
             <div class="row">
               <label><input type="checkbox" id="dare-has-timer" /> Таймер</label>
             </div>
             <div class="row" id="dare-timer-seconds-row" style="display:none">
               <label>Секунд: <input type="number" id="dare-timer-seconds" value="60" min="5" max="600" style="width:70px" /></label>
+              <span class="hint" id="dare-timer-music-hint"></span>
             </div>
             <div class="error-box" id="add-dare-error"></div>
             <div class="row-actions" style="margin-top:8px">
@@ -385,26 +396,116 @@ async function renderDashboard() {
 
   const timerSecondsRow = document.getElementById("dare-timer-seconds-row");
   const hasTimerCheckbox = document.getElementById("dare-has-timer");
+  const timerSecondsInput = document.getElementById("dare-timer-seconds");
+  const timerMusicHint = document.getElementById("dare-timer-music-hint");
+
+  let uploadedAudioFilename = null;
+  let uploadedAudioOriginalName = null;
+  let musicStartSeconds = 0;
+  let musicDuration = 0;
+  let musicPreviewStopTimer = null;
+  const audioInput = document.getElementById("dare-audio-input");
+  const audioStatus = document.getElementById("dare-audio-status");
+  const musicEditor = document.getElementById("dare-music-editor");
+  const musicPreviewEl = document.getElementById("dare-music-preview");
+  const musicStartSlider = document.getElementById("dare-music-start");
+  const musicRangeLabel = document.getElementById("dare-music-range-label");
+  const musicPreviewClipBtn = document.getElementById("dare-music-preview-clip-btn");
+
   function updateTimerSecondsVisibility() {
-    timerSecondsRow.style.display = hasTimerCheckbox.checked ? "" : "none";
+    const show = hasTimerCheckbox.checked || Boolean(uploadedAudioFilename);
+    timerSecondsRow.style.display = show ? "" : "none";
+    timerMusicHint.textContent =
+      uploadedAudioFilename && !hasTimerCheckbox.checked ? "(это же длина отрывка музыки)" : "";
   }
   hasTimerCheckbox.addEventListener("change", updateTimerSecondsVisibility);
   updateTimerSecondsVisibility();
 
-  let uploadedAudioFilename = null;
-  const audioInput = document.getElementById("dare-audio-input");
-  const audioStatus = document.getElementById("dare-audio-status");
+  function formatTime(sec) {
+    sec = Math.max(0, Math.round(sec));
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+  }
+
+  function updateMusicRangeLabel() {
+    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
+    const end = Math.min(musicDuration, musicStartSeconds + timerSeconds);
+    musicRangeLabel.textContent = musicDuration
+      ? `Будет проигрываться: ${formatTime(musicStartSeconds)}–${formatTime(end)} ` +
+        `(${timerSeconds} сек из ${formatTime(musicDuration)})`
+      : "";
+  }
+
+  function updateMusicSliderBounds() {
+    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
+    const maxStart = Math.max(0, Math.floor(musicDuration - timerSeconds));
+    musicStartSlider.max = String(maxStart);
+    if (musicStartSeconds > maxStart) musicStartSeconds = maxStart;
+    musicStartSlider.value = String(musicStartSeconds);
+    updateMusicRangeLabel();
+  }
+
+  function showMusicEditor(url, startSeconds) {
+    musicStartSeconds = startSeconds || 0;
+    musicDuration = 0;
+    musicEditor.style.display = "";
+    musicPreviewEl.src = url;
+    musicPreviewEl.addEventListener(
+      "loadedmetadata",
+      () => {
+        musicDuration = musicPreviewEl.duration || 0;
+        updateMusicSliderBounds();
+      },
+      { once: true }
+    );
+  }
+
+  function hideMusicEditor() {
+    if (musicPreviewStopTimer) {
+      clearTimeout(musicPreviewStopTimer);
+      musicPreviewStopTimer = null;
+    }
+    musicEditor.style.display = "none";
+    musicPreviewEl.pause();
+    musicPreviewEl.removeAttribute("src");
+    musicPreviewEl.load();
+    musicStartSeconds = 0;
+    musicDuration = 0;
+  }
+
+  musicStartSlider.addEventListener("input", () => {
+    musicStartSeconds = parseInt(musicStartSlider.value, 10) || 0;
+    updateMusicRangeLabel();
+  });
+
+  timerSecondsInput.addEventListener("input", () => {
+    if (uploadedAudioFilename) updateMusicSliderBounds();
+    updateTimerSecondsVisibility();
+  });
+
+  musicPreviewClipBtn.addEventListener("click", () => {
+    const timerSeconds = parseInt(timerSecondsInput.value, 10) || 60;
+    if (musicPreviewStopTimer) clearTimeout(musicPreviewStopTimer);
+    musicPreviewEl.currentTime = musicStartSeconds;
+    musicPreviewEl.play().catch(() => {});
+    musicPreviewStopTimer = setTimeout(() => musicPreviewEl.pause(), timerSeconds * 1000);
+  });
+
   audioInput.addEventListener("change", async () => {
     const file = audioInput.files && audioInput.files[0];
     if (!file) return;
     uploadedAudioFilename = null;
+    uploadedAudioOriginalName = null;
+    hideMusicEditor();
     audioStatus.textContent = "Загрузка...";
     try {
       const form = new FormData();
       form.append("file", file);
       const res = await api("/fanty/upload-audio", { method: "POST", body: form });
       uploadedAudioFilename = res.filename;
-      audioStatus.textContent = `Загружено: ${file.name}`;
+      uploadedAudioOriginalName = res.originalName || file.name;
+      audioStatus.textContent = `Загружено: ${uploadedAudioOriginalName}`;
+      showMusicEditor(`/uploads/${uploadedAudioFilename}`, 0);
+      updateTimerSecondsVisibility();
     } catch (err) {
       audioStatus.textContent = err.message;
       audioInput.value = "";
@@ -419,9 +520,11 @@ async function renderDashboard() {
   function resetDareForm() {
     dareForm.reset();
     updateMixedPairVisibility();
-    updateTimerSecondsVisibility();
     uploadedAudioFilename = null;
+    uploadedAudioOriginalName = null;
     audioStatus.textContent = "";
+    hideMusicEditor();
+    updateTimerSecondsVisibility();
     document.getElementById("dare-timer-seconds").value = 60;
     editingDareId = null;
     dareFormHeading.textContent = "Добавить вручную";
@@ -445,13 +548,20 @@ async function renderDashboard() {
       el.checked = dare.categories.includes(el.value);
     });
 
-    uploadedAudioFilename = dare.musicUrl ? dare.musicUrl.split("/").pop() : null;
-    audioStatus.textContent = dare.musicUrl ? "Текущий трек сохранится, если не загрузить новый" : "";
-    audioInput.value = "";
-
     hasTimerCheckbox.checked = dare.hasTimer;
-    updateTimerSecondsVisibility();
     document.getElementById("dare-timer-seconds").value = dare.timerSeconds || 60;
+
+    uploadedAudioFilename = dare.musicUrl ? dare.musicUrl.split("/").pop() : null;
+    uploadedAudioOriginalName = dare.musicOriginalName || uploadedAudioFilename;
+    audioInput.value = "";
+    if (dare.musicUrl) {
+      audioStatus.textContent = `Текущий файл: ${uploadedAudioOriginalName}`;
+      showMusicEditor(dare.musicUrl, dare.musicStartSeconds || 0);
+    } else {
+      audioStatus.textContent = "";
+      hideMusicEditor();
+    }
+    updateTimerSecondsVisibility();
 
     dareFormHeading.textContent = `Редактировать фант #${dare.id}`;
     dareSubmitBtn.textContent = "Сохранить изменения";
@@ -482,6 +592,8 @@ async function renderDashboard() {
       locations,
       categories,
       musicFilename: uploadedAudioFilename,
+      musicOriginalName: uploadedAudioOriginalName,
+      musicStartSeconds: uploadedAudioFilename ? musicStartSeconds : 0,
       hasTimer,
       timerSeconds,
     };

@@ -402,7 +402,8 @@ def admin_list_dares():
     db = get_db()
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair, d.likes,
-                  d.music_filename, d.has_timer, d.timer_seconds,
+                  d.music_filename, d.music_original_name, d.music_start_seconds,
+                  d.has_timer, d.timer_seconds,
                   COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
@@ -430,6 +431,8 @@ def admin_list_dares():
                 "locations": locs,
                 "mixedPair": bool(r["mixed_pair"]),
                 "musicUrl": f"/uploads/{r['music_filename']}" if r["music_filename"] else None,
+                "musicOriginalName": r["music_original_name"],
+                "musicStartSeconds": r["music_start_seconds"],
                 "hasTimer": bool(r["has_timer"]),
                 "timerSeconds": r["timer_seconds"],
                 "createdBy": r["created_by"],
@@ -449,7 +452,7 @@ def admin_upload_audio():
         return jsonify({"error": "Недопустимый формат файла (нужен mp3/ogg/wav/m4a)"}), 400
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(UPLOAD_DIR, secure_filename(filename)))
-    return jsonify({"filename": filename})
+    return jsonify({"filename": filename, "originalName": file.filename})
 
 
 def _parse_dare_payload(data):
@@ -471,20 +474,37 @@ def _parse_dare_payload(data):
     music_filename = data.get("musicFilename") or None
     if music_filename and not os.path.isfile(os.path.join(UPLOAD_DIR, os.path.basename(music_filename))):
         music_filename = None
+    music_original_name = (data.get("musicOriginalName") or "").strip()[:200] or None
+    if not music_filename:
+        music_original_name = None
+
     has_timer = bool(data.get("hasTimer"))
-    timer_seconds = 60
-    if has_timer:
+
+    # Also doubles as the music-clip length (see music_start_seconds), so
+    # it's parsed whenever it's given, not just when the on-screen timer
+    # itself is enabled — a dare can trim its music without showing a
+    # countdown.
+    try:
+        timer_seconds = int(data.get("timerSeconds") or 60)
+    except (TypeError, ValueError):
+        timer_seconds = 60
+    timer_seconds = max(5, min(600, timer_seconds))
+
+    music_start_seconds = 0
+    if music_filename:
         try:
-            timer_seconds = int(data.get("timerSeconds") or 60)
+            music_start_seconds = int(data.get("musicStartSeconds") or 0)
         except (TypeError, ValueError):
-            timer_seconds = 60
-        timer_seconds = max(5, min(600, timer_seconds))
+            music_start_seconds = 0
+        music_start_seconds = max(0, music_start_seconds)
 
     fields = {
         "text": text,
         "kind": kind,
         "mixed_pair": int(mixed_pair),
         "music_filename": music_filename,
+        "music_original_name": music_original_name,
+        "music_start_seconds": music_start_seconds,
         "has_timer": int(has_timer),
         "timer_seconds": timer_seconds,
     }
@@ -502,6 +522,8 @@ def _dare_json(dare_id, fields, status, uses, categories, locations):
         "locations": locations,
         "mixedPair": bool(fields["mixed_pair"]),
         "musicUrl": f"/uploads/{fields['music_filename']}" if fields["music_filename"] else None,
+        "musicOriginalName": fields["music_original_name"],
+        "musicStartSeconds": fields["music_start_seconds"],
         "hasTimer": bool(fields["has_timer"]),
         "timerSeconds": fields["timer_seconds"],
     }
@@ -519,13 +541,16 @@ def admin_add_dare():
     if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (fields["text"],)).fetchone():
         return jsonify({"error": "Такой фант уже есть"}), 400
     cur = db.execute(
-        """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename, has_timer, timer_seconds)
-           VALUES (?, ?, 'active', ?, ?, ?, ?)""",
+        """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename,
+           music_original_name, music_start_seconds, has_timer, timer_seconds)
+           VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)""",
         (
             fields["text"],
             fields["kind"],
             fields["mixed_pair"],
             fields["music_filename"],
+            fields["music_original_name"],
+            fields["music_start_seconds"],
             fields["has_timer"],
             fields["timer_seconds"],
         ),
@@ -565,13 +590,16 @@ def admin_edit_dare(dare_id):
         return jsonify({"error": "Такой фант уже есть"}), 400
 
     db.execute(
-        """UPDATE fanty_dares SET text=?, kind=?, mixed_pair=?, music_filename=?, has_timer=?, timer_seconds=?
+        """UPDATE fanty_dares SET text=?, kind=?, mixed_pair=?, music_filename=?,
+           music_original_name=?, music_start_seconds=?, has_timer=?, timer_seconds=?
            WHERE id=?""",
         (
             fields["text"],
             fields["kind"],
             fields["mixed_pair"],
             fields["music_filename"],
+            fields["music_original_name"],
+            fields["music_start_seconds"],
             fields["has_timer"],
             fields["timer_seconds"],
             dare_id,

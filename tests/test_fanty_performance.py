@@ -15,7 +15,9 @@ def _add_dare_with_timer_and_music(client):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    music_filename = resp.get_json()["filename"]
+    upload_body = resp.get_json()
+    music_filename = upload_body["filename"]
+    assert upload_body["originalName"] == "clip.mp3"
 
     resp = client.post(
         "/admin/api/fanty/dares",
@@ -27,8 +29,12 @@ def _add_dare_with_timer_and_music(client):
             "hasTimer": True,
             "timerSeconds": 45,
             "musicFilename": music_filename,
+            "musicOriginalName": "clip.mp3",
+            "musicStartSeconds": 12,
         },
     )
+    assert resp.get_json()["musicOriginalName"] == "clip.mp3"
+    assert resp.get_json()["musicStartSeconds"] == 12
     assert resp.status_code == 200
     dare_id = resp.get_json()["id"]
 
@@ -68,6 +74,7 @@ def test_timer_and_music_dare_exposed_in_state_and_gated_start_performance(clien
     assert state["fanty"]["hasTimer"] is True
     assert state["fanty"]["timerSeconds"] == 45
     assert state["fanty"]["musicUrl"] == f"/uploads/{music_filename}"
+    assert state["fanty"]["musicStartSeconds"] == 12
     assert state["fanty"]["performanceStartedAt"] is None
 
     other_token = next(t for pid, t in tokens_by_id.items() if pid != picked_id)

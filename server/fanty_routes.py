@@ -434,7 +434,8 @@ def _build_state(db, room, player):
         text = None
         if fstate["current_content_type"] == "dare":
             row = db.execute(
-                "SELECT text, music_filename, has_timer, timer_seconds FROM fanty_dares WHERE id = ?",
+                "SELECT text, music_filename, music_start_seconds, has_timer, timer_seconds "
+                "FROM fanty_dares WHERE id = ?",
                 (fstate["current_dare_id"],),
             ).fetchone()
             text = row["text"] if row else None
@@ -445,6 +446,7 @@ def _build_state(db, room, player):
                     players_by_id.get(fstate["current_partner_id"], placeholder),
                 )
             fanty["musicUrl"] = f"/uploads/{row['music_filename']}" if row and row["music_filename"] else None
+            fanty["musicStartSeconds"] = row["music_start_seconds"] if row else 0
             fanty["hasTimer"] = bool(row["has_timer"]) if row else False
             fanty["timerSeconds"] = row["timer_seconds"] if row else None
             fanty["performanceStartedAt"] = fstate["performance_started_at"]

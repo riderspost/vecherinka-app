@@ -40,6 +40,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let animating = false;
   let lastBottleAngle = 0;
   let timerIntervalId = null;
+  let musicStopTimeoutId = null;
   let currentAudio = null;
   let persistentMeBadgeEl = null;
   let persistentCircleWrap = null;
@@ -182,6 +183,10 @@ export function mountFantyRoomPage(container, code, opts) {
         clearInterval(timerIntervalId);
         timerIntervalId = null;
       }
+      if (musicStopTimeoutId) {
+        clearTimeout(musicStopTimeoutId);
+        musicStopTimeoutId = null;
+      }
       if (currentAudio && (!state.fanty || state.fanty.phase !== "awaiting_action")) {
         currentAudio.pause();
         currentAudio = null;
@@ -240,6 +245,7 @@ export function mountFantyRoomPage(container, code, opts) {
         getCircleWrap: () => persistentCircleWrap,
         setCircleWrap: (el) => (persistentCircleWrap = el),
         setTimerInterval: (id) => (timerIntervalId = id),
+        setMusicStopTimeout: (id) => (musicStopTimeoutId = id),
         setAudio: (a) => (currentAudio = a),
         stopAudio: () => {
           if (currentAudio) {
@@ -785,6 +791,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
         goBtn.disabled = true;
         if (fanty.musicUrl) {
           const audio = new Audio(fanty.musicUrl);
+          audio.currentTime = fanty.musicStartSeconds || 0;
           audio.play().catch(() => {});
           if (ctrl) ctrl.setAudio(audio);
         }
@@ -828,6 +835,13 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       }
       tick();
       if (ctrl) ctrl.setTimerInterval(setInterval(tick, 250));
+    } else if (fanty.musicUrl) {
+      // No on-screen countdown, but the music clip still only plays for
+      // timerSeconds — same anchor the countdown would've used, so a trim
+      // set in the admin panel is respected either way.
+      const startedAt = new Date(fanty.performanceStartedAt).getTime();
+      const stopInMs = startedAt + fanty.timerSeconds * 1000 - Date.now();
+      if (ctrl) ctrl.setMusicStopTimeout(setTimeout(() => ctrl.stopAudio(), Math.max(0, stopInMs)));
     }
     if (fanty.musicUrl) {
       const musicMsg = document.createElement("p");
