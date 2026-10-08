@@ -302,6 +302,27 @@ def _fanty_content_is_live(db, column, content_id):
     )
 
 
+def _fanty_content_locked_for_edit(db, state_column, rounds_column, content_id):
+    # Blocks edits not just while the content is live right now, but for
+    # the whole rest of an unfinished game once it's been played in any
+    # round of it. The finished-game summary re-reads the dare/truth text
+    # fresh from fanty_dares/fanty_truths rather than storing a snapshot at
+    # resolve time, so an edit to an earlier round's content — while that
+    # same game is still going — would silently rewrite what the "Итоги
+    # игры" screen shows for a round players already played differently.
+    if _fanty_content_is_live(db, state_column, content_id):
+        return True
+    return (
+        db.execute(
+            f"""SELECT 1 FROM fanty_rounds fr
+                JOIN rooms r ON r.id = fr.room_id
+                WHERE r.status != 'finished' AND fr.{rounds_column} = ?""",
+            (content_id,),
+        ).fetchone()
+        is not None
+    )
+
+
 @admin_bp.route("/api/fanty/dares")
 @admin_required
 def admin_list_dares():
@@ -456,8 +477,8 @@ def admin_edit_dare(dare_id):
     existing = db.execute("SELECT * FROM fanty_dares WHERE id = ?", (dare_id,)).fetchone()
     if not existing:
         return jsonify({"error": "Не найдено"}), 404
-    if _fanty_content_is_live(db, "current_dare_id", dare_id):
-        return jsonify({"error": "Этот фант сейчас выполняется в активной игре — подождите, пока раунд закончится"}), 400
+    if _fanty_content_locked_for_edit(db, "current_dare_id", "dare_id", dare_id):
+        return jsonify({"error": "Этот фант используется в ещё не завершённой игре — подождите, пока она закончится"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     fields, categories, locations, err = _parse_dare_payload(data)
@@ -617,8 +638,8 @@ def admin_edit_truth(truth_id):
     existing = db.execute("SELECT * FROM fanty_truths WHERE id = ?", (truth_id,)).fetchone()
     if not existing:
         return jsonify({"error": "Не найдено"}), 404
-    if _fanty_content_is_live(db, "current_truth_id", truth_id):
-        return jsonify({"error": "Этот вопрос сейчас используется в активной игре — подождите, пока раунд закончится"}), 400
+    if _fanty_content_locked_for_edit(db, "current_truth_id", "truth_id", truth_id):
+        return jsonify({"error": "Этот вопрос используется в ещё не завершённой игре — подождите, пока она закончится"}), 400
 
     data = request.get_json(force=True, silent=True) or {}
     text = (data.get("text") or "").strip()

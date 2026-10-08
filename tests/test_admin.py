@@ -264,11 +264,22 @@ def test_admin_cannot_edit_or_delete_dare_currently_live_in_a_game(client, raw_d
     )
     assert resp.status_code == 200
 
-    # Once the round moves on, editing the formerly-live dare works again.
+    # Once the round moves on, the dare is no longer "live" but the game
+    # is still going — editing it stays blocked, now because it was played
+    # earlier in a game that hasn't finished yet (not because it's current).
     client.post(f"/api/fanty/rooms/{code}/resolve", json={"token": host_token, "counted": True})
     resp = client.put(
         f"/admin/api/fanty/dares/{live_dare_id}",
         json={"text": "Изменено после раунда", "categories": ["basic"], "locations": ["apartment"]},
+    )
+    assert resp.status_code == 400
+
+    # Once the game actually finishes, editing is allowed again — nothing
+    # left that could show a mismatched "Итоги игры" summary.
+    client.post(f"/api/fanty/rooms/{code}/end", json={"token": host_token})
+    resp = client.put(
+        f"/admin/api/fanty/dares/{live_dare_id}",
+        json={"text": "Изменено после окончания игры", "categories": ["basic"], "locations": ["apartment"]},
     )
     assert resp.status_code == 200
 
