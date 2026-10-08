@@ -50,6 +50,11 @@ export function mountFantyRoomPage(container, code, opts) {
   // every poll tick, which would otherwise reset the fire button back to
   // clickable a second and a half after tapping it.
   const likedContentIds = new Set();
+  // Which lobby sub-screen is showing for a local-mode host once they
+  // could start: "choice" (Добавить ещё / Начать игру) or "addForm" (just
+  // the add-player form, no start button in sight). Persisted across the
+  // poll-driven re-renders the same way likedContentIds is.
+  const lobbyUi = { view: "choice" };
 
   function stop() {
     stopped = true;
@@ -245,7 +250,7 @@ export function mountFantyRoomPage(container, code, opts) {
         likedContentIds,
       };
 
-      if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
+      if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
       else if (state.room.status === "playing") renderPlaying(wrap, state, token, code, ctrl);
       else if (state.room.status === "finished") renderFinished(wrap, state, token, code);
     }
@@ -272,7 +277,7 @@ function playersList(players) {
   return list;
 }
 
-async function renderLobby(wrap, state, token, code, switchPlayer) {
+async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   const shareUrl = `${window.location.origin}/fanty/r/${code}`;
   const displayUrl = `${window.location.origin}/fanty/r/${code}/display`;
   const players = state.players.filter((p) => !p.isDisplay);
@@ -292,7 +297,15 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
 
   if (state.me.isDisplay) return;
 
-  if (state.room.deviceMode === "local" && state.me.isHost) {
+  const isLocalHost = state.room.deviceMode === "local" && state.me.isHost;
+  // Once the host *could* start, show an explicit choice between adding
+  // another player and starting, instead of leaving the add-player form
+  // sitting right above "Начать игру" — that's exactly where hosts were
+  // losing a half-typed player by mis-tapping start instead of add.
+  const showChoiceScreen = isLocalHost && state.canStart && lobbyUi.view !== "addForm";
+  const showAddForm = isLocalHost && !showChoiceScreen;
+
+  if (showAddForm) {
     const addCard = document.createElement("div");
     addCard.className = "card-inline";
     const label = document.createElement("p");
@@ -344,10 +357,12 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
       try {
         const avatar = picker.getValue();
         await fantyApi.addLocalPlayer(code, token, name, avatar.avatarType, avatar.avatarValue, gender);
-        nameInput.value = "";
+        lobbyUi.view = "choice";
+        const fresh = await fantyApi.getState(code, token);
+        await renderLobby(wrap, fresh, token, code, switchPlayer, lobbyUi);
+        return;
       } catch (e) {
         addErr.textContent = e.message;
-      } finally {
         addBtn.disabled = false;
       }
     });
@@ -361,6 +376,20 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
     addCard.appendChild(addErr);
     addCard.appendChild(addBtn);
     wrap.appendChild(addCard);
+
+    // Only offer a way back to the choice screen when the form is showing
+    // because the host chose "Добавить ещё" — not when it's showing because
+    // there simply aren't enough players yet (nothing to go back to there).
+    if (state.canStart && lobbyUi.view === "addForm") {
+      const backBtn = document.createElement("button");
+      backBtn.className = "link-btn";
+      backBtn.textContent = "← Назад, не добавлять";
+      backBtn.addEventListener("click", () => {
+        lobbyUi.view = "choice";
+        renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
+      });
+      wrap.appendChild(backBtn);
+    }
   }
 
   if (state.room.deviceMode === "remote") {
@@ -385,7 +414,53 @@ async function renderLobby(wrap, state, token, code, switchPlayer) {
   });
   wrap.appendChild(displayBtn);
 
-  if (state.me.isHost) {
+  if (showChoiceScreen) {
+    const choiceRow = document.createElement("div");
+    choiceRow.className = "row-actions";
+
+    const addMoreBtn = document.createElement("button");
+    addMoreBtn.className = "btn";
+    addMoreBtn.textContent = "Добавить ещё игрока";
+    addMoreBtn.addEventListener("click", () => {
+      lobbyUi.view = "addForm";
+      renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
+    });
+
+    const startBtn = document.createElement("button");
+    startBtn.className = "btn btn-primary";
+    startBtn.textContent = "Начать игру";
+    startBtn.addEventListener("click", async () => {
+      startBtn.disabled = true;
+      addMoreBtn.disabled = true;
+      try {
+        await fantyApi.start(code, token);
+      } catch (e) {
+        alert(e.message);
+        startBtn.disabled = false;
+        addMoreBtn.disabled = false;
+      }
+    });
+
+    choiceRow.appendChild(addMoreBtn);
+    choiceRow.appendChild(startBtn);
+    wrap.appendChild(choiceRow);
+  } else if (isLocalHost && !state.canStart) {
+    // Not enough players yet (or missing a gender) — show why, disabled,
+    // right under the add-player form. If canStart is already true, the
+    // host explicitly chose "Добавить ещё" from the choice screen — no
+    // start button at all until they come back from the form.
+    const startBtn = document.createElement("button");
+    startBtn.className = "btn btn-primary";
+    startBtn.textContent = state.needsBothGenders
+      ? "Нужен хотя бы один игрок каждого пола"
+      : `Нужно ещё игроков (мин. ${state.minPlayers})`;
+    startBtn.disabled = true;
+    wrap.appendChild(startBtn);
+  } else if (isLocalHost) {
+    // canStart is true and the host is mid-way through "Добавить ещё" —
+    // the add-form (with its own "← Назад" link) already says everything
+    // that needs saying here; no button, nothing else to show.
+  } else if (!isLocalHost && state.me.isHost) {
     const startBtn = document.createElement("button");
     startBtn.className = "btn btn-primary";
     startBtn.textContent = state.canStart
