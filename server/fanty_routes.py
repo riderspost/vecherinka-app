@@ -18,6 +18,7 @@ from .rooms_common import (
     create_room_and_host,
     add_player,
     resize_and_save_image,
+    delete_room_and_files,
 )
 
 fanty_bp = Blueprint("fanty", __name__, url_prefix="/api/fanty")
@@ -303,29 +304,7 @@ def discard_room(code):
     if room["status"] != "finished":
         return error("Можно удалить только завершённую игру")
 
-    photo_rows = db.execute(
-        """SELECT frp.filename FROM fanty_round_photos frp
-           JOIN fanty_rounds fr ON fr.id = frp.round_id
-           WHERE fr.room_id = ?""",
-        (room["id"],),
-    ).fetchall()
-    filenames = []
-    for row in photo_rows:
-        filename = row["filename"]
-        base, ext = os.path.splitext(filename)
-        filenames.append(filename)
-        filenames.append(f"{base}_thumb{ext}")
-
-    db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
-    db.commit()
-
-    for filename in filenames:
-        path = os.path.join(UPLOAD_DIR, secure_filename(filename))
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-
+    delete_room_and_files(db, room)
     return jsonify({"ok": True})
 
 

@@ -4,6 +4,7 @@ import random
 import uuid
 
 from PIL import Image, ImageOps
+from werkzeug.utils import secure_filename
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "uploads"))
@@ -105,6 +106,38 @@ def get_room_or_404(db, code):
         db.execute("UPDATE rooms SET last_active_at = datetime('now') WHERE id = ?", (room["id"],))
         db.commit()
     return room
+
+
+def delete_room_and_files(db, room):
+    # Shared by the host-triggered /discard endpoints (either game) and the
+    # abandoned-room sweep (server/app.py) — deleting the room cascades
+    # everything in the DB (players, rounds, submissions, votes, fanty
+    # state/photos rows), but the uploaded round-photo files themselves
+    # live on disk and need cleaning up separately. Sentence-game rooms
+    # have no photos, so that part is just a no-op for them.
+    filenames = []
+    if room["game_type"] == "fanty":
+        photo_rows = db.execute(
+            """SELECT frp.filename FROM fanty_round_photos frp
+               JOIN fanty_rounds fr ON fr.id = frp.round_id
+               WHERE fr.room_id = ?""",
+            (room["id"],),
+        ).fetchall()
+        for row in photo_rows:
+            filename = row["filename"]
+            base, ext = os.path.splitext(filename)
+            filenames.append(filename)
+            filenames.append(f"{base}_thumb{ext}")
+
+    db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
+    db.commit()
+
+    for filename in filenames:
+        path = os.path.join(UPLOAD_DIR, secure_filename(filename))
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def get_player_or_404(db, room_id, token):

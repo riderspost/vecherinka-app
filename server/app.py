@@ -32,6 +32,7 @@ from .rooms_common import (
     add_player,
     taken_emojis_for_room,
     resize_and_save_image,
+    delete_room_and_files,
 )
 
 MAX_ANSWER_LEN = 300
@@ -83,19 +84,23 @@ ABANDONED_ROOM_CUTOFF = "-1 hour"
 
 
 def _sweep_abandoned_rooms(db):
-    # A room nobody has touched in over an hour (no state poll, no action)
-    # is treated the same as if its game had actually ended — otherwise it
-    # sits in "playing" forever, permanently locking any fanty content it
-    # used from admin edits. Lobby rooms are left alone: nothing's been
-    # played in them yet, so there's nothing for them to be locking.
-    db.execute(
-        """UPDATE rooms
-           SET status = CASE WHEN game_type = 'fanty' THEN 'finished' ELSE 'final_results' END
-           WHERE status NOT IN ('finished', 'final_results', 'lobby')
-             AND last_active_at < datetime('now', ?)""",
+    # A room nobody's touched in over an hour — no state poll, no action —
+    # is abandoned, whether that's mid-game or sitting unclaimed on its own
+    # finished-results screen. Delete it outright, the same as the host's
+    # own "На главную" button would (round history + fanty photos
+    # included) — we're not keeping game history around right now (see
+    # delete_room_and_files and the manual /discard endpoints), just not
+    # relying on every host to explicitly close the loop. The storage
+    # itself (fanty_rounds, round_prompts, submissions, votes, photos
+    # tables) stays fully intact for when game-history viewing is worth
+    # building — this only ever removes *rows*, never the schema. Lobby
+    # rooms are left alone: nothing's been played in them yet.
+    stale_rooms = db.execute(
+        "SELECT * FROM rooms WHERE status != 'lobby' AND last_active_at < datetime('now', ?)",
         (ABANDONED_ROOM_CUTOFF,),
-    )
-    db.commit()
+    ).fetchall()
+    for room in stale_rooms:
+        delete_room_and_files(db, room)
 
 
 @app.before_request
@@ -469,8 +474,7 @@ def discard_room(code):
     if room["status"] != "final_results":
         return error("Можно удалить только завершённую игру")
 
-    db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
-    db.commit()
+    delete_room_and_files(db, room)
     return jsonify({"ok": True})
 
 
