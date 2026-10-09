@@ -102,6 +102,8 @@ def add_local_player(code):
         return error("Добавление игроков доступно только в локальном режиме")
     if room["status"] not in ("lobby", "playing"):
         return error("Игра уже завершена")
+    if room["status"] == "playing" and fg.get_state(db, room["id"])["phase"] != "ready_to_spin":
+        return error("Можно добавить игрока только между раундами")
 
     settings = fg.get_settings(db, room["id"])
     gender = data.get("gender") if data.get("gender") in ("m", "f") else None
@@ -130,6 +132,8 @@ def remove_player(code, player_id):
         return error("Только организатор может удалить игрока", 403)
     if room["status"] not in ("lobby", "playing"):
         return error("Игра уже завершена")
+    if room["status"] == "playing" and fg.get_state(db, room["id"])["phase"] != "ready_to_spin":
+        return error("Можно удалить игрока только между раундами")
     if player_id == host["id"]:
         return error("Нельзя удалить самого себя")
 

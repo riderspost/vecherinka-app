@@ -814,7 +814,7 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
     wrap.appendChild(endBtn);
   }
 
-  if (state.me.isHost) {
+  if (state.me.isHost && fanty.phase === "ready_to_spin") {
     const manageBtn = document.createElement("button");
     manageBtn.className = "btn manage-players-btn";
     manageBtn.style.marginTop = "16px";
