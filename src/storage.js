@@ -30,3 +30,12 @@ export function listSessionCodes() {
   }
   return codes;
 }
+
+// Logging out of the account is the one action with a clear "fresh start
+// on this device" intent — without this, the room sessions above (and the
+// "вернуться в комнату" cards built from them) would just keep working as
+// whoever was last logged in, handing the next person on a shared device
+// a live seat in someone else's game.
+export function clearAllSessions() {
+  listSessionCodes().forEach(clearSession);
+}
