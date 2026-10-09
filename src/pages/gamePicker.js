@@ -1,7 +1,7 @@
 import { navigate } from "../router.js";
 import { api, authApi } from "../api.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
-import { listSessionCodes, clearSession, saveSession } from "../storage.js";
+import { listSessionCodes, clearSession, saveSession, forgetAccountLinkedSessions } from "../storage.js";
 import { escapeHtml } from "../utils.js";
 
 // Covers both games' status vocabularies — fanty's is just
@@ -119,6 +119,7 @@ function renderAccountCorner(sessionPromise) {
         logoutBtn.addEventListener("click", async () => {
           logoutBtn.disabled = true;
           try {
+            await forgetAccountLinkedSessions();
             await authApi.logout();
             navigate("/");
           } catch (e) {

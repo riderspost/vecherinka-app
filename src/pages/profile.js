@@ -1,6 +1,7 @@
 import { authApi } from "../api.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker } from "../avatarPicker.js";
+import { forgetAccountLinkedSessions } from "../storage.js";
 
 export function renderProfilePage(container) {
   container.innerHTML = "";
@@ -96,6 +97,7 @@ export function renderProfilePage(container) {
       logoutLink.addEventListener("click", async () => {
         logoutLink.disabled = true;
         try {
+          await forgetAccountLinkedSessions();
           await authApi.logout();
           navigate("/account");
         } catch (e) {
