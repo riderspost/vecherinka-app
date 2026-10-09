@@ -1228,7 +1228,11 @@ async function refreshRooms() {
         <td>${escapeHtml(r.code)}</td>
         <td>${escapeHtml(ROOM_GAME_TYPE_LABEL[r.gameType] || r.gameType)}</td>
         <td>${escapeHtml(r.status)}</td>
-        <td>${escapeHtml(r.hostName || "—")}</td>
+        <td>${escapeHtml(r.hostName || "—")}${
+        r.hostAuthenticated
+          ? ` <span class="tag-pill tag-author" title="${escapeHtml(r.hostEmail || "")}">аккаунт</span>`
+          : ` <span class="tag-pill tag-kind">аноним</span>`
+      }</td>
         <td>${r.playerCount}</td>
         <td>${r.roundsPlayed}</td>
         <td>${escapeHtml(r.createdAt)}</td>

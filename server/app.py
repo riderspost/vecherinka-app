@@ -169,6 +169,41 @@ def create_room():
     return jsonify({"code": code, "token": token, "playerId": player_id})
 
 
+@app.route("/api/my-rooms")
+def my_rooms():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify([])
+    db = get_db()
+    rows = db.execute(
+        """SELECT DISTINCT r.code AS code, r.game_type AS gameType, r.status AS status
+           FROM players p
+           JOIN rooms r ON r.id = p.room_id
+           WHERE p.user_id = ? AND p.is_display = 0 AND p.left_at IS NULL
+           ORDER BY r.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/rooms/<code>/resume", methods=["POST"])
+def resume_room(code):
+    user_id = session.get("user_id")
+    if not user_id:
+        return error("Нужно войти в аккаунт", 401)
+    db = get_db()
+    room = get_room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    player = db.execute(
+        "SELECT * FROM players WHERE room_id = ? AND user_id = ? AND is_display = 0 AND left_at IS NULL",
+        (room["id"], user_id),
+    ).fetchone()
+    if not player:
+        return error("Вы не участвуете в этой комнате", 404)
+    return jsonify({"token": player["token"], "playerId": player["id"]})
+
+
 @app.route("/api/rooms/<code>/taken-emojis", methods=["GET"])
 def taken_emojis(code):
     db = get_db()
@@ -214,7 +249,14 @@ def join_room(code):
 
     try:
         token, player_id = add_player(
-            db, room, data.get("name"), data.get("avatarType"), data.get("avatarValue"), is_display, gender=gender
+            db,
+            room,
+            data.get("name"),
+            data.get("avatarType"),
+            data.get("avatarValue"),
+            is_display,
+            gender=gender,
+            user_id=session.get("user_id"),
         )
     except RoomError as e:
         return error(e.message, e.status)

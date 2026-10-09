@@ -98,7 +98,10 @@ def admin_list_rooms():
     result = []
     for r in rooms:
         host = db.execute(
-            "SELECT name FROM players WHERE room_id = ? AND is_host = 1 LIMIT 1", (r["id"],)
+            """SELECT p.name, p.user_id, u.email AS user_email
+               FROM players p LEFT JOIN users u ON u.id = p.user_id
+               WHERE p.room_id = ? AND p.is_host = 1 LIMIT 1""",
+            (r["id"],),
         ).fetchone()
         player_count = db.execute(
             "SELECT COUNT(*) AS c FROM players WHERE room_id = ? AND is_display = 0 AND left_at IS NULL",
@@ -120,6 +123,8 @@ def admin_list_rooms():
                 "gameType": r["game_type"],
                 "status": r["status"],
                 "hostName": host["name"] if host else None,
+                "hostAuthenticated": bool(host and host["user_id"]),
+                "hostEmail": host["user_email"] if host else None,
                 "playerCount": player_count,
                 "roundsPlayed": rounds_played,
                 "createdAt": r["created_at"],

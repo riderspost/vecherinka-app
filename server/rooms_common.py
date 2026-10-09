@@ -208,14 +208,14 @@ def create_room_and_host(
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host, gender)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?)""",
-        (player_id, room_id, token, name, avatar_type, avatar_value, gender),
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host, gender, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+        (player_id, room_id, token, name, avatar_type, avatar_value, gender, created_by_user_id),
     )
     return room_id, code, token, player_id
 
 
-def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_host=False, gender=None):
+def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_host=False, gender=None, user_id=None):
     """Validates + inserts a new player row (join, or host-added local player). Returns (token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN) or ("Экран" if is_display else "")
     if not name:
@@ -236,9 +236,20 @@ def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_h
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host, gender)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (player_id, room["id"], token, name, avatar_type, avatar_value, int(is_display), int(is_host), gender),
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host, gender, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            player_id,
+            room["id"],
+            token,
+            name,
+            avatar_type,
+            avatar_value,
+            int(is_display),
+            int(is_host),
+            gender,
+            None if is_display else user_id,
+        ),
     )
     return token, player_id
 
