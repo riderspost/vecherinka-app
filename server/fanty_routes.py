@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from datetime import datetime
 
 from flask import Blueprint, request, jsonify, session
 from werkzeug.utils import secure_filename
@@ -450,6 +451,13 @@ def _build_state(db, room, player):
             fanty["hasTimer"] = bool(row["has_timer"]) if row else False
             fanty["timerSeconds"] = row["timer_seconds"] if row else None
             fanty["performanceStartedAt"] = fstate["performance_started_at"]
+            # Lets the client correct for its own clock being off from the
+            # server's — the countdown compares performanceStartedAt against
+            # the client's Date.now(), so any skew there directly throws off
+            # the displayed seconds (e.g. a client clock running a few
+            # seconds behind makes the timer start above the configured
+            # value instead of at it).
+            fanty["serverNow"] = datetime.utcnow().isoformat() + "Z"
         elif fstate["current_content_type"] == "truth":
             row = db.execute(
                 "SELECT text FROM fanty_truths WHERE id = ?", (fstate["current_truth_id"],)

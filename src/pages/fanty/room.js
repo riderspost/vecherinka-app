@@ -9,8 +9,16 @@ import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
+const MUSIC_FADE_MS = 2000;
 
 const BOTTLE_IMG = `<img src="/src/assets/bottle.png" alt="" class="bottle-img" draggable="false" />`;
+
+function clockAdjustedStartedAt(fanty) {
+  const startedAt = new Date(fanty.performanceStartedAt).getTime();
+  if (!fanty.serverNow) return startedAt;
+  const skew = new Date(fanty.serverNow).getTime() - Date.now();
+  return startedAt - skew;
+}
 
 function genderRadioGroup(defaultValue) {
   const wrap = document.createElement("div");
@@ -41,6 +49,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let lastBottleAngle = 0;
   let timerIntervalId = null;
   let musicStopTimeoutId = null;
+  let musicFadeIntervalId = null;
   let currentAudio = null;
   let persistentMeBadgeEl = null;
   let persistentCircleWrap = null;
@@ -187,6 +196,10 @@ export function mountFantyRoomPage(container, code, opts) {
         clearTimeout(musicStopTimeoutId);
         musicStopTimeoutId = null;
       }
+      if (musicFadeIntervalId) {
+        clearInterval(musicFadeIntervalId);
+        musicFadeIntervalId = null;
+      }
       if (currentAudio && (!state.fanty || state.fanty.phase !== "awaiting_action")) {
         currentAudio.pause();
         currentAudio = null;
@@ -248,10 +261,34 @@ export function mountFantyRoomPage(container, code, opts) {
         setMusicStopTimeout: (id) => (musicStopTimeoutId = id),
         setAudio: (a) => (currentAudio = a),
         stopAudio: () => {
+          if (musicFadeIntervalId) {
+            clearInterval(musicFadeIntervalId);
+            musicFadeIntervalId = null;
+          }
           if (currentAudio) {
             currentAudio.pause();
             currentAudio = null;
           }
+        },
+        fadeOutAudio: (durationMs) => {
+          if (musicFadeIntervalId || !currentAudio) return;
+          const audio = currentAudio;
+          const startVolume = audio.volume;
+          const startedAt = Date.now();
+          const STEP_MS = 100;
+          musicFadeIntervalId = setInterval(() => {
+            const elapsed = Date.now() - startedAt;
+            const ratio = Math.max(0, 1 - elapsed / durationMs);
+            audio.volume = startVolume * ratio;
+            if (ratio <= 0) {
+              clearInterval(musicFadeIntervalId);
+              musicFadeIntervalId = null;
+              if (currentAudio === audio) {
+                audio.pause();
+                currentAudio = null;
+              }
+            }
+          }, STEP_MS);
         },
         likedContentIds,
       };
@@ -820,7 +857,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       timerEl.className = "big-timer";
       panel.appendChild(timerEl);
 
-      const startedAt = new Date(fanty.performanceStartedAt).getTime();
+      const startedAt = clockAdjustedStartedAt(fanty);
       const totalMs = fanty.timerSeconds * 1000;
 
       function tick() {
@@ -831,6 +868,9 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
           if (ctrl) ctrl.stopAudio();
         } else {
           timerEl.textContent = `${Math.ceil(remaining / 1000)}`;
+          if (fanty.musicUrl && remaining <= MUSIC_FADE_MS && ctrl) {
+            ctrl.fadeOutAudio(MUSIC_FADE_MS);
+          }
         }
       }
       tick();
@@ -838,10 +878,12 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
     } else if (fanty.musicUrl) {
       // No on-screen countdown, but the music clip still only plays for
       // timerSeconds — same anchor the countdown would've used, so a trim
-      // set in the admin panel is respected either way.
-      const startedAt = new Date(fanty.performanceStartedAt).getTime();
+      // set in the admin panel is respected either way. Fade out over the
+      // last couple of seconds instead of cutting it off abruptly.
+      const startedAt = clockAdjustedStartedAt(fanty);
       const stopInMs = startedAt + fanty.timerSeconds * 1000 - Date.now();
-      if (ctrl) ctrl.setMusicStopTimeout(setTimeout(() => ctrl.stopAudio(), Math.max(0, stopInMs)));
+      const fadeInMs = Math.max(0, stopInMs - MUSIC_FADE_MS);
+      if (ctrl) ctrl.setMusicStopTimeout(setTimeout(() => ctrl.fadeOutAudio(MUSIC_FADE_MS), fadeInMs));
     }
     if (fanty.musicUrl) {
       const musicMsg = document.createElement("p");
