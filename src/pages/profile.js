@@ -1,7 +1,6 @@
 import { authApi } from "../api.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker } from "../avatarPicker.js";
-import { clearAllSessions } from "../storage.js";
 
 export function renderProfilePage(container) {
   container.innerHTML = "";
@@ -98,7 +97,6 @@ export function renderProfilePage(container) {
         logoutLink.disabled = true;
         try {
           await authApi.logout();
-          clearAllSessions();
           navigate("/account");
         } catch (e) {
           logoutLink.disabled = false;

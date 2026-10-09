@@ -1,7 +1,7 @@
 import { navigate } from "../router.js";
 import { api, authApi } from "../api.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
-import { listSessionCodes, clearSession, clearAllSessions, saveSession } from "../storage.js";
+import { listSessionCodes, clearSession, saveSession } from "../storage.js";
 import { escapeHtml } from "../utils.js";
 
 // Covers both games' status vocabularies — fanty's is just
@@ -33,31 +33,35 @@ async function renderReturnSection(section, sessionPromise) {
   }
 
   if (authenticated) {
+    // Logged in: show exactly what this account is linked to server-side,
+    // nothing else — mixing in whatever this browser's localStorage
+    // happens to hold (a guest room played before logging in, or on a
+    // shared browser, someone else's) made the list look like it belonged
+    // to the account when most of it had nothing to do with it.
     try {
       const myRooms = await api.myRooms();
       myRooms.forEach((r) => entries.set(r.code, { gameType: r.gameType, status: r.status, resume: true }));
     } catch (e) {
-      // Account lookup failing shouldn't block local sessions below.
+      // Account lookup failing just means an empty list here.
     }
+  } else {
+    // Logged out (or never logged in): the only thing to offer back is
+    // whatever this browser itself remembers from playing as a guest.
+    const localCodes = listSessionCodes();
+    await Promise.all(
+      localCodes.map(async (code) => {
+        try {
+          const res = await api.getTakenEmojis(code);
+          entries.set(code, { gameType: res.gameType, status: res.status, resume: false });
+        } catch (e) {
+          // Only drop the session on a definitive "no such room" — a
+          // network hiccup while the home screen loads shouldn't make a
+          // perfectly fine session vanish from under the user.
+          if (e.status === 404) clearSession(code);
+        }
+      })
+    );
   }
-
-  // Local (guest) sessions this account list doesn't already cover — e.g.
-  // played without being logged in, or on a device the account has no
-  // matching player row for.
-  const localCodes = listSessionCodes().filter((code) => !entries.has(code));
-  await Promise.all(
-    localCodes.map(async (code) => {
-      try {
-        const res = await api.getTakenEmojis(code);
-        entries.set(code, { gameType: res.gameType, status: res.status, resume: false });
-      } catch (e) {
-        // Only drop the session on a definitive "no such room" — a network
-        // hiccup while the home screen loads shouldn't make a perfectly
-        // fine session vanish from under the user.
-        if (e.status === 404) clearSession(code);
-      }
-    })
-  );
 
   entries.forEach((info, code) => {
     const path = info.gameType === "fanty" ? `/fanty/r/${code}` : `/r/${code}`;
@@ -116,7 +120,6 @@ function renderAccountCorner(sessionPromise) {
           logoutBtn.disabled = true;
           try {
             await authApi.logout();
-            clearAllSessions();
             navigate("/");
           } catch (e) {
             logoutBtn.disabled = false;
