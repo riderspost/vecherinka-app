@@ -17,6 +17,11 @@ async function request(method, path, body) {
     const message = (data && data.error) || "Ошибка сети";
     const err = new Error(message);
     if (data && typeof data === "object") Object.assign(err, data);
+    // A genuine server response (even an error one) reached us — status is
+    // what lets callers tell "the server says you're not in this room
+    // anymore" apart from a network blip, which never gets this far and so
+    // never sets it.
+    err.status = res.status;
     throw err;
   }
   return data;

@@ -26,7 +26,10 @@ function renderReturnSection(section) {
     try {
       res = await api.getTakenEmojis(code);
     } catch (e) {
-      clearSession(code);
+      // Only drop the session on a definitive "no such room" — a network
+      // hiccup while the home screen loads shouldn't make a perfectly
+      // fine session vanish from under the user.
+      if (e.status === 404) clearSession(code);
       return;
     }
     const path = res.gameType === "fanty" ? `/fanty/r/${code}` : `/r/${code}`;

@@ -102,11 +102,18 @@ export function mountRoomPage(container, code, opts) {
         const state = await api.getState(code, token);
         render(state, token);
       } catch (e) {
-        clearSession(code);
-        container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
-        const backBtn = document.getElementById("back-home");
-        if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
-        return;
+        // Only a definitive "you're not in this room" response from the
+        // server ends the session here — a dropped connection or a
+        // momentary server hiccup throws too, but with no e.status (fetch
+        // never got a response), and should just retry next tick instead
+        // of wiping a perfectly fine session.
+        if (e.status === 401 || e.status === 403 || e.status === 404) {
+          clearSession(code);
+          container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
+          const backBtn = document.getElementById("back-home");
+          if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
+          return;
+        }
       }
       if (!stopped) pollTimer = setTimeout(tick, POLL_MS);
     }

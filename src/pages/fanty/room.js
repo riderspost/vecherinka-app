@@ -180,11 +180,18 @@ export function mountFantyRoomPage(container, code, opts) {
             render(state, token);
           }
         } catch (e) {
-          clearSession(code);
-          container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
-          const backBtn = document.getElementById("back-home");
-          if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
-          return;
+          // Only a definitive "you're not in this room" response from the
+          // server (room gone, player gone/removed) ends the session here.
+          // A dropped wifi connection or a momentary server hiccup throws
+          // too, but with no e.status (fetch never got a response) — that
+          // should just retry next tick, not wipe a perfectly fine session.
+          if (e.status === 401 || e.status === 403 || e.status === 404) {
+            clearSession(code);
+            container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
+            const backBtn = document.getElementById("back-home");
+            if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
+            return;
+          }
         }
       }
       if (!stopped) pollTimer = setTimeout(tick, POLL_MS);
