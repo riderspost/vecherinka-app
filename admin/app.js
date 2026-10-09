@@ -1232,6 +1232,14 @@ async function refreshRooms() {
         r.hostAuthenticated
           ? ` <span class="tag-pill tag-author" title="${escapeHtml(r.hostEmail || "")}">аккаунт</span>`
           : ` <span class="tag-pill tag-kind">аноним</span>`
+      }${
+        r.hostRoomCount > 1
+          ? ` <span class="tag-pill tag-timer" title="${
+              r.hostAuthenticated
+                ? "Этот аккаунт — хост ещё " + (r.hostRoomCount - 1) + " комнат(ы) из списка ниже"
+                : "Совпадение имени и аватарки с ещё " + (r.hostRoomCount - 1) + " комнатой(ами) ниже — возможно, тот же человек"
+            }">×${r.hostRoomCount}</span>`
+          : ""
       }</td>
         <td>${r.playerCount}</td>
         <td>${r.roundsPlayed}</td>

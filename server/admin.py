@@ -96,9 +96,10 @@ def admin_list_rooms():
     db = get_db()
     rooms = db.execute("SELECT * FROM rooms ORDER BY created_at DESC").fetchall()
     result = []
+    group_keys = []
     for r in rooms:
         host = db.execute(
-            """SELECT p.name, p.user_id, u.email AS user_email
+            """SELECT p.name, p.avatar_type, p.avatar_value, p.user_id, u.email AS user_email
                FROM players p LEFT JOIN users u ON u.id = p.user_id
                WHERE p.room_id = ? AND p.is_host = 1 LIMIT 1""",
             (r["id"],),
@@ -117,13 +118,27 @@ def admin_list_rooms():
             "SELECT CAST((julianday('now') - julianday(?)) * 24 * 60 AS INTEGER) AS m",
             (r["last_active_at"],),
         ).fetchone()["m"]
+        is_authenticated = bool(host and host["user_id"])
+        # Authenticated hosts group exactly, by account. Anonymous hosts have
+        # no such identity to key off, so group by name+avatar instead — a
+        # guess (two strangers could pick the same name/emoji), not proof,
+        # but it's the only repeatable signal an anonymous host leaves
+        # behind, and good enough to flag "probably the same person made
+        # several rooms" for a human reviewing the list.
+        if is_authenticated:
+            group_key = ("user", host["user_id"])
+        elif host:
+            group_key = ("anon", host["name"], host["avatar_type"], host["avatar_value"])
+        else:
+            group_key = None
+        group_keys.append(group_key)
         result.append(
             {
                 "code": r["code"],
                 "gameType": r["game_type"],
                 "status": r["status"],
                 "hostName": host["name"] if host else None,
-                "hostAuthenticated": bool(host and host["user_id"]),
+                "hostAuthenticated": is_authenticated,
                 "hostEmail": host["user_email"] if host else None,
                 "playerCount": player_count,
                 "roundsPlayed": rounds_played,
@@ -131,6 +146,14 @@ def admin_list_rooms():
                 "idleMinutes": idle_minutes,
             }
         )
+
+    group_counts = {}
+    for key in group_keys:
+        if key is not None:
+            group_counts[key] = group_counts.get(key, 0) + 1
+    for room, key in zip(result, group_keys):
+        room["hostRoomCount"] = group_counts[key] if key is not None else 1
+
     return jsonify(result)
 
 
