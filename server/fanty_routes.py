@@ -100,8 +100,8 @@ def add_local_player(code):
         return error("Только хост может добавлять локальных игроков")
     if room["device_mode"] != "local":
         return error("Добавление игроков доступно только в локальном режиме")
-    if room["status"] != "lobby":
-        return error("Игра уже началась")
+    if room["status"] not in ("lobby", "playing"):
+        return error("Игра уже завершена")
 
     settings = fg.get_settings(db, room["id"])
     gender = data.get("gender") if data.get("gender") in ("m", "f") else None
@@ -116,6 +116,27 @@ def add_local_player(code):
         return error(e.message, e.status)
     db.commit()
     return jsonify({"ok": True, "playerId": player_id})
+
+
+@fanty_bp.route("/rooms/<code>/players/<player_id>", methods=["DELETE"])
+def remove_player(code, player_id):
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    token = request.args.get("token") or (request.get_json(silent=True) or {}).get("token")
+    host = get_player_or_404(db, room["id"], token)
+    if not host or not host["is_host"]:
+        return error("Только организатор может удалить игрока", 403)
+    if room["status"] not in ("lobby", "playing"):
+        return error("Игра уже завершена")
+    if player_id == host["id"]:
+        return error("Нельзя удалить самого себя")
+
+    ok, message = fg.remove_player(db, room, player_id)
+    if not ok:
+        return error(message)
+    return jsonify({"ok": True})
 
 
 @fanty_bp.route("/rooms/<code>/start", methods=["POST"])
@@ -380,7 +401,7 @@ def _build_summary(db, room):
 
 def _build_state(db, room, player):
     players = db.execute(
-        "SELECT * FROM players WHERE room_id = ? ORDER BY joined_at", (room["id"],)
+        "SELECT * FROM players WHERE room_id = ? AND left_at IS NULL ORDER BY joined_at", (room["id"],)
     ).fetchall()
     active_players = [p for p in players if not p["is_display"]]
     settings = fg.get_settings(db, room["id"])
@@ -478,8 +499,15 @@ def state(code):
     room = _room_or_404(db, code)
     if not room:
         return error("Комната не найдена", 404)
-    player = get_player_or_404(db, room["id"], request.args.get("token"))
+    token = request.args.get("token")
+    player = get_player_or_404(db, room["id"], token)
     if not player:
+        left = db.execute(
+            "SELECT 1 FROM players WHERE room_id = ? AND token = ? AND left_at IS NOT NULL",
+            (room["id"], token),
+        ).fetchone()
+        if left:
+            return error("Вас удалили из игры", 403)
         return error("Игрок не найден", 404)
     return jsonify(_build_state(db, room, player))
 

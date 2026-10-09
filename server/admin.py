@@ -101,7 +101,8 @@ def admin_list_rooms():
             "SELECT name FROM players WHERE room_id = ? AND is_host = 1 LIMIT 1", (r["id"],)
         ).fetchone()
         player_count = db.execute(
-            "SELECT COUNT(*) AS c FROM players WHERE room_id = ? AND is_display = 0", (r["id"],)
+            "SELECT COUNT(*) AS c FROM players WHERE room_id = ? AND is_display = 0 AND left_at IS NULL",
+            (r["id"],),
         ).fetchone()["c"]
         if r["game_type"] == "fanty":
             rounds_played = db.execute(

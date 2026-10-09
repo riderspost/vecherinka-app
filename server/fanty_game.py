@@ -33,7 +33,7 @@ _lock = threading.Lock()
 
 def get_active_players(db, room_id):
     return db.execute(
-        "SELECT * FROM players WHERE room_id = ? AND is_display = 0 ORDER BY joined_at",
+        "SELECT * FROM players WHERE room_id = ? AND is_display = 0 AND left_at IS NULL ORDER BY joined_at",
         (room_id,),
     ).fetchall()
 
@@ -282,6 +282,59 @@ def spin_partner(db, room):
             (partner, dare_id, room["id"]),
         )
         db.commit()
+
+
+def remove_player(db, room, player_id):
+    """Soft-removes a player mid-game (host action). Returns (ok, error_message).
+
+    A hard DELETE would hit fanty_rounds.picked_player_id/partner_player_id —
+    those have no ON DELETE clause, so removing anyone who's already played a
+    round would raise an IntegrityError. Marking left_at instead keeps round
+    history intact and is what get_active_players/get_player_or_404 already
+    treat as "not in the game" everywhere else.
+    """
+    with _lock:
+        player = db.execute(
+            "SELECT * FROM players WHERE id = ? AND room_id = ? AND is_display = 0",
+            (player_id, room["id"]),
+        ).fetchone()
+        if not player or player["left_at"] is not None:
+            return False, "Игрок не найден"
+        if player["is_host"]:
+            return False, "Нельзя удалить организатора"
+
+        settings = get_settings(db, room["id"])
+        remaining = [p for p in get_active_players(db, room["id"]) if p["id"] != player_id]
+        if len(remaining) < min_players_for(settings["game_mode"]):
+            return False, f"Останется слишком мало игроков (минимум {min_players_for(settings['game_mode'])})"
+        if gender_required(settings) and not has_both_genders(remaining):
+            return False, "Нужны игроки обоих полов для этого режима"
+
+        db.execute(
+            "UPDATE players SET left_at = ? WHERE id = ?",
+            (datetime.utcnow().isoformat() + "Z", player_id),
+        )
+
+        state = get_state(db, room["id"])
+        remaining_ids = [p["id"] for p in remaining]
+        involved = player_id in (state["next_spinner_id"], state["current_picked_id"], state["current_partner_id"])
+        if involved and remaining_ids:
+            # The round this player was part of can't continue — void it and
+            # hand the bottle to whoever's left, same as a normal round
+            # handoff, rather than trying to patch a half-finished round.
+            fallback_spinner = (
+                state["next_spinner_id"] if state["next_spinner_id"] in remaining_ids else remaining_ids[0]
+            )
+            db.execute(
+                """UPDATE fanty_state SET phase='ready_to_spin', next_spinner_id=?,
+                   current_picked_id=NULL, current_partner_id=NULL, current_choice=NULL,
+                   current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL,
+                   performance_started_at=NULL
+                   WHERE room_id=?""",
+                (fallback_spinner, room["id"]),
+            )
+        db.commit()
+        return True, None
 
 
 def format_team_text(text, player1, player2):

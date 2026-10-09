@@ -536,6 +536,10 @@ label {
   margin: 0 auto;
 }
 
+.link-btn.danger-text {
+  color: #ff8a8a;
+}
+
 .player-list {
   display: flex;
   flex-wrap: wrap;
@@ -551,6 +555,12 @@ label {
   padding: 8px 12px;
   border-radius: 999px;
   font-size: 14px;
+}
+
+.player-chip .link-btn {
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
 }
 
 .avatar-emoji {

@@ -144,7 +144,7 @@ def get_player_or_404(db, room_id, token):
     if not token:
         return None
     return db.execute(
-        "SELECT * FROM players WHERE room_id = ? AND token = ?", (room_id, token)
+        "SELECT * FROM players WHERE room_id = ? AND token = ? AND left_at IS NULL", (room_id, token)
     ).fetchone()
 
 

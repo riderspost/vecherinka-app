@@ -64,6 +64,8 @@ export const fantyApi = {
   createRoom: (payload) => request("POST", "/api/fanty/rooms", payload),
   addLocalPlayer: (code, token, name, avatarType, avatarValue, gender) =>
     request("POST", `/api/fanty/rooms/${code}/local-players`, { token, name, avatarType, avatarValue, gender }),
+  removePlayer: (code, token, playerId) =>
+    request("DELETE", `/api/fanty/rooms/${code}/players/${playerId}?token=${encodeURIComponent(token)}`),
   start: (code, token) => request("POST", `/api/fanty/rooms/${code}/start`, { token }),
   getState: (code, token) =>
     request("GET", `/api/fanty/rooms/${code}/state?token=${encodeURIComponent(token)}`),

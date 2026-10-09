@@ -196,7 +196,11 @@ def join_room(code):
 
     data = request.get_json(silent=True) or {}
     is_display = bool(data.get("isDisplay"))
-    if not is_display and room["status"] != "lobby":
+    # Fanty specifically allows a new friend to join while a round is
+    # already in progress — the sentence game's round/submission flow isn't
+    # built for that, so it still stays lobby-only.
+    mid_game_allowed = room["game_type"] == "fanty" and room["status"] == "playing"
+    if not is_display and room["status"] != "lobby" and not mid_game_allowed:
         return error("Игра уже началась, подключиться нельзя")
     if not is_display and room["device_mode"] == "local":
         return error("Эта комната только для локальных игроков — попросите организатора добавить вас")

@@ -65,6 +65,10 @@ export function mountFantyRoomPage(container, code, opts) {
   // the add-player form, no start button in sight). Persisted across the
   // poll-driven re-renders the same way likedContentIds is.
   const lobbyUi = { view: "choice" };
+  // Whether the host's "manage players" panel is expanded during "playing"
+  // — persisted the same way lobbyUi is, so it survives poll-driven
+  // re-renders of the playing screen instead of collapsing every 1.5s.
+  const manageUi = { open: false };
 
   function stop() {
     stopped = true;
@@ -294,7 +298,7 @@ export function mountFantyRoomPage(container, code, opts) {
       };
 
       if (state.room.status === "lobby") renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
-      else if (state.room.status === "playing") renderPlaying(wrap, state, token, code, ctrl);
+      else if (state.room.status === "playing") renderPlaying(wrap, state, token, code, ctrl, manageUi);
       else if (state.room.status === "finished") renderFinished(wrap, state, token, code);
     }
 
@@ -306,7 +310,7 @@ export function mountFantyRoomPage(container, code, opts) {
   }
 }
 
-function playersList(players) {
+function playersList(players, onRemove) {
   const list = document.createElement("div");
   list.className = "player-list";
   players.forEach((p) => {
@@ -315,9 +319,82 @@ function playersList(players) {
     item.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>${
       p.isHost ? '<span class="host-badge">хост</span>' : ""
     }`;
+    if (onRemove && !p.isHost) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "link-btn danger-text";
+      removeBtn.textContent = "Удалить";
+      removeBtn.addEventListener("click", () => onRemove(p, removeBtn));
+      item.appendChild(removeBtn);
+    }
     list.appendChild(item);
   });
   return list;
+}
+
+async function buildAddPlayerForm(code, token, needsGender, onAdded) {
+  const addCard = document.createElement("div");
+  addCard.className = "card-inline";
+
+  const nameInput = document.createElement("input");
+  nameInput.className = "text-input";
+  nameInput.placeholder = "Имя игрока";
+  nameInput.maxLength = 30;
+
+  let takenEmojis = [];
+  try {
+    const res = await api.getTakenEmojis(code);
+    takenEmojis = res.taken || [];
+  } catch (e) {
+    takenEmojis = [];
+  }
+  const picker = createAvatarPicker(null, takenEmojis);
+
+  const genderLabel = document.createElement("label");
+  genderLabel.textContent = "Пол";
+  const genderGroup = genderRadioGroup(null);
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "btn";
+  addBtn.textContent = "Добавить";
+  const addErr = document.createElement("div");
+  addErr.className = "error-msg";
+
+  addBtn.addEventListener("click", async () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      addErr.textContent = "Введите имя";
+      return;
+    }
+    const gender = needsGender ? genderGroup.getValue() : null;
+    if (needsGender && !gender) {
+      addErr.textContent = "Выберите пол";
+      return;
+    }
+    if (picker.isUploading()) {
+      addErr.textContent = "Дождитесь загрузки фото";
+      return;
+    }
+    addBtn.disabled = true;
+    addErr.textContent = "";
+    try {
+      const avatar = picker.getValue();
+      await fantyApi.addLocalPlayer(code, token, name, avatar.avatarType, avatar.avatarValue, gender);
+      onAdded();
+    } catch (e) {
+      addErr.textContent = e.message;
+      addBtn.disabled = false;
+    }
+  });
+
+  addCard.appendChild(nameInput);
+  addCard.appendChild(picker.element);
+  if (needsGender) {
+    addCard.appendChild(genderLabel);
+    addCard.appendChild(genderGroup.element);
+  }
+  addCard.appendChild(addErr);
+  addCard.appendChild(addBtn);
+  return addCard;
 }
 
 async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
@@ -349,75 +426,17 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   const showAddForm = isLocalHost && !showChoiceScreen;
 
   if (showAddForm) {
-    const addCard = document.createElement("div");
-    addCard.className = "card-inline";
     const label = document.createElement("p");
     label.className = "tagline";
     label.textContent = "Добавить игрока за этим устройством:";
-    addCard.appendChild(label);
-
-    const nameInput = document.createElement("input");
-    nameInput.className = "text-input";
-    nameInput.placeholder = "Имя игрока";
-    nameInput.maxLength = 30;
-    let takenEmojis = [];
-    try {
-      const res = await api.getTakenEmojis(code);
-      takenEmojis = res.taken || [];
-    } catch (e) {
-      takenEmojis = [];
-    }
-    const picker = createAvatarPicker(null, takenEmojis);
+    wrap.appendChild(label);
 
     const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
-    const genderLabel = document.createElement("label");
-    genderLabel.textContent = "Пол";
-    const genderGroup = genderRadioGroup(null);
-
-    const addBtn = document.createElement("button");
-    addBtn.className = "btn";
-    addBtn.textContent = "Добавить";
-    const addErr = document.createElement("div");
-    addErr.className = "error-msg";
-
-    addBtn.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      if (!name) {
-        addErr.textContent = "Введите имя";
-        return;
-      }
-      const gender = needsGender ? genderGroup.getValue() : null;
-      if (needsGender && !gender) {
-        addErr.textContent = "Выберите пол";
-        return;
-      }
-      if (picker.isUploading()) {
-        addErr.textContent = "Дождитесь загрузки фото";
-        return;
-      }
-      addBtn.disabled = true;
-      addErr.textContent = "";
-      try {
-        const avatar = picker.getValue();
-        await fantyApi.addLocalPlayer(code, token, name, avatar.avatarType, avatar.avatarValue, gender);
-        lobbyUi.view = "choice";
-        const fresh = await fantyApi.getState(code, token);
-        await renderLobby(wrap, fresh, token, code, switchPlayer, lobbyUi);
-        return;
-      } catch (e) {
-        addErr.textContent = e.message;
-        addBtn.disabled = false;
-      }
+    const addCard = await buildAddPlayerForm(code, token, needsGender, async () => {
+      lobbyUi.view = "choice";
+      const fresh = await fantyApi.getState(code, token);
+      await renderLobby(wrap, fresh, token, code, switchPlayer, lobbyUi);
     });
-
-    addCard.appendChild(nameInput);
-    addCard.appendChild(picker.element);
-    if (needsGender) {
-      addCard.appendChild(genderLabel);
-      addCard.appendChild(genderGroup.element);
-    }
-    addCard.appendChild(addErr);
-    addCard.appendChild(addBtn);
     wrap.appendChild(addCard);
 
     // Only offer a way back to the choice screen when the form is showing
@@ -637,7 +656,7 @@ async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, fre
   ctrl.rerender(freshState);
 }
 
-function renderPlaying(wrap, state, token, code, ctrl) {
+async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   const players = state.players.filter((p) => !p.isDisplay);
   const fanty = state.fanty;
 
@@ -666,6 +685,10 @@ function renderPlaying(wrap, state, token, code, ctrl) {
   if (oldPanel) oldPanel.remove();
   const oldEndBtn = wrap.querySelector(".end-game-btn");
   if (oldEndBtn) oldEndBtn.remove();
+  const oldManageBtn = wrap.querySelector(".manage-players-btn");
+  if (oldManageBtn) oldManageBtn.remove();
+  const oldManageCard = wrap.querySelector(".manage-players-card");
+  if (oldManageCard) oldManageCard.remove();
 
   const panel = document.createElement("div");
   panel.className = "fanty-panel";
@@ -789,6 +812,65 @@ function renderPlaying(wrap, state, token, code, ctrl) {
       }
     });
     wrap.appendChild(endBtn);
+  }
+
+  if (state.me.isHost) {
+    const manageBtn = document.createElement("button");
+    manageBtn.className = "btn manage-players-btn";
+    manageBtn.style.marginTop = "16px";
+    manageBtn.textContent = manageUi.open ? "Скрыть управление игроками" : "👥 Управление игроками";
+    manageBtn.addEventListener("click", () => {
+      manageUi.open = !manageUi.open;
+      renderPlaying(wrap, state, token, code, ctrl, manageUi);
+    });
+    wrap.appendChild(manageBtn);
+
+    if (manageUi.open) {
+      const manageCard = document.createElement("div");
+      manageCard.className = "card-inline manage-players-card";
+
+      manageCard.appendChild(
+        playersList(players, async (p, removeBtn) => {
+          if (!confirm(`Удалить ${p.name} из игры?`)) return;
+          removeBtn.disabled = true;
+          try {
+            await fantyApi.removePlayer(code, token, p.id);
+            const fresh = await fantyApi.getState(code, token);
+            ctrl.rerender(fresh);
+          } catch (e) {
+            alert(e.message);
+            removeBtn.disabled = false;
+          }
+        })
+      );
+
+      if (state.room.deviceMode === "local") {
+        const label = document.createElement("p");
+        label.className = "tagline";
+        label.textContent = "Добавить игрока за этим устройством:";
+        manageCard.appendChild(label);
+
+        const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
+        const addCard = await buildAddPlayerForm(code, token, needsGender, async () => {
+          const fresh = await fantyApi.getState(code, token);
+          ctrl.rerender(fresh);
+        });
+        manageCard.appendChild(addCard);
+      } else {
+        const shareUrl = `${window.location.origin}/fanty/r/${code}`;
+        const copyBtn = document.createElement("button");
+        copyBtn.className = "btn";
+        copyBtn.textContent = "Скопировать ссылку для нового игрока";
+        copyBtn.addEventListener("click", () => {
+          navigator.clipboard.writeText(shareUrl).catch(() => {});
+          copyBtn.textContent = "Скопировано!";
+          setTimeout(() => (copyBtn.textContent = "Скопировать ссылку для нового игрока"), 1500);
+        });
+        manageCard.appendChild(copyBtn);
+      }
+
+      wrap.appendChild(manageCard);
+    }
   }
 }
 
