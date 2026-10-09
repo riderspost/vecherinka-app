@@ -171,6 +171,42 @@ body {
   opacity: 0.5;
 }
 
+.return-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.return-session-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.return-session-emoji {
+  font-size: 24px;
+  flex: 0 0 auto;
+}
+
+.return-session-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.return-session-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .game-cards {
   display: flex;
   flex-direction: column;

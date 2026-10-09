@@ -1,6 +1,48 @@
 import { navigate } from "../router.js";
-import { authApi } from "../api.js";
+import { api, authApi } from "../api.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
+import { listSessionCodes, clearSession } from "../storage.js";
+import { escapeHtml } from "../utils.js";
+
+// Covers both games' status vocabularies — fanty's is just
+// lobby/playing/finished, the sentence game's tracks every round phase
+// directly in room.status instead of a separate sub-phase field.
+const ROOM_STATUS_LABEL = {
+  lobby: "в лобби, ждём игроков",
+  playing: "игра идёт",
+  finished: "игра завершена",
+  answering: "игра идёт",
+  voting: "игра идёт",
+  voting_results: "игра идёт",
+  round_results: "игра идёт",
+  overall_results: "игра идёт",
+  final_results: "игра завершена",
+};
+
+function renderReturnSection(section) {
+  const codes = listSessionCodes();
+  codes.forEach(async (code) => {
+    let res;
+    try {
+      res = await api.getTakenEmojis(code);
+    } catch (e) {
+      clearSession(code);
+      return;
+    }
+    const path = res.gameType === "fanty" ? `/fanty/r/${code}` : `/r/${code}`;
+    const card = document.createElement("button");
+    card.className = "return-session-card";
+    card.innerHTML = `
+      <span class="return-session-emoji">${res.gameType === "fanty" ? "🍾" : "✏️"}</span>
+      <span>
+        <span class="return-session-title">Вернуться в комнату ${escapeHtml(code)}</span><br/>
+        <span class="return-session-sub">${escapeHtml(ROOM_STATUS_LABEL[res.status] || res.status)}</span>
+      </span>
+    `;
+    card.addEventListener("click", () => navigate(path));
+    section.appendChild(card);
+  });
+}
 
 function renderAccountCorner(sessionPromise) {
   const corner = document.createElement("div");
@@ -62,6 +104,11 @@ export function renderGamePicker(container) {
     <h1 class="logo">🎉 Вечеринка</h1>
     <p class="tagline">Выберите игру для компании</p>
   `;
+
+  const returnSection = document.createElement("div");
+  returnSection.className = "return-sessions";
+  wrap.appendChild(returnSection);
+  renderReturnSection(returnSection);
 
   const cards = document.createElement("div");
   cards.className = "game-cards";
