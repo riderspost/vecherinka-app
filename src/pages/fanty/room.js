@@ -586,17 +586,20 @@ function renderBottleCircle(players, fanty, ctrl) {
     }
   }
 
-  // The player list (and so the seat layout) can't change once a fanty
-  // game is "playing" — nobody can join or leave mid-round. So once the
-  // circle is built, every later call just reuses it wholesale and only
-  // updates the picked/partner highlight + the bottle's angle in place,
-  // instead of tearing down and rebuilding every seat/avatar/bottle on
-  // every poll-detected state change. That full rebuild was the actual
-  // source of the flicker, especially visible on photo avatars (the
-  // service worker never caches /uploads/, so each rebuilt <img> forced a
-  // real network re-fetch) — reusing just the <img> node wasn't enough on
-  // its own, since it still got reparented through a freshly-created
-  // wrapper chain on every render.
+  // The player list (and so the seat layout) stays the same between most
+  // poll ticks — only a host add/remove between rounds actually changes
+  // it. So as long as playerKey matches, every call just reuses the circle
+  // wholesale and only updates the picked/partner highlight + the
+  // bottle's angle in place, instead of tearing down and rebuilding every
+  // seat/avatar/bottle on every poll-detected state change. That full
+  // rebuild was the actual source of the flicker, especially visible on
+  // photo avatars (the service worker never caches /uploads/, so each
+  // rebuilt <img> forced a real network re-fetch) — reusing just the
+  // <img> node wasn't enough on its own, since it still got reparented
+  // through a freshly-created wrapper chain on every render. A changed
+  // playerKey (someone added/removed) still falls through to a full
+  // rebuild below — the caller is responsible for swapping it into the
+  // DOM in place of the old one.
   const existing = ctrl ? ctrl.getCircleWrap() : null;
   if (existing && existing.__playerKey === playerKey) {
     existing.querySelectorAll(".circle-seat").forEach((seatEl) => {
@@ -685,6 +688,13 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
 
   const { circleWrap, bottle } = renderBottleCircle(players, fanty, ctrl);
   if (circleWrap.parentNode !== wrap) {
+    // renderBottleCircle only returns a *new* element when the player list
+    // changed (a different seat layout) — now that players can actually be
+    // added/removed mid-game, that's a real case, not just a first render.
+    // Drop whatever stale circle is already sitting in wrap first, or the
+    // old and new ones both end up attached side by side.
+    const staleCircle = wrap.querySelector(".bottle-circle");
+    if (staleCircle && staleCircle !== circleWrap) staleCircle.remove();
     wrap.appendChild(circleWrap);
   }
 
@@ -707,6 +717,17 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
       btn.textContent = "Крутить бутылку!";
       btn.addEventListener("click", async () => {
         btn.disabled = true;
+        // The manage-players panel only ever shows during ready_to_spin,
+        // but the spin animation keeps the screen frozen (poll renders are
+        // skipped while animating) for ~9s before the next real render —
+        // reset the flag so it doesn't silently reopen expanded once the
+        // round ends, and also rip the panel out of the DOM right now so
+        // it doesn't just sit there through the whole spin animation.
+        manageUi.open = false;
+        const openManageCard = wrap.querySelector(".manage-players-card");
+        if (openManageCard) openManageCard.remove();
+        const openManageBtn = wrap.querySelector(".manage-players-btn");
+        if (openManageBtn) openManageBtn.remove();
         // Set this before the network round-trips below, not after — on a
         // slow mobile connection those can take long enough for a poll tick
         // to land in between and wipe the bottle mid-spin (full screen
