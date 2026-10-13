@@ -196,17 +196,16 @@ def test_local_mode_host_adds_local_players(client):
     assert resp.status_code == 200
 
 
-def test_discard_requires_finished_status(client):
+def test_discard_works_from_any_status(client):
+    # The host's "Выйти из комнаты" button works at any point in the game,
+    # not just from the finished-game summary screen — discard is no
+    # longer status-gated.
     resp = create_fanty_room(client, game_mode="solo")
     body = resp.get_json()
     code, host_token = body["code"], body["token"]
     join_fanty(client, code, "Bob", "🐶")
     client.post(f"/api/fanty/rooms/{code}/start", json={"token": host_token})
 
-    resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
-    assert resp.status_code == 400
-
-    client.post(f"/api/fanty/rooms/{code}/end", json={"token": host_token})
     resp = client.post(f"/api/fanty/rooms/{code}/discard", json={"token": host_token})
     assert resp.status_code == 200
 

@@ -515,10 +515,11 @@ def advance_room(code):
 
 @app.route("/api/rooms/<code>/discard", methods=["POST"])
 def discard_room(code):
-    # Called when the host leaves the final-results screen. Players can join
-    # from their own devices in this game, so only the host's own exit counts
-    # as "we're done" — a non-host leaving shouldn't yank results away from
-    # everyone else who might still be looking at their screen.
+    # Called both when the host leaves the final-results screen and from
+    # the persistent "Выйти из комнаты" button, at any point in the game.
+    # Players can join from their own devices in this game, so only the
+    # host's own exit counts as "we're done" — a non-host leaving shouldn't
+    # yank the room away from everyone else still in it.
     db = get_db()
     room = get_room_or_404(db, code)
     if not room:
@@ -527,8 +528,6 @@ def discard_room(code):
     player = get_player_or_404(db, room["id"], data.get("token"))
     if not player or not player["is_host"]:
         return error("Только хост может завершить игру")
-    if room["status"] != "final_results":
-        return error("Можно удалить только завершённую игру")
 
     delete_room_and_files(db, room)
     return jsonify({"ok": True})

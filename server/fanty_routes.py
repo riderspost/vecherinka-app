@@ -314,11 +314,11 @@ def end_room(code):
 
 @fanty_bp.route("/rooms/<code>/discard", methods=["POST"])
 def discard_room(code):
-    # Called when the host leaves the finished-game summary screen — fanty
-    # rooms are single-device now, so that's the one clear "we're done"
-    # signal. Deletes the room (cascades to rounds/photos rows) and the
+    # Called both when the host leaves the finished-game summary screen and
+    # from the persistent "Выйти из комнаты" button, at any point in the
+    # game. Deletes the room (cascades to rounds/photos rows) and the
     # uploaded round-photo files themselves, so nothing from this party
-    # lingers on disk once nobody is looking at the summary any more.
+    # lingers on disk once the host is done with it.
     db = get_db()
     room = _room_or_404(db, code)
     if not room:
@@ -327,8 +327,6 @@ def discard_room(code):
     player = get_player_or_404(db, room["id"], data.get("token"))
     if not player or not player["is_host"]:
         return error("Только хост может завершить игру")
-    if room["status"] != "finished":
-        return error("Можно удалить только завершённую игру")
 
     delete_room_and_files(db, room)
     return jsonify({"ok": True})

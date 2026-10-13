@@ -185,12 +185,16 @@ def test_full_round_cycle_reaches_round_results(client):
     assert len(state["roundResults"]["roundScores"]) == 4
 
 
-def test_discard_requires_final_results_status(client):
+def test_discard_works_from_any_status(client, raw_db):
+    # The host's "Выйти из комнаты" button works at any point in the game,
+    # not just from the final-results screen — discard is no longer
+    # status-gated.
     code, tokens = make_room_with_players(client, n=2)
     host_token = tokens[0][1]
 
     resp = client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
 
 
 def test_discard_requires_host(client, raw_db):

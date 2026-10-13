@@ -1,10 +1,41 @@
-import { api } from "../api.js";
+import { api, authApi } from "../api.js";
 import { loadSession, saveSession, clearSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker, avatarHtml } from "../avatarPicker.js";
 import { escapeHtml } from "../utils.js";
 
 const POLL_MS = 1500;
+
+// Shared by the persistent "Выйти из комнаты" button and the final-results
+// screen's "На главную" — anonymous play has no account to resume from,
+// so leaving really does mean losing the room for good, which is worth a
+// confirmation; a logged-in user's account already keeps this safe, so no
+// extra prompt for them. Returns whether the user actually left (so a
+// caller can re-enable its button on cancel).
+async function leaveRoom(state, token, code) {
+  let authenticated = false;
+  try {
+    authenticated = Boolean((await authApi.session()).authenticated);
+  } catch (e) {
+    authenticated = false;
+  }
+  if (!authenticated) {
+    const ok = confirm(
+      "Если вы выйдете, комната будет потеряна — сохранить её можно только под аккаунтом. Выйти?"
+    );
+    if (!ok) return false;
+  }
+  if (state.me.isHost) {
+    try {
+      await api.discardRoom(code, token);
+    } catch (e) {
+      // best-effort cleanup — still leave even if this fails
+    }
+  }
+  clearSession(code);
+  navigate("/");
+  return true;
+}
 
 export function mountRoomPage(container, code, opts) {
   const asDisplay = Boolean(opts && opts.asDisplay);
@@ -155,6 +186,20 @@ export function mountRoomPage(container, code, opts) {
         setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
       });
       page.appendChild(displayBtn);
+
+      // Same "always available, not tucked into one screen" reasoning as
+      // the TV-link button above — closing the tab already abandoned a
+      // room just fine, this just makes leaving an explicit, intentional
+      // action instead of the only option being "give up silently".
+      const leaveBtn = document.createElement("button");
+      leaveBtn.className = "link-btn danger-text";
+      leaveBtn.textContent = "🚪 Выйти из комнаты";
+      leaveBtn.addEventListener("click", async () => {
+        leaveBtn.disabled = true;
+        const left = await leaveRoom(state, token, code);
+        if (!left) leaveBtn.disabled = false;
+      });
+      page.appendChild(leaveBtn);
     } else {
       page.appendChild(renderDisplayHeader(state, code));
     }
@@ -514,14 +559,8 @@ function renderFinalResults(wrap, state, token, code) {
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;
-      if (state.me.isHost) {
-        try {
-          await api.discardRoom(code, token);
-        } catch (e) {
-          // best-effort cleanup — still leave even if this fails
-        }
-      }
-      navigate("/");
+      const left = await leaveRoom(state, token, code);
+      if (!left) homeBtn.disabled = false;
     });
     wrap.appendChild(homeBtn);
   }
