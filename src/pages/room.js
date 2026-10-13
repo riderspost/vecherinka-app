@@ -120,13 +120,6 @@ export function mountRoomPage(container, code, opts) {
     tick();
   }
 
-  function switchPlayer() {
-    if (pollTimer) clearTimeout(pollTimer);
-    clearSession(code);
-    lastAnsweringKey = null;
-    renderJoinForm();
-  }
-
   function render(state, token) {
     const status = state.room.status;
 
@@ -156,7 +149,7 @@ export function mountRoomPage(container, code, opts) {
     page.appendChild(wrap);
     container.appendChild(page);
 
-    if (status === "lobby") renderLobby(wrap, state, token, code, switchPlayer);
+    if (status === "lobby") renderLobby(wrap, state, token, code);
     else if (status === "answering") renderAnswering(wrap, state, token, code);
     else if (status === "voting") renderVoting(wrap, state, token, code);
     else if (status === "voting_results") renderVotingResults(wrap, state, token, code);
@@ -212,7 +205,7 @@ function playersList(players) {
   return list;
 }
 
-function renderLobby(wrap, state, token, code, switchPlayer) {
+function renderLobby(wrap, state, token, code) {
   const shareUrl = `${window.location.origin}/r/${code}`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`;
 
@@ -270,16 +263,6 @@ function renderLobby(wrap, state, token, code, switchPlayer) {
       waitMsg.textContent = "Ждём, пока хост начнёт игру...";
       wrap.appendChild(waitMsg);
     }
-
-    const switchBtn = document.createElement("button");
-    switchBtn.className = "link-btn";
-    switchBtn.textContent = "Это не я — выйти и зайти другим игроком";
-    switchBtn.addEventListener("click", () => {
-      if (confirm("Выйти из комнаты как " + state.me.name + " и зайти новым игроком?")) {
-        switchPlayer();
-      }
-    });
-    wrap.appendChild(switchBtn);
   }
 }
 
