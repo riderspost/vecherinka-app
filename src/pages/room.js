@@ -140,6 +140,21 @@ export function mountRoomPage(container, code, opts) {
       meBadge.className = "me-badge";
       meBadge.innerHTML = `${avatarHtml(state.me)}<span>${escapeHtml(state.me.name)}</span>`;
       page.appendChild(meBadge);
+
+      // Kept outside the lobby-only renderLobby() on purpose — someone
+      // setting up the TV screen partway through the game (not just before
+      // it starts) needs this link too, and a full re-render on every poll
+      // tick is fine since it's just a button, same as meBadge above it.
+      const displayUrl = `${window.location.origin}/r/${code}/display`;
+      const displayBtn = document.createElement("button");
+      displayBtn.className = "link-btn";
+      displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
+      displayBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(displayUrl).catch(() => {});
+        displayBtn.textContent = "Скопировано!";
+        setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
+      });
+      page.appendChild(displayBtn);
     } else {
       page.appendChild(renderDisplayHeader(state, code));
     }
@@ -211,9 +226,10 @@ function renderLobby(wrap, state, token, code) {
 
   wrap.innerHTML = `
     <h1 class="logo">🎉 Комната ${escapeHtml(code)}</h1>
+    <img class="qr-code" src="${qrUrl}" alt="QR код" />
     ${
       state.me.isDisplay
-        ? `<img class="qr-code" src="${qrUrl}" alt="QR код" /><p class="tagline">Отсканируйте, чтобы присоединиться: ${shareUrl}</p>`
+        ? `<p class="tagline">Отсканируйте, чтобы присоединиться: ${shareUrl}</p>`
         : `<p class="tagline">Позовите друзей: <b>${shareUrl}</b></p>`
     }
     <p class="players-count">Игроков: ${state.players.filter((p) => !p.isDisplay).length} (минимум ${state.minPlayers})</p>
@@ -230,17 +246,6 @@ function renderLobby(wrap, state, token, code) {
       setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
     });
     wrap.appendChild(copyBtn);
-
-    const displayUrl = `${window.location.origin}/r/${code}/display`;
-    const displayBtn = document.createElement("button");
-    displayBtn.className = "btn";
-    displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
-    displayBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(displayUrl).catch(() => {});
-      displayBtn.textContent = "Скопировано!";
-      setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
-    });
-    wrap.appendChild(displayBtn);
 
     if (state.me.isHost) {
       const startBtn = document.createElement("button");
