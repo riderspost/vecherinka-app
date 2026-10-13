@@ -582,7 +582,17 @@ function renderBottleCircle(players, fanty, ctrl) {
   const radius = 42;
   const playerKey = players.map((p) => p.id).join(",");
 
-  const targetId = fanty.phase === "awaiting_partner_spin" ? fanty.pickedPlayerId : fanty.partnerPlayerId || fanty.pickedPlayerId;
+  // Between rounds (ready_to_spin), pickedPlayerId/partnerPlayerId are both
+  // cleared server-side — nextSpinnerId (who the bottle handed off to) is
+  // the only server-known "who it's resting on" left at that point. Without
+  // this fallback the bottle only looked right because of lastBottleAngle,
+  // a plain in-memory variable that resets to 0 on every page load — which
+  // is exactly why a refresh between rounds snapped it back to "up" instead
+  // of wherever it last actually landed.
+  const targetId =
+    fanty.phase === "awaiting_partner_spin"
+      ? fanty.pickedPlayerId
+      : fanty.partnerPlayerId || fanty.pickedPlayerId || fanty.nextSpinnerId;
   let staticAngle = ctrl ? ctrl.getLastAngle() : 0;
   if (targetId) {
     const idx = players.findIndex((p) => p.id === targetId);
