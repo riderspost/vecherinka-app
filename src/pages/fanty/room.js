@@ -248,6 +248,23 @@ export function mountFantyRoomPage(container, code, opts) {
             persistentMeBadgeEl = meBadge;
           }
           page.appendChild(persistentMeBadgeEl);
+
+          // Lives here, not inside renderLobby, so it survives the
+          // lobby->playing transition instead of vanishing the moment the
+          // game starts — someone setting up the TV screen mid-game needs
+          // this link too. page/wrap are only rebuilt on a status change,
+          // so this button (like the badge above it) naturally persists
+          // through every poll tick within "playing" without re-appending.
+          const displayUrl = `${window.location.origin}/fanty/r/${code}/display`;
+          const displayBtn = document.createElement("button");
+          displayBtn.className = "link-btn";
+          displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
+          displayBtn.addEventListener("click", () => {
+            navigator.clipboard.writeText(displayUrl).catch(() => {});
+            displayBtn.textContent = "Скопировано!";
+            setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
+          });
+          page.appendChild(displayBtn);
         }
 
         const wrap = document.createElement("div");
@@ -406,7 +423,6 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
 
 async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   const shareUrl = `${window.location.origin}/fanty/r/${code}`;
-  const displayUrl = `${window.location.origin}/fanty/r/${code}/display`;
   const players = state.players.filter((p) => !p.isDisplay);
   const modeLabel = GAME_MODES.find((m) => m.value === state.settings.gameMode)?.label || state.settings.gameMode;
 
@@ -472,16 +488,6 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
     });
     wrap.appendChild(copyBtn);
   }
-
-  const displayBtn = document.createElement("button");
-  displayBtn.className = "btn";
-  displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
-  displayBtn.addEventListener("click", () => {
-    navigator.clipboard.writeText(displayUrl).catch(() => {});
-    displayBtn.textContent = "Скопировано!";
-    setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
-  });
-  wrap.appendChild(displayBtn);
 
   if (showChoiceScreen) {
     const choiceRow = document.createElement("div");
