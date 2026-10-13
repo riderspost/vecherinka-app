@@ -458,6 +458,22 @@ label {
   min-height: 18px;
 }
 
+.guest-warning {
+  background: rgba(255, 210, 63, 0.1);
+  border: 1px solid rgba(255, 210, 63, 0.35);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  margin: 10px 0;
+}
+
+.guest-warning a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .success-msg {
   color: #7ee787;
   font-size: 14px;

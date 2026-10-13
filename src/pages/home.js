@@ -53,11 +53,24 @@ export function renderHome(container) {
     formHost.innerHTML = "";
 
     let profile = null;
+    let authenticated = false;
     try {
       const session = await authApi.session();
+      authenticated = Boolean(session.authenticated);
       if (session.authenticated && session.profileComplete) profile = session;
     } catch (e) {
       // not logged in or session check failed — fall back to a blank form
+    }
+
+    if (!authenticated) {
+      const warning = document.createElement("div");
+      warning.className = "guest-warning";
+      warning.innerHTML = `⚠️ Вы не вошли в аккаунт — если случайно закроете игру, вернуться в эту комнату будет нельзя. <a href="/account">Войти</a>`;
+      warning.querySelector("a").addEventListener("click", (e) => {
+        e.preventDefault();
+        navigate("/account");
+      });
+      formHost.appendChild(warning);
     }
 
     const nameInput = document.createElement("input");

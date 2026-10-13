@@ -1,7 +1,7 @@
 import { navigate } from "../router.js";
 import { api, authApi } from "../api.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../pwaInstall.js";
-import { listSessionCodes, clearSession, saveSession, forgetAccountLinkedSessions } from "../storage.js";
+import { saveSession, forgetAccountLinkedSessions } from "../storage.js";
 import { escapeHtml } from "../utils.js";
 
 // Covers both games' status vocabularies — fanty's is just
@@ -20,69 +20,43 @@ const ROOM_STATUS_LABEL = {
 };
 
 async function renderReturnSection(section, sessionPromise) {
-  // code -> { gameType, status, resume } — "resume" means this entry came
-  // from the logged-in account (no token sitting in localStorage yet, has
-  // to be fetched via /resume), not from a plain local guest session.
-  const entries = new Map();
-
+  // Returning to a room you've left is an account-only feature — a guest
+  // has no durable identity to look it up by, only whatever token happens
+  // to still be sitting in this specific browser's localStorage, which is
+  // exactly the "not actually yours" confusion this used to cause on a
+  // shared device. Logged-in users create/join rooms while asked to log
+  // in, at creation, with that linkage.
   let authenticated = false;
   try {
     authenticated = Boolean((await sessionPromise).authenticated);
   } catch (e) {
     authenticated = false;
   }
+  if (!authenticated) return;
 
-  if (authenticated) {
-    // Logged in: show exactly what this account is linked to server-side,
-    // nothing else — mixing in whatever this browser's localStorage
-    // happens to hold (a guest room played before logging in, or on a
-    // shared browser, someone else's) made the list look like it belonged
-    // to the account when most of it had nothing to do with it.
-    try {
-      const myRooms = await api.myRooms();
-      myRooms.forEach((r) => entries.set(r.code, { gameType: r.gameType, status: r.status, resume: true }));
-    } catch (e) {
-      // Account lookup failing just means an empty list here.
-    }
-  } else {
-    // Logged out (or never logged in): the only thing to offer back is
-    // whatever this browser itself remembers from playing as a guest.
-    const localCodes = listSessionCodes();
-    await Promise.all(
-      localCodes.map(async (code) => {
-        try {
-          const res = await api.getTakenEmojis(code);
-          entries.set(code, { gameType: res.gameType, status: res.status, resume: false });
-        } catch (e) {
-          // Only drop the session on a definitive "no such room" — a
-          // network hiccup while the home screen loads shouldn't make a
-          // perfectly fine session vanish from under the user.
-          if (e.status === 404) clearSession(code);
-        }
-      })
-    );
+  let myRooms;
+  try {
+    myRooms = await api.myRooms();
+  } catch (e) {
+    return;
   }
 
-  entries.forEach((info, code) => {
-    const path = info.gameType === "fanty" ? `/fanty/r/${code}` : `/r/${code}`;
+  myRooms.forEach((r) => {
+    const path = r.gameType === "fanty" ? `/fanty/r/${r.code}` : `/r/${r.code}`;
     const card = document.createElement("button");
     card.className = "return-session-card";
     card.innerHTML = `
-      <span class="return-session-emoji">${info.gameType === "fanty" ? "🍾" : "✏️"}</span>
+      <span class="return-session-emoji">${r.gameType === "fanty" ? "🍾" : "✏️"}</span>
       <span>
-        <span class="return-session-title">Вернуться в комнату ${escapeHtml(code)}</span><br/>
-        <span class="return-session-sub">${escapeHtml(ROOM_STATUS_LABEL[info.status] || info.status)}</span>
+        <span class="return-session-title">Вернуться в комнату ${escapeHtml(r.code)}</span><br/>
+        <span class="return-session-sub">${escapeHtml(ROOM_STATUS_LABEL[r.status] || r.status)}</span>
       </span>
     `;
     card.addEventListener("click", async () => {
-      if (!info.resume) {
-        navigate(path);
-        return;
-      }
       card.disabled = true;
       try {
-        const res = await api.resumeRoom(code);
-        saveSession(code, { token: res.token, playerId: res.playerId });
+        const res = await api.resumeRoom(r.code);
+        saveSession(r.code, { token: res.token, playerId: res.playerId });
         navigate(path);
       } catch (e) {
         alert(e.message);
