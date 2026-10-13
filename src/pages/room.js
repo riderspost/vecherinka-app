@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { loadSession, saveSession, clearSession } from "../storage.js";
+import { loadSession, saveSession, clearSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker, avatarHtml } from "../avatarPicker.js";
 import { escapeHtml } from "../utils.js";
@@ -80,7 +80,7 @@ export function mountRoomPage(container, code, opts) {
       errorEl.textContent = "";
       try {
         const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar });
+        const res = await api.joinRoom(code, { name, ...avatar, deviceId: getDeviceId() });
         saveSession(code, { token: res.token, playerId: res.playerId });
         startPolling(res.token);
       } catch (e) {

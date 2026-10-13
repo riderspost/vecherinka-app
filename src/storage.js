@@ -20,17 +20,23 @@ export function clearSession(code) {
   localStorage.removeItem(PREFIX + code.toUpperCase());
 }
 
-// Every room code this device has ever joined and hasn't since left —
-// used on the home screen to offer a way back in after an accidental exit
-// (the installed PWA's start_url is always "/", so without this a lost
-// session would otherwise just look like a brand-new, empty app).
-export function listSessionCodes() {
-  const codes = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith(PREFIX)) codes.push(key.slice(PREFIX.length));
+const DEVICE_ID_KEY = "vecherinka-device-id";
+
+// A single identifier for this browser, independent of any one room —
+// generated once and kept forever. The sentence game sends it along with
+// create/join so the server can refuse a second join from a device that's
+// already got a player in that room (its "у меня есть код" flow has no
+// login to key uniqueness off otherwise). Same trust model as the room
+// session tokens above: good enough to stop someone from casually joining
+// twice from one browser, not a defense against someone deliberately
+// clearing storage or switching browsers.
+export function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    localStorage.setItem(DEVICE_ID_KEY, id);
   }
-  return codes;
+  return id;
 }
 
 // Visiting the home screen while logged in (saveSession on a normal

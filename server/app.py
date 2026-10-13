@@ -30,6 +30,7 @@ from .rooms_common import (
     validate_avatar,
     create_room_and_host,
     add_player,
+    device_already_in_room,
     taken_emojis_for_room,
     resize_and_save_image,
     delete_room_and_files,
@@ -162,6 +163,7 @@ def create_room():
             data.get("avatarType"),
             data.get("avatarValue"),
             created_by_user_id=session.get("user_id"),
+            device_id=data.get("deviceId"),
         )
     except RoomError as e:
         return error(e.message, e.status)
@@ -240,6 +242,13 @@ def join_room(code):
     if not is_display and room["device_mode"] == "local":
         return error("Эта комната только для локальных игроков — попросите организатора добавить вас")
 
+    device_id = data.get("deviceId")
+    # Fanty's local mode deliberately puts several players on one device —
+    # that's the whole point of it. The sentence game has no such mode, so
+    # for it specifically, one browser only ever gets one seat per room.
+    if not is_display and room["game_type"] == "sentence" and device_already_in_room(db, room["id"], device_id):
+        return error("С этого устройства уже есть игрок в этой комнате")
+
     gender = None
     if not is_display and room["game_type"] == "fanty":
         settings = fg.get_settings(db, room["id"])
@@ -257,6 +266,7 @@ def join_room(code):
             is_display,
             gender=gender,
             user_id=session.get("user_id"),
+            device_id=device_id,
         )
     except RoomError as e:
         return error(e.message, e.status)

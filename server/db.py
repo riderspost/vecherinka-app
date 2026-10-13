@@ -68,6 +68,7 @@ def init_db():
     _ensure_column(db, "fanty_dares", "music_start_seconds", "music_start_seconds INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "players", "left_at", "left_at TEXT")
     _ensure_column(db, "players", "user_id", "user_id TEXT")
+    _ensure_column(db, "players", "device_id", "device_id TEXT")
     db.commit()
     db.close()
 

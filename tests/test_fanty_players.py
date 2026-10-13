@@ -149,6 +149,27 @@ def test_add_local_player_allowed_mid_game(client):
     assert any(p["name"] == "Carol" for p in state["players"])
 
 
+def test_fanty_remote_join_ignores_device_uniqueness(client):
+    # The one-device-one-player rule is sentence-game-only — fanty's own
+    # local mode is built entirely around one device hosting many players,
+    # and even in remote mode, two friends sharing a device to join
+    # shouldn't be blocked the way it is for the sentence game.
+    resp = create_fanty_room(client, game_mode="solo")
+    code = resp.get_json()["code"]
+
+    resp = client.post(
+        f"/api/rooms/{code}/join",
+        json={"name": "Bob", "avatarType": "emoji", "avatarValue": "🐶", "deviceId": "shared-device"},
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        f"/api/rooms/{code}/join",
+        json={"name": "Carol", "avatarType": "emoji", "avatarValue": "🦊", "deviceId": "shared-device"},
+    )
+    assert resp.status_code == 200
+
+
 def test_remote_join_allowed_mid_game_for_fanty(client):
     resp = create_fanty_room(client, game_mode="solo")
     body = resp.get_json()

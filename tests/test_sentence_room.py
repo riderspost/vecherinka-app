@@ -73,8 +73,63 @@ def test_join_after_start_blocked(client):
     resp = client.post(f"/api/rooms/{code}/start", json={"token": tokens[0][1]})
     assert resp.status_code == 200
 
-    resp = join(client, code, "Latecomer", "🦉")
+
+def test_second_join_from_same_device_blocked(client):
+    resp = client.post(
+        "/api/rooms",
+        json={"name": "Host", "avatarType": "emoji", "avatarValue": "🙂", "deviceId": "device-1"},
+    )
+    code = resp.get_json()["code"]
+
+    resp = client.post(
+        f"/api/rooms/{code}/join",
+        json={"name": "Bob", "avatarType": "emoji", "avatarValue": "🐶", "deviceId": "device-1"},
+    )
     assert resp.status_code == 400
+    assert "устройства" in resp.get_json()["error"]
+
+
+def test_join_from_different_device_allowed(client):
+    resp = client.post(
+        "/api/rooms",
+        json={"name": "Host", "avatarType": "emoji", "avatarValue": "🙂", "deviceId": "device-1"},
+    )
+    code = resp.get_json()["code"]
+
+    resp = client.post(
+        f"/api/rooms/{code}/join",
+        json={"name": "Bob", "avatarType": "emoji", "avatarValue": "🐶", "deviceId": "device-2"},
+    )
+    assert resp.status_code == 200
+
+
+def test_join_without_device_id_still_allowed(client):
+    # No deviceId sent at all (e.g. an older client) shouldn't block anyone —
+    # the check only fires when a deviceId is actually provided.
+    code, _tokens = make_room_with_players(client, n=1)
+    resp = join(client, code, "Bob", "🐶")
+    assert resp.status_code == 200
+
+
+def test_display_join_not_blocked_by_or_blocking_device_check(client):
+    resp = client.post(
+        "/api/rooms",
+        json={"name": "Host", "avatarType": "emoji", "avatarValue": "🙂", "deviceId": "device-1"},
+    )
+    code = resp.get_json()["code"]
+
+    # A display connection from the same device as the host isn't a real
+    # "second player" and shouldn't be blocked.
+    resp = client.post(f"/api/rooms/{code}/join", json={"name": "Экран", "isDisplay": True, "deviceId": "device-9"})
+    assert resp.status_code == 200
+
+    # Nor should the display's own device_id count as occupying that device
+    # for a later real player join.
+    resp = client.post(
+        f"/api/rooms/{code}/join",
+        json={"name": "Bob", "avatarType": "emoji", "avatarValue": "🐶", "deviceId": "device-9"},
+    )
+    assert resp.status_code == 200
 
 
 def test_full_round_cycle_reaches_round_results(client):

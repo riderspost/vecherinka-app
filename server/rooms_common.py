@@ -175,8 +175,29 @@ def validate_avatar(avatar_type, avatar_value):
     return "emoji", value[:8]
 
 
+def device_already_in_room(db, room_id, device_id):
+    """True if some non-display player in this room already carries this device_id."""
+    if not device_id:
+        return False
+    return (
+        db.execute(
+            "SELECT 1 FROM players WHERE room_id = ? AND is_display = 0 AND device_id = ? LIMIT 1",
+            (room_id, device_id),
+        ).fetchone()
+        is not None
+    )
+
+
 def create_room_and_host(
-    db, game_type, name, avatar_type, avatar_value, device_mode="remote", created_by_user_id=None, gender=None
+    db,
+    game_type,
+    name,
+    avatar_type,
+    avatar_value,
+    device_mode="remote",
+    created_by_user_id=None,
+    gender=None,
+    device_id=None,
 ):
     """Creates a room (in 'lobby' status) with the given host player. Returns (room_id, code, token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN)
@@ -208,14 +229,16 @@ def create_room_and_host(
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host, gender, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)""",
-        (player_id, room_id, token, name, avatar_type, avatar_value, gender, created_by_user_id),
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_host, gender, user_id, device_id)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)""",
+        (player_id, room_id, token, name, avatar_type, avatar_value, gender, created_by_user_id, device_id),
     )
     return room_id, code, token, player_id
 
 
-def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_host=False, gender=None, user_id=None):
+def add_player(
+    db, room, name, avatar_type, avatar_value, is_display=False, is_host=False, gender=None, user_id=None, device_id=None
+):
     """Validates + inserts a new player row (join, or host-added local player). Returns (token, player_id)."""
     name = clean_str(name, MAX_NAME_LEN) or ("Экран" if is_display else "")
     if not name:
@@ -236,8 +259,8 @@ def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_h
     player_id = gen_id()
     token = uuid.uuid4().hex
     db.execute(
-        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host, gender, user_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO players (id, room_id, token, name, avatar_type, avatar_value, is_display, is_host, gender, user_id, device_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             player_id,
             room["id"],
@@ -249,6 +272,7 @@ def add_player(db, room, name, avatar_type, avatar_value, is_display=False, is_h
             int(is_host),
             gender,
             None if is_display else user_id,
+            None if is_display else device_id,
         ),
     )
     return token, player_id

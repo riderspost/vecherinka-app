@@ -1,5 +1,5 @@
 import { api, authApi } from "../api.js";
-import { saveSession } from "../storage.js";
+import { saveSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker } from "../avatarPicker.js";
 
@@ -104,7 +104,7 @@ export function renderHome(container) {
       errorEl.textContent = "";
       try {
         const avatar = picker.getValue();
-        const res = await api.createRoom({ name, ...avatar });
+        const res = await api.createRoom({ name, ...avatar, deviceId: getDeviceId() });
         saveSession(res.code, { token: res.token, playerId: res.playerId });
         navigate(`/r/${res.code}`);
       } catch (e) {
@@ -246,7 +246,7 @@ export function renderHome(container) {
       errorEl.textContent = "";
       try {
         const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar });
+        const res = await api.joinRoom(code, { name, ...avatar, deviceId: getDeviceId() });
         saveSession(res.code, { token: res.token, playerId: res.playerId });
         navigate(`/r/${res.code}`);
       } catch (e) {
