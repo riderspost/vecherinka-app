@@ -7,11 +7,14 @@ import { escapeHtml } from "../utils.js";
 const POLL_MS = 1500;
 
 // Shared by the persistent "Выйти из комнаты" button and the final-results
-// screen's "На главную" — anonymous play has no account to resume from,
-// so leaving really does mean losing the room for good, which is worth a
-// confirmation; a logged-in user's account already keeps this safe, so no
-// extra prompt for them. Returns whether the user actually left (so a
-// caller can re-enable its button on cancel).
+// screen's "На главную". Anonymous play has no account to resume a room
+// from, so for the host specifically, leaving really does mean losing it
+// for good — hence the confirmation, and the room is discarded right then
+// since there's no other way back into it anyway. A logged-in host's room
+// stays — that's the whole point of being able to resume it later via
+// "Вернуться в комнату" — so no prompt and no discard call for them.
+// Returns whether the user actually left (so a caller can re-enable its
+// button on cancel).
 async function leaveRoom(state, token, code) {
   let authenticated = false;
   try {
@@ -24,12 +27,12 @@ async function leaveRoom(state, token, code) {
       "Если вы выйдете, комната будет потеряна — сохранить её можно только под аккаунтом. Выйти?"
     );
     if (!ok) return false;
-  }
-  if (state.me.isHost) {
-    try {
-      await api.discardRoom(code, token);
-    } catch (e) {
-      // best-effort cleanup — still leave even if this fails
+    if (state.me.isHost) {
+      try {
+        await api.discardRoom(code, token);
+      } catch (e) {
+        // best-effort cleanup — still leave even if this fails
+      }
     }
   }
   clearSession(code);
