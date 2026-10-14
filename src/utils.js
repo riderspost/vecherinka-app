@@ -7,34 +7,17 @@ export function escapeHtml(str) {
 const NAME_DISPLAY_LEN = 15;
 
 // Player names can be up to 20 characters (server-enforced), which is too
-// wide for the tight spaces names show up in during a game — seat labels
-// around the bottle, player chips, round announcements. Cuts it to
-// NAME_DISPLAY_LEN and appends a small dotted-circle "⋯" button that
-// expands it in place (wireNameTruncationClicks below) — names that
-// already fit are returned as plain escaped text, nothing clickable.
+// wide for the bottle-table seat labels in Fanty. Cuts it to
+// NAME_DISPLAY_LEN and wraps it in a span carrying both forms as data
+// attributes — renderBottleCircle (fanty/room.js) toggles between them when
+// the seat's avatar is clicked. Names that already fit are returned as
+// plain escaped text, nothing to toggle.
 export function truncatedNameHtml(name) {
   const full = name == null ? "" : String(name);
   if (full.length <= NAME_DISPLAY_LEN) return escapeHtml(full);
   const short = escapeHtml(full.slice(0, NAME_DISPLAY_LEN));
   const safeFull = escapeHtml(full);
-  return `<span class="truncated-name" data-full-name="${safeFull}" data-short-name="${short}"><span class="truncated-name-text">${short}</span><button type="button" class="truncated-name-toggle" aria-label="Показать полное имя">⋯</button></span>`;
-}
-
-// Call once at app startup. Delegated so it keeps working across every
-// page's own full re-renders without each one having to wire its own
-// per-element click handlers. Toggles the name text between its short and
-// full form — dataset values come back already HTML-unescaped since the
-// browser decodes attribute entities on parse.
-export function wireNameTruncationClicks() {
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest(".truncated-name-toggle");
-    if (!btn) return;
-    const wrap = btn.closest(".truncated-name");
-    const textEl = wrap && wrap.querySelector(".truncated-name-text");
-    if (!wrap || !textEl) return;
-    const expanded = wrap.classList.toggle("truncated-name-expanded");
-    textEl.textContent = expanded ? wrap.dataset.fullName : wrap.dataset.shortName;
-  });
+  return `<span class="truncated-name" data-full-name="${safeFull}" data-short-name="${short}">${short}</span>`;
 }
 
 // Round-result photo uploads save a much smaller "<name>_thumb.<ext>" copy

@@ -702,6 +702,17 @@ function renderBottleCircle(players, fanty, ctrl) {
     const nameEl = document.createElement("span");
     nameEl.innerHTML = truncatedNameHtml(p.name);
 
+    // Only a truncated name has anything to reveal — tapping the avatar
+    // toggles the sibling span between its short and full form in place.
+    const truncatedSpan = nameEl.querySelector(".truncated-name");
+    if (truncatedSpan) {
+      avatarWrap.classList.add("seat-avatar-clickable");
+      avatarWrap.addEventListener("click", () => {
+        const expanded = truncatedSpan.classList.toggle("truncated-name-expanded");
+        truncatedSpan.textContent = expanded ? truncatedSpan.dataset.fullName : truncatedSpan.dataset.shortName;
+      });
+    }
+
     seat.appendChild(avatarWrap);
     seat.appendChild(nameEl);
     circleWrap.appendChild(seat);

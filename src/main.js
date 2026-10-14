@@ -8,7 +8,6 @@ import { renderFantySubmit } from "./pages/fanty/submit.js";
 import { renderAccountPage } from "./pages/account.js";
 import { renderContactPage } from "./pages/contact.js";
 import { renderProfilePage } from "./pages/profile.js";
-import { wireNameTruncationClicks } from "./utils.js";
 import "./pwaInstall.js";
 
 if ("serviceWorker" in navigator) {
@@ -16,8 +15,6 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
-
-wireNameTruncationClicks();
 
 const app = document.getElementById("app");
 
