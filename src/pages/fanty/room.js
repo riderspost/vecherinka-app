@@ -727,11 +727,24 @@ function renderBottleCircle(players, fanty, ctrl) {
       tooltip.hidden = true;
       seat.appendChild(tooltip);
 
+      const TOOLTIP_AUTO_HIDE_MS = 2000;
       avatarWrap.classList.add("seat-avatar-clickable");
       avatarWrap.addEventListener("click", () => {
         const wasHidden = tooltip.hidden;
-        circleWrap.querySelectorAll(".name-tooltip").forEach((t) => (t.hidden = true));
-        tooltip.hidden = !wasHidden;
+        circleWrap.querySelectorAll(".name-tooltip").forEach((t) => {
+          t.hidden = true;
+          if (t.__hideTimeout) {
+            clearTimeout(t.__hideTimeout);
+            t.__hideTimeout = null;
+          }
+        });
+        if (wasHidden) {
+          tooltip.hidden = false;
+          tooltip.__hideTimeout = setTimeout(() => {
+            tooltip.hidden = true;
+            tooltip.__hideTimeout = null;
+          }, TOOLTIP_AUTO_HIDE_MS);
+        }
       });
     }
 
