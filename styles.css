@@ -958,6 +958,7 @@ h2, h3 {
 /* Фанты */
 
 .bottle-circle {
+  --seat-scale: 1;
   position: relative;
   width: 100%;
   max-width: 340px;
@@ -972,14 +973,14 @@ h2, h3 {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--seat-scale));
   text-align: center;
-  max-width: 70px;
+  max-width: calc(70px * var(--seat-scale));
 }
 
 .seat-avatar {
-  width: 46px;
-  height: 46px;
+  width: calc(46px * var(--seat-scale));
+  height: calc(46px * var(--seat-scale));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -989,7 +990,7 @@ h2, h3 {
 }
 
 .seat-avatar .avatar-emoji {
-  font-size: 24px;
+  font-size: calc(24px * var(--seat-scale));
   line-height: 1;
 }
 

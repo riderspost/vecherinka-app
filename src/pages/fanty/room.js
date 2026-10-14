@@ -626,6 +626,21 @@ function seatAngle(index, total) {
   return (360 / total) * index - 90;
 }
 
+// Seats are spaced evenly around a circle of fixed radius, so the gap
+// between neighboring avatars shrinks as more players join — past 12 they
+// start overlapping. Scales avatar/text size down just enough to keep the
+// same avatar-to-gap ratio that 12 players have at full size: the chord
+// between adjacent points on a circle is proportional to sin(π/n), so
+// sin(π/n) / sin(π/12) is exactly the factor that keeps pace with a
+// shrinking gap. Purely a visual knob — seatAngle above (and so the
+// bottle's pointing accuracy) never depends on it.
+function seatScaleFor(playerCount) {
+  const BASELINE = 12;
+  if (playerCount <= BASELINE) return 1;
+  const ratio = Math.sin(Math.PI / playerCount) / Math.sin(Math.PI / BASELINE);
+  return Math.max(0.55, ratio);
+}
+
 function renderBottleCircle(players, fanty, ctrl) {
   const radius = 42;
   const playerKey = players.map((p) => p.id).join(",");
@@ -680,6 +695,7 @@ function renderBottleCircle(players, fanty, ctrl) {
   const circleWrap = document.createElement("div");
   circleWrap.className = "bottle-circle";
   circleWrap.__playerKey = playerKey;
+  circleWrap.style.setProperty("--seat-scale", seatScaleFor(players.length).toFixed(3));
 
   players.forEach((p, i) => {
     const angleDeg = seatAngle(i, players.length);
