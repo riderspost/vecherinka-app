@@ -9,25 +9,31 @@ const NAME_DISPLAY_LEN = 15;
 // Player names can be up to 20 characters (server-enforced), which is too
 // wide for the tight spaces names show up in during a game — seat labels
 // around the bottle, player chips, round announcements. Cuts it to
-// NAME_DISPLAY_LEN with an ellipsis and wraps it in a span that's both
-// hoverable (title, for desktop) and tappable (wireNameTruncationClicks
-// below shows the full name on click, for everyone else) — names that
+// NAME_DISPLAY_LEN and appends a small dotted-circle "⋯" button that
+// expands it in place (wireNameTruncationClicks below) — names that
 // already fit are returned as plain escaped text, nothing clickable.
 export function truncatedNameHtml(name) {
   const full = name == null ? "" : String(name);
   if (full.length <= NAME_DISPLAY_LEN) return escapeHtml(full);
   const short = escapeHtml(full.slice(0, NAME_DISPLAY_LEN));
   const safeFull = escapeHtml(full);
-  return `<span class="truncated-name" data-full-name="${safeFull}" title="${safeFull}">${short}…</span>`;
+  return `<span class="truncated-name" data-full-name="${safeFull}" data-short-name="${short}"><span class="truncated-name-text">${short}</span><button type="button" class="truncated-name-toggle" aria-label="Показать полное имя">⋯</button></span>`;
 }
 
 // Call once at app startup. Delegated so it keeps working across every
 // page's own full re-renders without each one having to wire its own
-// per-element click handlers.
+// per-element click handlers. Toggles the name text between its short and
+// full form — dataset values come back already HTML-unescaped since the
+// browser decodes attribute entities on parse.
 export function wireNameTruncationClicks() {
   document.addEventListener("click", (e) => {
-    const el = e.target.closest(".truncated-name");
-    if (el) alert(el.dataset.fullName);
+    const btn = e.target.closest(".truncated-name-toggle");
+    if (!btn) return;
+    const wrap = btn.closest(".truncated-name");
+    const textEl = wrap && wrap.querySelector(".truncated-name-text");
+    if (!wrap || !textEl) return;
+    const expanded = wrap.classList.toggle("truncated-name-expanded");
+    textEl.textContent = expanded ? wrap.dataset.fullName : wrap.dataset.shortName;
   });
 }
 

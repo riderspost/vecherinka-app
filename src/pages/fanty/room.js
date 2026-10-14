@@ -277,7 +277,7 @@ export function mountFantyRoomPage(container, code, opts) {
             meBadge.__playerId = state.me.id;
             meBadge.appendChild(createAvatarElement(state.me));
             const meName = document.createElement("span");
-            meName.innerHTML = truncatedNameHtml(state.me.name);
+            meName.textContent = state.me.name;
             meBadge.appendChild(meName);
             persistentMeBadgeEl = meBadge;
           }
@@ -388,7 +388,7 @@ function playersList(players, onRemove) {
   players.forEach((p) => {
     const item = document.createElement("div");
     item.className = "player-chip";
-    item.innerHTML = `${avatarHtml(p)}<span>${truncatedNameHtml(p.name)}</span>${
+    item.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>${
       p.isHost ? '<span class="host-badge">хост</span>' : ""
     }`;
     if (onRemove && !p.isHost) {
@@ -812,14 +812,14 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
       const spinnerName = players.find((p) => p.id === fanty.nextSpinnerId)?.name || "?";
       const msg = document.createElement("p");
       msg.className = "tagline";
-      msg.innerHTML = `Крутит: ${truncatedNameHtml(spinnerName)}...`;
+      msg.textContent = `Крутит: ${spinnerName}...`;
       panel.appendChild(msg);
     }
   } else if (fanty.phase === "awaiting_choice") {
     const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
     const title = document.createElement("h2");
     title.className = "prompt-text";
-    title.innerHTML = `${truncatedNameHtml(pickedName)} выбирает: правда или действие?`;
+    title.textContent = `${pickedName} выбирает: правда или действие?`;
     panel.appendChild(title);
     if (fanty.canAct) {
       const row = document.createElement("div");
@@ -856,7 +856,7 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
     const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
     const title = document.createElement("h2");
     title.className = "prompt-text";
-    title.innerHTML = `${truncatedNameHtml(pickedName)} крутит бутылку ещё раз — выбирает напарника!`;
+    title.textContent = `${pickedName} крутит бутылку ещё раз — выбирает напарника!`;
     panel.appendChild(title);
     if (fanty.canSpinPartner) {
       const btn = document.createElement("button");
@@ -975,9 +975,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
 
   const who = document.createElement("p");
   who.className = "round-label";
-  who.innerHTML = partnerName
-    ? `${truncatedNameHtml(pickedName)} и ${truncatedNameHtml(partnerName)}`
-    : truncatedNameHtml(pickedName);
+  who.textContent = partnerName ? `${pickedName} и ${partnerName}` : pickedName;
   panel.appendChild(who);
 
   if (fanty.choice) {
@@ -1231,8 +1229,8 @@ function renderFinished(wrap, state, token, code) {
     const card = document.createElement("div");
     card.className = "fanty-summary-card";
     const who = r.partnerName
-      ? `${truncatedNameHtml(r.pickedName)} и ${truncatedNameHtml(r.partnerName)}`
-      : truncatedNameHtml(r.pickedName);
+      ? `${escapeHtml(r.pickedName)} и ${escapeHtml(r.partnerName)}`
+      : escapeHtml(r.pickedName);
     const choiceLabel = r.choice ? (r.choice === "truth" ? " · Правда" : " · Действие") : "";
     card.innerHTML = `
       <p class="round-label">Раунд ${r.roundNumber} · ${who}${choiceLabel} ${r.counted ? "✅" : "❌"}</p>
