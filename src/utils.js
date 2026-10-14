@@ -8,16 +8,15 @@ const NAME_DISPLAY_LEN = 15;
 
 // Player names can be up to 20 characters (server-enforced), which is too
 // wide for the bottle-table seat labels in Fanty. Cuts it to
-// NAME_DISPLAY_LEN and wraps it in a span carrying both forms as data
-// attributes — renderBottleCircle (fanty/room.js) toggles between them when
-// the seat's avatar is clicked. Names that already fit are returned as
-// plain escaped text, nothing to toggle.
+// NAME_DISPLAY_LEN and marks the result with a `.truncated-name` class —
+// renderBottleCircle (fanty/room.js) checks for that class to decide
+// whether the seat's avatar should reveal a full-name tooltip on tap.
+// Names that already fit are returned as plain escaped text.
 export function truncatedNameHtml(name) {
   const full = name == null ? "" : String(name);
   if (full.length <= NAME_DISPLAY_LEN) return escapeHtml(full);
   const short = escapeHtml(full.slice(0, NAME_DISPLAY_LEN));
-  const safeFull = escapeHtml(full);
-  return `<span class="truncated-name" data-full-name="${safeFull}" data-short-name="${short}">${short}</span>`;
+  return `<span class="truncated-name">${short}…</span>`;
 }
 
 // Round-result photo uploads save a much smaller "<name>_thumb.<ext>" copy

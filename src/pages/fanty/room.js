@@ -703,13 +703,19 @@ function renderBottleCircle(players, fanty, ctrl) {
     nameEl.innerHTML = truncatedNameHtml(p.name);
 
     // Only a truncated name has anything to reveal — tapping the avatar
-    // toggles the sibling span between its short and full form in place.
-    const truncatedSpan = nameEl.querySelector(".truncated-name");
-    if (truncatedSpan) {
+    // shows the full name as a speech-bubble tooltip above the seat.
+    if (nameEl.querySelector(".truncated-name")) {
+      const tooltip = document.createElement("div");
+      tooltip.className = "name-tooltip";
+      tooltip.textContent = p.name;
+      tooltip.hidden = true;
+      seat.appendChild(tooltip);
+
       avatarWrap.classList.add("seat-avatar-clickable");
       avatarWrap.addEventListener("click", () => {
-        const expanded = truncatedSpan.classList.toggle("truncated-name-expanded");
-        truncatedSpan.textContent = expanded ? truncatedSpan.dataset.fullName : truncatedSpan.dataset.shortName;
+        const wasHidden = tooltip.hidden;
+        circleWrap.querySelectorAll(".name-tooltip").forEach((t) => (t.hidden = true));
+        tooltip.hidden = !wasHidden;
       });
     }
 
