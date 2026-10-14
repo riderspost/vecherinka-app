@@ -39,6 +39,12 @@ body {
   max-width: 1100px;
 }
 
+.truncated-name {
+  cursor: pointer;
+  text-decoration: underline dotted var(--text-dim);
+  text-underline-offset: 2px;
+}
+
 .display-header {
   width: 100%;
   display: flex;

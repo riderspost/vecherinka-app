@@ -76,7 +76,7 @@ export function renderHome(container) {
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 30;
+    nameInput.maxLength = 20;
     if (profile) nameInput.value = profile.name;
 
     const picker = createAvatarPicker(
@@ -221,7 +221,7 @@ export function renderHome(container) {
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 30;
+    nameInput.maxLength = 20;
 
     const picker = createAvatarPicker(null, info.taken || []);
 

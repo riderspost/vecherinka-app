@@ -2,7 +2,7 @@ import { api, authApi } from "../api.js";
 import { loadSession, saveSession, clearSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker, avatarHtml } from "../avatarPicker.js";
-import { escapeHtml } from "../utils.js";
+import { escapeHtml, truncatedNameHtml } from "../utils.js";
 
 const POLL_MS = 1500;
 
@@ -82,7 +82,7 @@ export function mountRoomPage(container, code, opts) {
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 30;
+    nameInput.maxLength = 20;
 
     let takenEmojis = [];
     try {
@@ -172,7 +172,7 @@ export function mountRoomPage(container, code, opts) {
     if (!state.me.isDisplay) {
       const meBadge = document.createElement("div");
       meBadge.className = "me-badge";
-      meBadge.innerHTML = `${avatarHtml(state.me)}<span>${escapeHtml(state.me.name)}</span>`;
+      meBadge.innerHTML = `${avatarHtml(state.me)}<span>${truncatedNameHtml(state.me.name)}</span>`;
       page.appendChild(meBadge);
 
       // Kept outside the lobby-only renderLobby() on purpose — someone
@@ -242,7 +242,7 @@ function renderDisplayHeader(state, code) {
     const medal = RANK_MEDALS[rank];
     const chip = document.createElement("div");
     chip.className = "display-score-chip" + (medal ? " display-score-top" : "");
-    chip.innerHTML = `<span class="display-rank">${medal || rank}</span>${avatarHtml(p)}<span>${escapeHtml(
+    chip.innerHTML = `<span class="display-rank">${medal || rank}</span>${avatarHtml(p)}<span>${truncatedNameHtml(
       p.name
     )}</span><span class="display-points">${p.totalScore.toFixed(2)}</span>`;
     strip.appendChild(chip);
@@ -260,7 +260,7 @@ function playersList(players) {
     .forEach((p) => {
       const item = document.createElement("div");
       item.className = "player-chip";
-      item.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>${
+      item.innerHTML = `${avatarHtml(p)}<span>${truncatedNameHtml(p.name)}</span>${
         p.isHost ? '<span class="host-badge">хост</span>' : ""
       }`;
       list.appendChild(item);
@@ -336,7 +336,7 @@ function renderAnswering(wrap, state, token, code) {
         const done = p.answered >= p.total;
         const row = document.createElement("div");
         row.className = "player-progress-row" + (done ? " player-progress-done" : "");
-        row.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span><span class="progress-count">${
+        row.innerHTML = `${avatarHtml(p)}<span>${truncatedNameHtml(p.name)}</span><span class="progress-count">${
           done ? "✅ готово" : `осталось ${p.total - p.answered}`
         }</span>`;
         list.appendChild(row);
@@ -527,7 +527,7 @@ function renderRoundResults(wrap, state, token, code) {
     .forEach((s) => {
       const row = document.createElement("div");
       row.className = "score-row";
-      row.innerHTML = `${avatarHtml(s)}<span>${escapeHtml(s.name)}</span><span class="score-points">+${s.points.toFixed(2)}</span>`;
+      row.innerHTML = `${avatarHtml(s)}<span>${truncatedNameHtml(s.name)}</span><span class="score-points">+${s.points.toFixed(2)}</span>`;
       roundList.appendChild(row);
     });
   wrap.appendChild(roundList);
@@ -551,7 +551,7 @@ function renderFinalResults(wrap, state, token, code) {
   if (winner) {
     const win = document.createElement("div");
     win.className = "winner-banner";
-    win.innerHTML = `${avatarHtml(winner)}<div>Победитель: <b>${escapeHtml(winner.name)}</b></div>`;
+    win.innerHTML = `${avatarHtml(winner)}<div>Победитель: <b>${truncatedNameHtml(winner.name)}</b></div>`;
     wrap.appendChild(win);
   }
   wrap.appendChild(leaderboardEl(r.leaderboard));
@@ -590,7 +590,7 @@ function leaderboardEl(leaderboard) {
     const medal = RANK_MEDALS[rank];
     const row = document.createElement("div");
     row.className = "score-row" + (medal ? ` score-row-top rank-${rank}` : "");
-    row.innerHTML = `<span class="rank">${medal || rank}</span>${avatarHtml(p)}<span>${escapeHtml(
+    row.innerHTML = `<span class="rank">${medal || rank}</span>${avatarHtml(p)}<span>${truncatedNameHtml(
       p.name
     )}</span><span class="score-points">${p.totalScore.toFixed(2)}</span>`;
     list.appendChild(row);

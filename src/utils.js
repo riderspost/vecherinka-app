@@ -4,6 +4,33 @@ export function escapeHtml(str) {
   return div.innerHTML;
 }
 
+const NAME_DISPLAY_LEN = 15;
+
+// Player names can be up to 20 characters (server-enforced), which is too
+// wide for the tight spaces names show up in during a game — seat labels
+// around the bottle, player chips, round announcements. Cuts it to
+// NAME_DISPLAY_LEN with an ellipsis and wraps it in a span that's both
+// hoverable (title, for desktop) and tappable (wireNameTruncationClicks
+// below shows the full name on click, for everyone else) — names that
+// already fit are returned as plain escaped text, nothing clickable.
+export function truncatedNameHtml(name) {
+  const full = name == null ? "" : String(name);
+  if (full.length <= NAME_DISPLAY_LEN) return escapeHtml(full);
+  const short = escapeHtml(full.slice(0, NAME_DISPLAY_LEN));
+  const safeFull = escapeHtml(full);
+  return `<span class="truncated-name" data-full-name="${safeFull}" title="${safeFull}">${short}…</span>`;
+}
+
+// Call once at app startup. Delegated so it keeps working across every
+// page's own full re-renders without each one having to wire its own
+// per-element click handlers.
+export function wireNameTruncationClicks() {
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest(".truncated-name");
+    if (el) alert(el.dataset.fullName);
+  });
+}
+
 // Round-result photo uploads save a much smaller "<name>_thumb.<ext>" copy
 // alongside the full-size file (see upload_photo in fanty_routes.py) — this
 // derives its URL from the full one so grids/lists can load the light

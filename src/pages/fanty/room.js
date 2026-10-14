@@ -2,7 +2,7 @@ import { api, fantyApi, authApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
-import { escapeHtml, thumbUrl, createFireButton } from "../../utils.js";
+import { escapeHtml, thumbUrl, createFireButton, truncatedNameHtml } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
@@ -140,7 +140,7 @@ export function mountFantyRoomPage(container, code, opts) {
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 30;
+    nameInput.maxLength = 20;
 
     let takenEmojis = [];
     let requireGender = false;
@@ -277,7 +277,7 @@ export function mountFantyRoomPage(container, code, opts) {
             meBadge.__playerId = state.me.id;
             meBadge.appendChild(createAvatarElement(state.me));
             const meName = document.createElement("span");
-            meName.textContent = state.me.name;
+            meName.innerHTML = truncatedNameHtml(state.me.name);
             meBadge.appendChild(meName);
             persistentMeBadgeEl = meBadge;
           }
@@ -388,7 +388,7 @@ function playersList(players, onRemove) {
   players.forEach((p) => {
     const item = document.createElement("div");
     item.className = "player-chip";
-    item.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>${
+    item.innerHTML = `${avatarHtml(p)}<span>${truncatedNameHtml(p.name)}</span>${
       p.isHost ? '<span class="host-badge">хост</span>' : ""
     }`;
     if (onRemove && !p.isHost) {
@@ -410,7 +410,7 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
   const nameInput = document.createElement("input");
   nameInput.className = "text-input";
   nameInput.placeholder = "Имя игрока";
-  nameInput.maxLength = 30;
+  nameInput.maxLength = 20;
 
   let takenEmojis = [];
   try {
@@ -700,7 +700,7 @@ function renderBottleCircle(players, fanty, ctrl) {
     avatarWrap.appendChild(createAvatarElement(p));
 
     const nameEl = document.createElement("span");
-    nameEl.textContent = p.name;
+    nameEl.innerHTML = truncatedNameHtml(p.name);
 
     seat.appendChild(avatarWrap);
     seat.appendChild(nameEl);
@@ -812,14 +812,14 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
       const spinnerName = players.find((p) => p.id === fanty.nextSpinnerId)?.name || "?";
       const msg = document.createElement("p");
       msg.className = "tagline";
-      msg.textContent = `Крутит: ${spinnerName}...`;
+      msg.innerHTML = `Крутит: ${truncatedNameHtml(spinnerName)}...`;
       panel.appendChild(msg);
     }
   } else if (fanty.phase === "awaiting_choice") {
     const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
     const title = document.createElement("h2");
     title.className = "prompt-text";
-    title.textContent = `${pickedName} выбирает: правда или действие?`;
+    title.innerHTML = `${truncatedNameHtml(pickedName)} выбирает: правда или действие?`;
     panel.appendChild(title);
     if (fanty.canAct) {
       const row = document.createElement("div");
@@ -856,7 +856,7 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
     const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
     const title = document.createElement("h2");
     title.className = "prompt-text";
-    title.textContent = `${pickedName} крутит бутылку ещё раз — выбирает напарника!`;
+    title.innerHTML = `${truncatedNameHtml(pickedName)} крутит бутылку ещё раз — выбирает напарника!`;
     panel.appendChild(title);
     if (fanty.canSpinPartner) {
       const btn = document.createElement("button");
@@ -975,7 +975,9 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
 
   const who = document.createElement("p");
   who.className = "round-label";
-  who.textContent = partnerName ? `${pickedName} и ${partnerName}` : pickedName;
+  who.innerHTML = partnerName
+    ? `${truncatedNameHtml(pickedName)} и ${truncatedNameHtml(partnerName)}`
+    : truncatedNameHtml(pickedName);
   panel.appendChild(who);
 
   if (fanty.choice) {
@@ -1229,8 +1231,8 @@ function renderFinished(wrap, state, token, code) {
     const card = document.createElement("div");
     card.className = "fanty-summary-card";
     const who = r.partnerName
-      ? `${escapeHtml(r.pickedName)} и ${escapeHtml(r.partnerName)}`
-      : escapeHtml(r.pickedName);
+      ? `${truncatedNameHtml(r.pickedName)} и ${truncatedNameHtml(r.partnerName)}`
+      : truncatedNameHtml(r.pickedName);
     const choiceLabel = r.choice ? (r.choice === "truth" ? " · Правда" : " · Действие") : "";
     card.innerHTML = `
       <p class="round-label">Раунд ${r.roundNumber} · ${who}${choiceLabel} ${r.counted ? "✅" : "❌"}</p>

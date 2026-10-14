@@ -49,7 +49,7 @@ export function renderProfilePage(container) {
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 30;
+    nameInput.maxLength = 20;
     if (session.name) nameInput.value = session.name;
 
     const picker = createAvatarPicker(

@@ -327,7 +327,7 @@ export function renderFantyHome(container) {
       const nameInput = document.createElement("input");
       nameInput.className = "text-input";
       nameInput.placeholder = "Ваше имя";
-      nameInput.maxLength = 30;
+      nameInput.maxLength = 20;
       if (formState.name) nameInput.value = formState.name;
       else if (profile) nameInput.value = profile.name;
 
