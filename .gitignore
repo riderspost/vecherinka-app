@@ -7,3 +7,5 @@ uploads/
 .env
 .DS_Store
 .claude/
+.env.*
+!.env.example

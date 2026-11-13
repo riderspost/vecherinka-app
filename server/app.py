@@ -1,10 +1,12 @@
 import html
 import os
+import posixpath
 import re
 import uuid
 from datetime import timedelta
 
 from flask import Flask, jsonify, request, send_from_directory, session
+from werkzeug.security import safe_join
 from werkzeug.utils import secure_filename
 
 from . import game
@@ -632,11 +634,31 @@ def spa(_rest=None):
     return send_from_directory(STATIC_ROOT, "index.html")
 
 
+# Only the website itself is served from the project folder. Everything else
+# that lives next to it (.env, the database, .git, the server code...) is not
+# the browser's business, so it answers 404 instead of being sent.
+PUBLIC_ROOT_FILES = {"index.html", "manifest.json", "sw.js", "styles.css"}
+PUBLIC_DIRS = ("src/", "icons/")
+
+
+def is_public_asset(path):
+    clean = posixpath.normpath(path)
+    if clean in PUBLIC_ROOT_FILES:
+        return True
+    in_public_dir = clean.startswith(PUBLIC_DIRS)
+    hidden_part = any(part.startswith(".") for part in clean.split("/"))
+    return in_public_dir and not hidden_part
+
+
 @app.route("/<path:filename>")
 def static_files(filename):
-    full_path = os.path.join(STATIC_ROOT, filename)
-    if os.path.isfile(full_path):
-        return send_from_directory(STATIC_ROOT, filename)
+    if is_public_asset(filename):
+        full_path = safe_join(STATIC_ROOT, filename)
+        if full_path and os.path.isfile(full_path):
+            return send_from_directory(STATIC_ROOT, filename)
+    elif os.path.exists(os.path.join(STATIC_ROOT, filename)):
+        return jsonify({"error": "Not found"}), 404
+    # Unknown paths are front-end routes: the single-page app handles them.
     return send_from_directory(STATIC_ROOT, "index.html")
 
 
