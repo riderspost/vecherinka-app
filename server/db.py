@@ -69,6 +69,9 @@ def init_db():
     _ensure_column(db, "players", "left_at", "left_at TEXT")
     _ensure_column(db, "players", "user_id", "user_id TEXT")
     _ensure_column(db, "players", "device_id", "device_id TEXT")
+    _ensure_column(db, "reverse_rounds", "chunks_json", "chunks_json TEXT NOT NULL DEFAULT '[]'")
+    _ensure_column(db, "reverse_rounds", "original_done", "original_done INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "reverse_rounds", "imitation_done", "imitation_done INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 

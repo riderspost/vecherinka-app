@@ -1,20 +1,24 @@
 import array
 import io
 import json
+import os
 import random
 import sys
+import uuid
 import wave
 
-from .rooms_common import gen_id
+from .rooms_common import gen_id, UPLOAD_DIR
 
 MIN_PLAYERS = 2
 OPTIONS_COUNT = 4
+WORDS_PER_CHUNK = 2
 
-# Записи — короткие фразы. Всё, что длиннее/тяжелее, почти наверняка не
-# речь, а мусор или попытка забить диск.
+# Фраза записывается кусками по два слова, так что каждая запись короткая.
+# Всё, что длиннее/тяжелее, почти наверняка не речь, а мусор или попытка
+# забить диск.
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
-MIN_AUDIO_SECONDS = 0.3
-MAX_AUDIO_SECONDS = 15.0
+MIN_AUDIO_SECONDS = 0.25
+MAX_AUDIO_SECONDS = 8.0
 MIN_SAMPLE_RATE = 8000
 MAX_SAMPLE_RATE = 48000
 
@@ -23,37 +27,48 @@ PHASE_RECORDING_IMITATION = "recording_imitation"
 PHASE_GUESSING = "guessing"
 PHASE_REVEAL = "reveal"
 
+KIND_ORIGINAL = "original"
+KIND_IMITATION = "imitation"
+
 
 class AudioError(Exception):
     pass
 
 
-def read_wav(data):
-    """Parses a mono 16-bit PCM WAV; returns (params, samples as array('h'))."""
-    if len(data) > MAX_AUDIO_BYTES:
-        raise AudioError("Запись слишком большая")
+# --- аудио ---
+
+
+def parse_wav(data):
+    """Parses a mono 16-bit PCM WAV; returns (rate, samples as array('h'))."""
     try:
         with wave.open(io.BytesIO(data), "rb") as w:
             channels = w.getnchannels()
             width = w.getsampwidth()
             rate = w.getframerate()
-            frames = w.getnframes()
-            raw = w.readframes(frames)
+            raw = w.readframes(w.getnframes())
     except (wave.Error, EOFError):
         raise AudioError("Не удалось прочитать запись")
     if channels != 1 or width != 2:
         raise AudioError("Нужна моно-запись 16 бит")
-    if not (MIN_SAMPLE_RATE <= rate <= MAX_SAMPLE_RATE):
-        raise AudioError("Неподдерживаемая частота записи")
-    duration = frames / float(rate)
-    if duration < MIN_AUDIO_SECONDS:
-        raise AudioError("Запись слишком короткая")
-    if duration > MAX_AUDIO_SECONDS:
-        raise AudioError("Запись слишком длинная")
     samples = array.array("h")
     samples.frombytes(raw)
     if sys.byteorder == "big":
         samples.byteswap()
+    return rate, samples
+
+
+def read_wav(data):
+    """Validates an uploaded chunk and returns (rate, samples)."""
+    if len(data) > MAX_AUDIO_BYTES:
+        raise AudioError("Запись слишком большая")
+    rate, samples = parse_wav(data)
+    if not (MIN_SAMPLE_RATE <= rate <= MAX_SAMPLE_RATE):
+        raise AudioError("Неподдерживаемая частота записи")
+    duration = len(samples) / float(rate)
+    if duration < MIN_AUDIO_SECONDS:
+        raise AudioError("Запись слишком короткая")
+    if duration > MAX_AUDIO_SECONDS:
+        raise AudioError("Запись слишком длинная")
     return rate, samples
 
 
@@ -68,18 +83,62 @@ def write_wav(path, rate, samples):
         w.writeframes(out.tobytes())
 
 
-def save_wav_and_reversed(data, forward_path, reversed_path):
-    """Validates an uploaded WAV, stores it as-is and stores a reversed copy.
+def read_wav_file(filename):
+    with open(os.path.join(UPLOAD_DIR, filename), "rb") as f:
+        return parse_wav(f.read())
 
-    Reversing happens here rather than in the player's browser so the
-    person who has to listen to the reversed clip is never handed a URL to
-    the forward one.
+
+def _reversed(samples):
+    out = array.array("h", samples)
+    out.reverse()
+    return out
+
+
+def _new_names():
+    base = uuid.uuid4().hex
+    return f"{base}.wav", f"{base}_rev.wav"
+
+
+def _save_pair(rate, samples):
+    """Writes a clip and its reversed twin; returns (forward, reversed) filenames."""
+    forward, reverse = _new_names()
+    write_wav(os.path.join(UPLOAD_DIR, forward), rate, samples)
+    write_wav(os.path.join(UPLOAD_DIR, reverse), rate, _reversed(samples))
+    return forward, reverse
+
+
+def _glue(clips):
+    """clips: list of (rate, samples) in playing order -> (rate, samples)."""
+    rate = clips[0][0]
+    joined = array.array("h")
+    for clip_rate, samples in clips:
+        if clip_rate != rate:
+            raise AudioError("Куски записаны в разном формате")
+        joined.extend(samples)
+    return rate, joined
+
+
+# --- нарезка фразы ---
+
+
+def split_chunks(text, size=WORDS_PER_CHUNK):
+    """Cuts a phrase into pieces of `size` words (the last may be shorter).
+
+    A dash or other punctuation standing alone belongs to the word before it
+    instead of counting as a word of its own.
     """
-    rate, samples = read_wav(data)
-    write_wav(forward_path, rate, samples)
-    reversed_samples = array.array("h", samples)
-    reversed_samples.reverse()
-    write_wav(reversed_path, rate, reversed_samples)
+    words = []
+    for token in text.split():
+        if words and not any(ch.isalnum() for ch in token):
+            words[-1] += " " + token
+        else:
+            words.append(token)
+    return [" ".join(words[i : i + size]) for i in range(0, len(words), size)] or [text]
+
+
+def round_chunks(rnd, phrase_text=""):
+    chunks = json.loads(rnd["chunks_json"] or "[]")
+    return chunks or [phrase_text]
 
 
 # --- состояние игры ---
@@ -167,8 +226,9 @@ def start_next_round(db, room):
     round_id = gen_id()
     db.execute(
         """INSERT INTO reverse_rounds
-           (id, room_id, round_number, speaker_id, imitator_id, phrase_id, phase, options_json, correct_index)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           (id, room_id, round_number, speaker_id, imitator_id, phrase_id, phase,
+            options_json, correct_index, chunks_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             round_id,
             room["id"],
@@ -179,11 +239,75 @@ def start_next_round(db, room):
             PHASE_RECORDING_ORIGINAL,
             json.dumps(options, ensure_ascii=False),
             correct_index,
+            json.dumps(split_chunks(phrase["text"]), ensure_ascii=False),
         ),
     )
     db.execute("UPDATE reverse_state SET round_number = ? WHERE room_id = ?", (number, room["id"]))
     db.commit()
     return round_id
+
+
+# --- запись кусков ---
+
+
+def store_chunk(db, rnd, kind, index, data, chunk_count):
+    """Saves one recorded piece; once the last one is in, glues them and moves on.
+
+    The speaker records the phrase piece by piece in reading order. The
+    imitator then hears the pieces in the order of the *reversed* recording —
+    last words first, each piece itself reversed — and records what they hear
+    in that same order. Gluing the imitator's pieces in the order they were
+    recorded and reversing the whole thing puts the pieces back in reading
+    order, so the guessers hear something shaped like the original phrase.
+    """
+    counter = "original_done" if kind == KIND_ORIGINAL else "imitation_done"
+    done = rnd[counter]
+    if index is not None and index != done:
+        raise AudioError("Эта часть уже записана или идёт не по порядку")
+
+    rate, samples = read_wav(data)
+    previous = db.execute(
+        "SELECT file FROM reverse_chunks WHERE round_id = ? AND kind = ? LIMIT 1", (rnd["id"], kind)
+    ).fetchone()
+    if previous and read_wav_file(previous["file"])[0] != rate:
+        raise AudioError("Куски записаны в разном формате")
+
+    forward, reverse = _save_pair(rate, samples)
+    db.execute(
+        "INSERT INTO reverse_chunks (id, round_id, kind, idx, file, reversed_file) VALUES (?, ?, ?, ?, ?, ?)",
+        (gen_id(), rnd["id"], kind, done, forward, reverse),
+    )
+    db.execute(f"UPDATE reverse_rounds SET {counter} = ? WHERE id = ?", (done + 1, rnd["id"]))
+    if done + 1 >= chunk_count:
+        _finish_kind(db, rnd, kind)
+    db.commit()
+
+
+def _finish_kind(db, rnd, kind):
+    rows = db.execute(
+        "SELECT file FROM reverse_chunks WHERE round_id = ? AND kind = ? ORDER BY idx", (rnd["id"], kind)
+    ).fetchall()
+    rate, joined = _glue([read_wav_file(r["file"]) for r in rows])
+    whole, whole_reversed = _save_pair(rate, joined)
+    if kind == KIND_ORIGINAL:
+        db.execute(
+            "UPDATE reverse_rounds SET original_file = ?, reversed_file = ?, phase = ? WHERE id = ?",
+            (whole, whole_reversed, PHASE_RECORDING_IMITATION, rnd["id"]),
+        )
+    else:
+        db.execute(
+            "UPDATE reverse_rounds SET imitation_file = ?, imitation_back_file = ?, phase = ? WHERE id = ?",
+            (whole, whole_reversed, PHASE_GUESSING, rnd["id"]),
+        )
+
+
+def portion_urls(db, rnd):
+    """Reversed pieces in the order the imitator hears them (last words first)."""
+    rows = db.execute(
+        "SELECT reversed_file FROM reverse_chunks WHERE round_id = ? AND kind = ? ORDER BY idx DESC",
+        (rnd["id"], KIND_ORIGINAL),
+    ).fetchall()
+    return [f"/uploads/{r['reversed_file']}" for r in rows]
 
 
 def score_and_reveal(db, rnd):
@@ -204,11 +328,3 @@ def score_and_reveal(db, rnd):
         )
     db.execute("UPDATE reverse_rounds SET phase = ? WHERE id = ?", (PHASE_REVEAL, rnd["id"]))
     db.commit()
-
-
-def round_files(row):
-    return [
-        row[key]
-        for key in ("original_file", "reversed_file", "imitation_file", "imitation_back_file")
-        if row[key]
-    ]

@@ -17,7 +17,12 @@ function formatSeconds(sec) {
 // message is shown and the user can retry without re-recording.
 // destroy() must be called when the panel goes away so a still-open
 // microphone is released.
-export function createRecorderPanel({ idleLabel = "🎙 Начать запись", submitLabel = "✅ Отправить", onSubmit }) {
+export function createRecorderPanel({
+  idleLabel = "🎙 Начать запись",
+  submitLabel = "✅ Отправить",
+  maxSeconds = MAX_RECORD_SECONDS,
+  onSubmit,
+}) {
   const panel = document.createElement("div");
   panel.className = "card-inline recorder-panel";
 
@@ -57,11 +62,12 @@ export function createRecorderPanel({ idleLabel = "🎙 Начать запис�
       stopAllAudio();
       try {
         const rec = await startRecording({
+          maxSeconds,
           onLevel: (level) => {
             if (levelFill) levelFill.style.width = `${Math.round(level * 100)}%`;
           },
           onTick: (elapsed) => {
-            if (timerEl) timerEl.textContent = `${formatSeconds(elapsed)} / ${formatSeconds(MAX_RECORD_SECONDS)}`;
+            if (timerEl) timerEl.textContent = `${formatSeconds(elapsed)} / ${formatSeconds(maxSeconds)}`;
           },
         });
         if (destroyed) {
@@ -89,7 +95,7 @@ export function createRecorderPanel({ idleLabel = "🎙 Начать запис�
     status.innerHTML = `<span class="rec-dot"></span><span>Идёт запись…</span>`;
     timerEl = document.createElement("span");
     timerEl.className = "rec-timer";
-    timerEl.textContent = `0:00 / ${formatSeconds(MAX_RECORD_SECONDS)}`;
+    timerEl.textContent = `0:00 / ${formatSeconds(maxSeconds)}`;
     status.appendChild(timerEl);
 
     const level = document.createElement("div");

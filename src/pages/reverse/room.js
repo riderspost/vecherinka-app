@@ -3,7 +3,7 @@ import { loadSession, saveSession, clearSession, getDeviceId } from "../../stora
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
-import { createPlayButton, stopAllAudio } from "../../audioTools.js";
+import { createPlayButton, stopAllAudio, MAX_CHUNK_SECONDS } from "../../audioTools.js";
 import { createRecorderPanel } from "./recorderPanel.js";
 
 const POLL_MS = 1500;
@@ -90,7 +90,7 @@ function heading(text) {
 // the existing DOM is left alone (a recorder mid-recording or a clip mid-play
 // would otherwise be torn down by every poll tick) and only a small
 // `updater` patches the live bits, like the answered counter.
-function viewKey(state) {
+function viewKey(state, introDoneRound) {
   const status = state.room.status;
   if (status === "lobby") return `lobby:${state.players.length}:${state.canStart}:${state.me.isHost}`;
   if (status === "finished") return "finished";
@@ -98,7 +98,8 @@ function viewKey(state) {
   if (!rv) return "playing";
   const role = rv.isSpeaker ? "speaker" : rv.isImitator ? "imitator" : "other";
   const answered = rv.myAnswer === null || rv.myAnswer === undefined ? "open" : "answered";
-  return `round${rv.roundNumber}:${rv.phase}:${role}:${answered}`;
+  const intro = rv.isImitator && rv.imitationDone === 0 && introDoneRound !== rv.roundNumber ? "intro" : "parts";
+  return `round${rv.roundNumber}:${rv.phase}:${role}:${answered}:${rv.originalDone}:${rv.imitationDone}:${intro}`;
 }
 
 export function mountReverseRoomPage(container, code) {
@@ -106,6 +107,9 @@ export function mountReverseRoomPage(container, code) {
   let stopped = false;
   let lastKey = null;
   let updater = null;
+  // The imitator first hears the whole reversed recording, then goes through
+  // it piece by piece. That step is purely local — remembered per round.
+  let introDoneRound = null;
   let panels = [];
 
   function teardownView() {
@@ -190,7 +194,7 @@ export function mountReverseRoomPage(container, code) {
       if (stopped) return;
       try {
         const state = await reverseApi.getState(code, token);
-        const key = viewKey(state);
+        const key = viewKey(state, introDoneRound);
         if (key !== lastKey) {
           lastKey = key;
           renderFull(state, token);
@@ -341,61 +345,111 @@ export function mountReverseRoomPage(container, code) {
     }
   }
 
+  function progressDots(done, total) {
+    const el = document.createElement("div");
+    el.className = "chunk-progress";
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement("span");
+      dot.className = "chunk-dot" + (i < done ? " done" : i === done ? " current" : "");
+      el.appendChild(dot);
+    }
+    return el;
+  }
+
   function renderRecordingOriginal(wrap, state, token, rv) {
     if (rv.isSpeaker) {
-      wrap.appendChild(heading("Твоя фраза"));
+      const index = rv.originalDone;
+      wrap.appendChild(heading(`Твоя фраза · часть ${index + 1} из ${rv.chunkCount}`));
+
       const card = document.createElement("div");
       card.className = "prompt-text phrase-card";
-      card.textContent = rv.phrase;
+      rv.chunks.forEach((text, i) => {
+        const piece = document.createElement("span");
+        piece.className = "phrase-piece" + (i < index ? " done" : i === index ? " current" : "");
+        piece.textContent = text;
+        card.appendChild(piece);
+        if (i < rv.chunks.length - 1) card.appendChild(document.createTextNode(" "));
+      });
       wrap.appendChild(card);
+      wrap.appendChild(progressDots(index, rv.chunkCount));
       wrap.appendChild(
         p(
           "tagline",
-          "Прочитай её вслух чётко и не торопясь. Остальные услышат запись только задом наперёд, так что тайна в безопасности."
+          "Фраза записывается кусками по два слова. Прочитай вслух выделенный кусок чётко и не торопясь. Остальные услышат всё только задом наперёд."
         )
       );
+      const isLast = index === rv.chunkCount - 1;
       const panel = createRecorderPanel({
-        idleLabel: "🎙 Записать фразу",
-        submitLabel: "✅ Отправить запись",
-        onSubmit: (blob) => reverseApi.uploadOriginal(code, token, blob),
+        idleLabel: `🎙 Записать «${rv.chunks[index]}»`,
+        submitLabel: isLast ? "✅ Отправить последнюю часть" : "✅ Отправить и дальше",
+        maxSeconds: MAX_CHUNK_SECONDS,
+        onSubmit: (blob) => reverseApi.uploadOriginal(code, token, blob, index),
       });
       panels.push(panel);
       wrap.appendChild(panel.element);
       return;
     }
     wrap.appendChild(heading("🎙 Запись фразы"));
-    wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу…`));
+    wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу по частям…`));
+    wrap.appendChild(progressDots(rv.originalDone, rv.chunkCount));
     if (rv.isImitator) {
       wrap.appendChild(
-        p("tagline", "Дальше ты послушаешь эту запись задом наперёд и повторишь её на слух. Приготовься!")
+        p("tagline", "Дальше ты послушаешь эту запись задом наперёд и повторишь её по частям. Приготовься!")
       );
     }
   }
 
   function renderRecordingImitation(wrap, state, token, rv) {
     if (rv.isImitator) {
-      wrap.appendChild(heading("Послушай запись задом наперёд"));
+      const inIntro = rv.imitationDone === 0 && introDoneRound !== rv.roundNumber;
+      if (inIntro) {
+        wrap.appendChild(heading("Послушай запись задом наперёд"));
+        wrap.appendChild(
+          p(
+            "tagline",
+            "Сначала послушай всю запись целиком — просто чтобы поймать общее впечатление. Потом будешь слушать и повторять её по частям."
+          )
+        );
+        wrap.appendChild(createPlayButton(rv.reversedUrl, "Прослушать всю запись", "btn btn-primary"));
+        const startBtn = document.createElement("button");
+        startBtn.className = "btn";
+        startBtn.textContent = `Дальше — по частям (${rv.chunkCount}) →`;
+        startBtn.addEventListener("click", () => {
+          introDoneRound = rv.roundNumber;
+          lastKey = viewKey(state, introDoneRound);
+          renderFull(state, token);
+        });
+        wrap.appendChild(startBtn);
+        return;
+      }
+
+      const index = rv.imitationDone;
+      wrap.appendChild(heading(`Часть ${index + 1} из ${rv.chunkCount}`));
+      wrap.appendChild(progressDots(index, rv.chunkCount));
       wrap.appendChild(
         p(
           "tagline",
-          "Слушай сколько нужно. Потом запиши, что услышал: повторяй именно звуки, а не пытайся понять смысл — чем точнее, тем лучше."
+          "Послушай этот кусок сколько нужно и сразу повтори его на запись. Повторяй звуки, а не смысл — чем точнее, тем лучше."
         )
       );
-      const play = createPlayButton(rv.reversedUrl, "Прослушать запись", "btn btn-primary");
-      wrap.appendChild(play);
+      wrap.appendChild(createPlayButton(rv.portions[index], "Прослушать эту часть", "btn btn-primary"));
+      const isLast = index === rv.chunkCount - 1;
       const panel = createRecorderPanel({
         idleLabel: "🎙 Записать, как я услышал(а)",
-        submitLabel: "✅ Отправить запись",
-        onSubmit: (blob) => reverseApi.uploadImitation(code, token, blob),
+        submitLabel: isLast ? "✅ Отправить последнюю часть" : "✅ Отправить и дальше",
+        maxSeconds: MAX_CHUNK_SECONDS,
+        onSubmit: (blob) => reverseApi.uploadImitation(code, token, blob, index),
       });
       panels.push(panel);
       wrap.appendChild(panel.element);
+      wrap.appendChild(createPlayButton(rv.reversedUrl, "Послушать всю запись ещё раз", "link-btn"));
       return;
     }
     wrap.appendChild(heading("👂 Слушаем наоборот"));
     wrap.appendChild(
-      p("tagline", `${nameOf(state, rv.imitatorId)} слушает запись задом наперёд и пытается её повторить…`)
+      p("tagline", `${nameOf(state, rv.imitatorId)} слушает запись задом наперёд и повторяет её по частям…`)
     );
+    wrap.appendChild(progressDots(rv.imitationDone, rv.chunkCount));
     if (rv.isSpeaker && rv.phrase) {
       wrap.appendChild(p("hint", `Твоя фраза: «${rv.phrase}»`));
     }

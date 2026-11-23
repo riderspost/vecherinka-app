@@ -95,9 +95,10 @@ export const fantyApi = {
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
 };
 
-function uploadAudio(code, token, kind, blob) {
+function uploadAudio(code, token, kind, blob, index) {
   const form = new FormData();
   form.append("token", token);
+  form.append("index", String(index));
   form.append("file", blob, "recording.wav");
   return request("POST", `/api/reverse/rooms/${code}/${kind}`, form);
 }
@@ -107,8 +108,8 @@ export const reverseApi = {
   start: (code, token) => request("POST", `/api/reverse/rooms/${code}/start`, { token }),
   getState: (code, token) =>
     request("GET", `/api/reverse/rooms/${code}/state?token=${encodeURIComponent(token)}`),
-  uploadOriginal: (code, token, blob) => uploadAudio(code, token, "original", blob),
-  uploadImitation: (code, token, blob) => uploadAudio(code, token, "imitation", blob),
+  uploadOriginal: (code, token, blob, index) => uploadAudio(code, token, "original", blob, index),
+  uploadImitation: (code, token, blob, index) => uploadAudio(code, token, "imitation", blob, index),
   answer: (code, token, optionIndex) =>
     request("POST", `/api/reverse/rooms/${code}/answer`, { token, optionIndex }),
   reveal: (code, token) => request("POST", `/api/reverse/rooms/${code}/reveal`, { token }),

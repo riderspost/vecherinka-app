@@ -1,6 +1,4 @@
 import json
-import os
-import uuid
 
 from flask import Blueprint, request, jsonify, session
 
@@ -8,7 +6,6 @@ from . import reverse_game as rg
 from .db import get_db
 from .rooms_common import (
     RoomError,
-    UPLOAD_DIR,
     get_room_or_404,
     get_player_or_404,
     player_public,
@@ -85,68 +82,64 @@ def _read_upload():
     return file.read(rg.MAX_AUDIO_BYTES + 1), None
 
 
-def _store_audio(data):
-    """Saves a validated recording and its reversed twin; returns (forward, reversed) filenames."""
-    base = uuid.uuid4().hex
-    forward = f"{base}.wav"
-    reverse = f"{base}_rev.wav"
+def _chunk_index():
+    raw = request.form.get("index")
+    if raw is None or raw == "":
+        return None
     try:
-        rg.save_wav_and_reversed(data, os.path.join(UPLOAD_DIR, forward), os.path.join(UPLOAD_DIR, reverse))
+        return int(raw)
+    except ValueError:
+        return -1
+
+
+def _chunk_count(db, rnd):
+    phrase = db.execute("SELECT text FROM reverse_phrases WHERE id = ?", (rnd["phrase_id"],)).fetchone()
+    return len(rg.round_chunks(rnd, phrase["text"] if phrase else ""))
+
+
+def _upload_chunk(code, kind, expected_phase, who_key, wrong_phase_msg, wrong_player_msg):
+    db = get_db()
+    room, player, err = _auth(db, code, request.form.get("token"))
+    if err:
+        return err
+    rnd = rg.get_current_round(db, room["id"]) if room["status"] == "playing" else None
+    if not rnd or rnd["phase"] != expected_phase:
+        return error(wrong_phase_msg)
+    if rnd[who_key] != player["id"]:
+        return error(wrong_player_msg)
+    data, err = _read_upload()
+    if err:
+        return err
+    try:
+        rg.store_chunk(db, rnd, kind, _chunk_index(), data, _chunk_count(db, rnd))
     except rg.AudioError as e:
-        return None, None, error(str(e))
-    return forward, reverse, None
+        db.rollback()
+        return error(str(e))
+    return jsonify({"ok": True})
 
 
 @reverse_bp.route("/rooms/<code>/original", methods=["POST"])
 def upload_original(code):
-    db = get_db()
-    room, player, err = _auth(db, code, request.form.get("token"))
-    if err:
-        return err
-    rnd = rg.get_current_round(db, room["id"]) if room["status"] == "playing" else None
-    if not rnd or rnd["phase"] != rg.PHASE_RECORDING_ORIGINAL:
-        return error("Сейчас запись фразы не нужна")
-    if rnd["speaker_id"] != player["id"]:
-        return error("Фразу сейчас записывает другой игрок")
-    data, err = _read_upload()
-    if err:
-        return err
-    forward, reverse, err = _store_audio(data)
-    if err:
-        return err
-    db.execute(
-        "UPDATE reverse_rounds SET original_file = ?, reversed_file = ?, phase = ? WHERE id = ?",
-        (forward, reverse, rg.PHASE_RECORDING_IMITATION, rnd["id"]),
+    return _upload_chunk(
+        code,
+        rg.KIND_ORIGINAL,
+        rg.PHASE_RECORDING_ORIGINAL,
+        "speaker_id",
+        "Сейчас запись фразы не нужна",
+        "Фразу сейчас записывает другой игрок",
     )
-    db.commit()
-    return jsonify({"ok": True})
 
 
 @reverse_bp.route("/rooms/<code>/imitation", methods=["POST"])
 def upload_imitation(code):
-    db = get_db()
-    room, player, err = _auth(db, code, request.form.get("token"))
-    if err:
-        return err
-    rnd = rg.get_current_round(db, room["id"]) if room["status"] == "playing" else None
-    if not rnd or rnd["phase"] != rg.PHASE_RECORDING_IMITATION:
-        return error("Сейчас повторять запись не нужно")
-    if rnd["imitator_id"] != player["id"]:
-        return error("Запись сейчас повторяет другой игрок")
-    data, err = _read_upload()
-    if err:
-        return err
-    # What the imitator said is itself reversed speech; flipping it back is
-    # what makes it sound like the original phrase again.
-    imitation, imitation_back, err = _store_audio(data)
-    if err:
-        return err
-    db.execute(
-        "UPDATE reverse_rounds SET imitation_file = ?, imitation_back_file = ?, phase = ? WHERE id = ?",
-        (imitation, imitation_back, rg.PHASE_GUESSING, rnd["id"]),
+    return _upload_chunk(
+        code,
+        rg.KIND_IMITATION,
+        rg.PHASE_RECORDING_IMITATION,
+        "imitator_id",
+        "Сейчас повторять запись не нужно",
+        "Запись сейчас повторяет другой игрок",
     )
-    db.commit()
-    return jsonify({"ok": True})
 
 
 @reverse_bp.route("/rooms/<code>/answer", methods=["POST"])
@@ -267,6 +260,7 @@ def _build_round_state(db, room, player, rnd):
     phase = rnd["phase"]
     is_speaker = rnd["speaker_id"] == player["id"]
     is_imitator = rnd["imitator_id"] == player["id"]
+    chunks = rg.round_chunks(rnd, phrase["text"] if phrase else "")
 
     st = rg.get_state(db, room["id"])
     reverse = {
@@ -277,15 +271,23 @@ def _build_round_state(db, room, player, rnd):
         "imitatorId": rnd["imitator_id"],
         "isSpeaker": is_speaker,
         "isImitator": is_imitator,
+        "chunkCount": len(chunks),
+        "originalDone": rnd["original_done"],
+        "imitationDone": rnd["imitation_done"],
     }
 
     # The phrase is only ever shown to the person who has to say it —
     # everyone else gets it at the reveal, never before.
     if is_speaker or phase == rg.PHASE_REVEAL:
         reverse["phrase"] = phrase["text"] if phrase else None
+    if is_speaker:
+        reverse["chunks"] = chunks
 
     if phase == rg.PHASE_RECORDING_IMITATION and is_imitator:
+        # Only reversed clips are ever handed out here — the whole thing
+        # first, then the same recording in pieces.
         reverse["reversedUrl"] = _upload_url(rnd["reversed_file"])
+        reverse["portions"] = rg.portion_urls(db, rnd)
 
     if phase in (rg.PHASE_GUESSING, rg.PHASE_REVEAL):
         guessers = rg.guessers_for_round(db, rnd)

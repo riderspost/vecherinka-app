@@ -136,6 +136,13 @@ def delete_room_and_files(db, room):
         ).fetchall()
         for row in audio_rows:
             filenames.extend(name for name in row if name)
+        chunk_rows = db.execute(
+            """SELECT c.file, c.reversed_file FROM reverse_chunks c
+               JOIN reverse_rounds rr ON rr.id = c.round_id WHERE rr.room_id = ?""",
+            (room["id"],),
+        ).fetchall()
+        for row in chunk_rows:
+            filenames.extend(name for name in row if name)
 
     db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
     db.commit()

@@ -212,7 +212,22 @@ CREATE TABLE IF NOT EXISTS reverse_rounds (
   reversed_file TEXT,
   imitation_file TEXT,
   imitation_back_file TEXT,
+  chunks_json TEXT NOT NULL DEFAULT '[]',
+  original_done INTEGER NOT NULL DEFAULT 0,
+  imitation_done INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Фраза записывается и повторяется кусками по два слова. Здесь лежат
+-- отдельные куски; склеенные целиком записи — в reverse_rounds.
+CREATE TABLE IF NOT EXISTS reverse_chunks (
+  id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL REFERENCES reverse_rounds(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  idx INTEGER NOT NULL,
+  file TEXT NOT NULL,
+  reversed_file TEXT NOT NULL,
+  UNIQUE(round_id, kind, idx)
 );
 
 CREATE TABLE IF NOT EXISTS reverse_answers (

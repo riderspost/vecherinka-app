@@ -9,7 +9,10 @@
 // version of what they're meant to be hearing backwards.
 
 export const MAX_RECORD_SECONDS = 12;
-const MIN_RECORD_SECONDS = 0.6;
+// Pieces of a phrase are two words each, so one can be short — a single
+// quick word is still a valid piece.
+export const MAX_CHUNK_SECONDS = 6;
+const MIN_RECORD_SECONDS = 0.4;
 const TARGET_RATE = 16000;
 const TRIM_PADDING_SECONDS = 0.12;
 const MIN_PEAK = 0.01;
