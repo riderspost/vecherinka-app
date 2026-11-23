@@ -198,13 +198,32 @@ def _pick_phrase(db, room_id):
     return random.choice(pool)
 
 
+def total_rounds_for(player_count):
+    """Every player gets to speak to every other player exactly once."""
+    return player_count * (player_count - 1)
+
+
+def roles_for_round(order, number):
+    """Who speaks and who repeats in round `number` (1-based), given the player circle.
+
+    Rounds go in laps. In lap 1 each player speaks once and the next player
+    around the circle repeats; in lap 2 the repeater is two seats along; and
+    so on until every ordered pair has had its turn. Because a lap is a full
+    pass over the circle, everyone has spoken the same number of times after
+    each lap — so a game ended early is still fair.
+    """
+    n = len(order)
+    lap, seat = divmod(number - 1, n)
+    return order[seat], order[(seat + lap + 1) % n]
+
+
 def start_game(db, room):
     players = get_active_players(db, room["id"])
     order = [p["id"] for p in players]
     random.shuffle(order)
     db.execute(
         "INSERT OR REPLACE INTO reverse_state (room_id, total_rounds, round_number, order_json) VALUES (?, ?, 0, ?)",
-        (room["id"], len(order), json.dumps(order)),
+        (room["id"], total_rounds_for(len(order)), json.dumps(order)),
     )
     db.execute("UPDATE rooms SET status = 'playing' WHERE id = ?", (room["id"],))
     start_next_round(db, room)
@@ -219,8 +238,7 @@ def start_next_round(db, room):
         db.execute("UPDATE rooms SET status = 'finished' WHERE id = ?", (room["id"],))
         db.commit()
         return None
-    speaker_id = order[(number - 1) % len(order)]
-    imitator_id = order[number % len(order)]
+    speaker_id, imitator_id = roles_for_round(order, number)
     phrase = _pick_phrase(db, room["id"])
     options, correct_index = _pick_options(db, phrase)
     round_id = gen_id()

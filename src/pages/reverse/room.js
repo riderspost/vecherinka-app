@@ -291,6 +291,15 @@ export function mountReverseRoomPage(container, code) {
     wrap.appendChild(copyBtn);
 
     wrap.appendChild(p("tagline", "🎙 Каждому понадобится микрофон на своём телефоне."));
+    if (players.length >= state.minPlayers) {
+      const rounds = players.length * (players.length - 1);
+      wrap.appendChild(
+        p(
+          "tagline",
+          `Каждый загадает каждому — раундов будет ${rounds}. Хост может завершить игру раньше.`
+        )
+      );
+    }
 
     if (state.me.isHost) {
       const startBtn = document.createElement("button");
@@ -342,6 +351,23 @@ export function mountReverseRoomPage(container, code) {
         }
       });
       wrap.appendChild(skipBtn);
+    }
+
+    if (state.me.isHost) {
+      const endBtn = document.createElement("button");
+      endBtn.className = "link-btn danger-text";
+      endBtn.textContent = "🏁 Завершить игру";
+      endBtn.addEventListener("click", async () => {
+        if (!confirm("Завершить игру и показать итоги?")) return;
+        endBtn.disabled = true;
+        try {
+          await reverseApi.end(code, token);
+        } catch (e) {
+          alert(e.message);
+          endBtn.disabled = false;
+        }
+      });
+      wrap.appendChild(endBtn);
     }
   }
 

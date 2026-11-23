@@ -4,7 +4,7 @@ import json
 import os
 import wave
 
-from server.reverse_game import MIN_PLAYERS, split_chunks
+from server.reverse_game import MIN_PLAYERS, split_chunks, total_rounds_for, roles_for_round
 from server.reverse_seed import PHRASES
 from server.rooms_common import UPLOAD_DIR
 
@@ -381,23 +381,24 @@ def finish_round(client, code, tokens, host_token):
     return speaker, imitator
 
 
-def test_full_game_rotates_roles_and_finishes(client):
+def test_full_game_covers_every_pair_and_finishes(client):
     code, tokens, host_token = setup_game(client, players=3)
-    speakers, imitators = [], []
-    for round_number in range(1, 4):
+    pairs = []
+    for round_number in range(1, 7):  # 3 players -> 3 * 2 rounds
         _, _, rv = round_roles(client, code, tokens)
         assert rv["roundNumber"] == round_number
-        assert rv["totalRounds"] == 3
+        assert rv["totalRounds"] == 6
         speaker, imitator = finish_round(client, code, tokens, host_token)
-        speakers.append(speaker)
-        imitators.append(imitator)
         assert speaker != imitator
+        pairs.append((speaker, imitator))
         resp = client.post(f"/api/reverse/rooms/{code}/next", json={"token": host_token})
         assert resp.status_code == 200
-    assert sorted(speakers) == sorted(tokens)  # everyone spoke exactly once
+    # every ordered (speaker, imitator) pair exactly once
+    assert len(set(pairs)) == 6
+    assert set(pairs) == {(a, b) for a in tokens for b in tokens if a != b}
     state = get_state(client, code, host_token)
     assert state["room"]["status"] == "finished"
-    assert len(state["summary"]) == 3
+    assert len(state["summary"]) == 6
     assert all(item["phrase"] for item in state["summary"])
 
 
@@ -407,7 +408,8 @@ def test_phrases_do_not_repeat_within_a_game(client, raw_db):
         finish_round(client, code, tokens, host_token)
         client.post(f"/api/reverse/rooms/{code}/next", json={"token": host_token})
     used = [r["phrase_id"] for r in raw_db.execute("SELECT phrase_id FROM reverse_rounds").fetchall()]
-    assert len(used) == len(set(used)) == 3
+    assert len(used) >= 3
+    assert len(set(used)) == len(used)
 
 
 def test_next_only_from_reveal_and_only_host(client):
@@ -430,7 +432,7 @@ def test_host_can_skip_a_stuck_round(client):
 
 def test_skipping_the_last_round_finishes_the_game(client):
     code, tokens, host_token = setup_game(client, players=3)
-    for _ in range(3):
+    for _ in range(6):
         client.post(f"/api/reverse/rooms/{code}/skip", json={"token": host_token})
     state = get_state(client, code, host_token)
     assert state["room"]["status"] == "finished"
@@ -461,3 +463,49 @@ def test_other_game_rooms_are_not_reachable_through_reverse_api(client):
     data = resp.get_json()
     resp = client.get(f"/api/reverse/rooms/{data['code']}/state?token={data['token']}")
     assert resp.status_code == 404
+
+
+def test_round_count_is_players_times_players_minus_one():
+    assert [total_rounds_for(n) for n in (2, 3, 4, 5, 8)] == [2, 6, 12, 20, 56]
+
+
+def test_every_pair_meets_once_and_each_lap_is_fair():
+    for n in (2, 3, 4, 5, 7):
+        order = [f"p{i}" for i in range(n)]
+        rounds = [roles_for_round(order, r) for r in range(1, total_rounds_for(n) + 1)]
+        assert len(set(rounds)) == len(rounds) == n * (n - 1)
+        assert all(speaker != imitator for speaker, imitator in rounds)
+        # After every full lap of n rounds everybody has spoken the same number of times,
+        # so ending the game early never favours anyone.
+        for lap_end in range(n, len(rounds) + 1, n):
+            spoke = [speaker for speaker, _ in rounds[:lap_end]]
+            assert all(spoke.count(p) == lap_end // n for p in order)
+        # ...and the same goes for repeating.
+        for lap_end in range(n, len(rounds) + 1, n):
+            repeated = [imitator for _, imitator in rounds[:lap_end]]
+            assert all(repeated.count(p) == lap_end // n for p in order)
+        # Nobody speaks two rounds in a row (when there is anyone else to ask).
+        if n > 2:
+            assert all(rounds[i][0] != rounds[i + 1][0] for i in range(len(rounds) - 1))
+
+
+def test_four_player_game_plays_all_twelve_rounds(client, raw_db):
+    code, tokens, host_token = setup_game(client, players=4)
+    assert get_state(client, code, host_token)["reverse"]["totalRounds"] == 12
+    for _ in range(12):
+        assert client.post(f"/api/reverse/rooms/{code}/skip", json={"token": host_token}).status_code == 200
+    assert get_state(client, code, host_token)["room"]["status"] == "finished"
+    pairs = {(r["speaker_id"], r["imitator_id"]) for r in raw_db.execute("SELECT * FROM reverse_rounds").fetchall()}
+    assert len(pairs) == 12
+
+
+def test_host_can_end_the_game_early(client):
+    code, tokens, host_token = setup_game(client, players=4)
+    non_host = next(t for t in tokens.values() if t != host_token)
+    assert client.post(f"/api/reverse/rooms/{code}/end", json={"token": non_host}).status_code == 400
+    finish_round(client, code, tokens, host_token)
+    assert client.post(f"/api/reverse/rooms/{code}/end", json={"token": host_token}).status_code == 200
+    state = get_state(client, code, host_token)
+    assert state["room"]["status"] == "finished"
+    assert len(state["summary"]) == 1  # only the round that was actually played
+    assert client.post(f"/api/reverse/rooms/{code}/end", json={"token": host_token}).status_code == 400

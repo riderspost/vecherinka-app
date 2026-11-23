@@ -115,4 +115,5 @@ export const reverseApi = {
   reveal: (code, token) => request("POST", `/api/reverse/rooms/${code}/reveal`, { token }),
   next: (code, token) => request("POST", `/api/reverse/rooms/${code}/next`, { token }),
   skip: (code, token) => request("POST", `/api/reverse/rooms/${code}/skip`, { token }),
+  end: (code, token) => request("POST", `/api/reverse/rooms/${code}/end`, { token }),
 };

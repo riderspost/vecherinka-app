@@ -209,6 +209,23 @@ def next_round(code):
     return jsonify({"ok": True})
 
 
+@reverse_bp.route("/rooms/<code>/end", methods=["POST"])
+def end_game(code):
+    """Host shortcut: with every pair playing, a game can run long — stop and show the results."""
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    room, player, err = _auth(db, code, data.get("token"))
+    if err:
+        return err
+    if not player["is_host"]:
+        return error("Только хост может завершить игру")
+    if room["status"] != "playing":
+        return error("Игра сейчас не идёт")
+    db.execute("UPDATE rooms SET status = 'finished' WHERE id = ?", (room["id"],))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @reverse_bp.route("/rooms/<code>/skip", methods=["POST"])
 def skip_round(code):
     """Host escape hatch: a player wandered off mid-round, move on without points."""
