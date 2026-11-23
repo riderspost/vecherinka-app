@@ -1,7 +1,22 @@
+import pytest
+
+from server.reverse_seed import seed_reverse_phrases
 from tests.test_admin import admin_login
 from tests.test_reverse_game import setup_game, play_to_guessing, get_state
 
 DECOYS = ["Тише ходишь — дольше будешь", "Ближе едешь — тише будешь", "Тише едешь — ближе будешь"]
+
+
+@pytest.fixture(autouse=True)
+def _restore_seed_phrases(raw_db):
+    # The test database is shared across the whole run, and these tests add,
+    # rename and delete phrases — put the seed set back so later game tests
+    # see exactly what a fresh install has.
+    yield
+    raw_db.execute("DELETE FROM rooms")
+    raw_db.execute("DELETE FROM reverse_phrases")
+    raw_db.commit()
+    seed_reverse_phrases(raw_db)
 
 
 def add_phrase(client, text="Новая тестовая фраза", decoys=None):

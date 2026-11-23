@@ -5,6 +5,7 @@ import os
 import wave
 
 from server.reverse_game import MIN_PLAYERS
+from server.reverse_seed import PHRASES
 from server.rooms_common import UPLOAD_DIR
 
 EMOJIS = ["🐸", "🦊", "🐼", "🐵", "🐶"]
@@ -83,14 +84,26 @@ def play_to_guessing(client, code, tokens):
     return speaker, imitator
 
 
-def test_seed_has_twenty_phrases_with_lookalike_decoys(raw_db):
-    rows = raw_db.execute("SELECT text, decoys FROM reverse_phrases WHERE status = 'active'").fetchall()
-    assert len(rows) >= 20
-    for row in rows:
-        decoys = json.loads(row["decoys"])
+def test_seed_has_twenty_phrases_loaded(raw_db):
+    count = raw_db.execute("SELECT COUNT(*) AS c FROM reverse_phrases WHERE status = 'active'").fetchone()["c"]
+    assert count >= len(PHRASES) >= 20
+
+
+def test_seed_phrases_have_lookalike_decoys():
+    texts = [entry["text"] for entry in PHRASES]
+    assert len(set(texts)) == len(texts)
+    for entry in PHRASES:
+        decoys = entry["decoys"]
         assert len(decoys) >= 3
-        assert row["text"] not in decoys
+        assert entry["text"] not in decoys
         assert len(set(decoys)) == len(decoys)
+        # Lookalikes: about the same number of words as the answer, so the
+        # length of the recording alone doesn't give the right one away.
+        assert all(abs(len(d.split()) - len(entry["text"].split())) <= 1 for d in decoys)
+        # And not just the same phrase with a different last letter or two:
+        # each decoy must still share most of its words with the answer.
+        answer_words = set(entry["text"].lower().split())
+        assert all(len(answer_words & set(d.lower().split())) >= len(answer_words) // 2 for d in decoys)
 
 
 def test_join_reports_game_type(client):
