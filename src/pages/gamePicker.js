@@ -19,6 +19,13 @@ const ROOM_STATUS_LABEL = {
   final_results: "игра завершена",
 };
 
+const GAME_ROOM_PATH = {
+  fanty: (code) => `/fanty/r/${code}`,
+  reverse: (code) => `/reverse/r/${code}`,
+  sentence: (code) => `/r/${code}`,
+};
+const GAME_EMOJI = { fanty: "🍾", reverse: "⏪", sentence: "✏️" };
+
 async function renderReturnSection(section, sessionPromise) {
   // Returning to a room you've left is an account-only feature — a guest
   // has no durable identity to look it up by, only whatever token happens
@@ -42,11 +49,11 @@ async function renderReturnSection(section, sessionPromise) {
   }
 
   myRooms.forEach((r) => {
-    const path = r.gameType === "fanty" ? `/fanty/r/${r.code}` : `/r/${r.code}`;
+    const path = GAME_ROOM_PATH[r.gameType] ? GAME_ROOM_PATH[r.gameType](r.code) : `/r/${r.code}`;
     const card = document.createElement("button");
     card.className = "return-session-card";
     card.innerHTML = `
-      <span class="return-session-emoji">${r.gameType === "fanty" ? "🍾" : "✏️"}</span>
+      <span class="return-session-emoji">${GAME_EMOJI[r.gameType] || "✏️"}</span>
       <span>
         <span class="return-session-title">Вернуться в комнату ${escapeHtml(r.code)}</span><br/>
         <span class="return-session-sub">${escapeHtml(ROOM_STATUS_LABEL[r.status] || r.status)}</span>
@@ -148,6 +155,12 @@ export function renderGamePicker(container) {
       <span class="game-card-emoji">🍾</span>
       <span class="game-card-title">Фанты</span>
       <span class="game-card-desc">Крутите бутылочку — правда, действие или командные фанты</span>
+      <span class="game-card-players">От 2 игроков</span>
+    </button>
+    <button class="game-card" data-path="/reverse">
+      <span class="game-card-emoji">⏪</span>
+      <span class="game-card-title">Наоборот</span>
+      <span class="game-card-desc">Фраза звучит задом наперёд — повторите на слух и узнайте, что было загадано</span>
       <span class="game-card-players">От 2 игроков</span>
     </button>
   `;

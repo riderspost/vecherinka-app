@@ -18,6 +18,8 @@ from .admin import admin_bp
 from .auth import auth_bp
 from .fanty_routes import fanty_bp
 from .fanty_seed import seed_fanty_content
+from .reverse_routes import reverse_bp
+from .reverse_seed import seed_reverse_phrases
 from .rooms_common import (
     BASE_DIR,
     UPLOAD_DIR,
@@ -48,6 +50,7 @@ register_app(app)
 app.register_blueprint(admin_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(fanty_bp)
+app.register_blueprint(reverse_bp)
 
 
 def _load_secret_key():
@@ -76,6 +79,7 @@ with app.app_context():
     _db = get_db()
     seed_prompts(_db)
     seed_fanty_content(_db)
+    seed_reverse_phrases(_db)
     close_db()
 
 
@@ -246,9 +250,13 @@ def join_room(code):
 
     device_id = data.get("deviceId")
     # Fanty's local mode deliberately puts several players on one device —
-    # that's the whole point of it. The sentence game has no such mode, so
-    # for it specifically, one browser only ever gets one seat per room.
-    if not is_display and room["game_type"] == "sentence" and device_already_in_room(db, room["id"], device_id):
+    # that's the whole point of it. The sentence and reverse games have no
+    # such mode, so for them one browser only ever gets one seat per room.
+    if (
+        not is_display
+        and room["game_type"] in ("sentence", "reverse")
+        and device_already_in_room(db, room["id"], device_id)
+    ):
         return error("С этого устройства уже есть игрок в этой комнате")
 
     gender = None

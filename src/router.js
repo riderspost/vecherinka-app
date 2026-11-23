@@ -21,6 +21,12 @@ export function parseRoute(pathname) {
   if (parts[0] === "contact") {
     return { name: "contact" };
   }
+  if (parts[0] === "reverse") {
+    if (parts[1] === "r" && parts[2]) {
+      return { name: "reverseRoom", code: parts[2].toUpperCase() };
+    }
+    return { name: "reverseHome" };
+  }
   if (parts[0] === "fanty") {
     if (parts[1] === "submit") {
       return { name: "fantySubmit" };

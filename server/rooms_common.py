@@ -128,6 +128,14 @@ def delete_room_and_files(db, room):
             base, ext = os.path.splitext(filename)
             filenames.append(filename)
             filenames.append(f"{base}_thumb{ext}")
+    elif room["game_type"] == "reverse":
+        audio_rows = db.execute(
+            "SELECT original_file, reversed_file, imitation_file, imitation_back_file "
+            "FROM reverse_rounds WHERE room_id = ?",
+            (room["id"],),
+        ).fetchall()
+        for row in audio_rows:
+            filenames.extend(name for name in row if name)
 
     db.execute("DELETE FROM rooms WHERE id = ?", (room["id"],))
     db.commit()

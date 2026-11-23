@@ -8,6 +8,8 @@ import { renderFantySubmit } from "./pages/fanty/submit.js";
 import { renderAccountPage } from "./pages/account.js";
 import { renderContactPage } from "./pages/contact.js";
 import { renderProfilePage } from "./pages/profile.js";
+import { renderReverseHome } from "./pages/reverse/home.js";
+import { mountReverseRoomPage } from "./pages/reverse/room.js";
 import "./pwaInstall.js";
 
 if ("serviceWorker" in navigator) {
@@ -36,6 +38,10 @@ function renderCurrentRoute() {
     mountFantyRoomPage(app, route.code, { asDisplay: true });
   } else if (route.name === "fantySubmit") {
     renderFantySubmit(app);
+  } else if (route.name === "reverseHome") {
+    renderReverseHome(app);
+  } else if (route.name === "reverseRoom") {
+    mountReverseRoomPage(app, route.code);
   } else if (route.name === "account") {
     renderAccountPage(app);
   } else if (route.name === "profile") {

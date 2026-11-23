@@ -181,3 +181,47 @@ CREATE INDEX IF NOT EXISTS idx_fanty_round_photos_round ON fanty_round_photos(ro
 CREATE INDEX IF NOT EXISTS idx_fanty_dare_locations_dare ON fanty_dare_locations(dare_id);
 CREATE INDEX IF NOT EXISTS idx_fanty_dare_categories_dare ON fanty_dare_categories(dare_id);
 CREATE INDEX IF NOT EXISTS idx_fanty_truth_categories_truth ON fanty_truth_categories(truth_id);
+
+-- Наоборот (аудио-игра: фраза записывается, переворачивается, повторяется на слух)
+
+CREATE TABLE IF NOT EXISTS reverse_phrases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  text TEXT NOT NULL UNIQUE,
+  decoys TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'active'
+);
+
+CREATE TABLE IF NOT EXISTS reverse_state (
+  room_id TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+  total_rounds INTEGER NOT NULL DEFAULT 0,
+  round_number INTEGER NOT NULL DEFAULT 0,
+  order_json TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE TABLE IF NOT EXISTS reverse_rounds (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  round_number INTEGER NOT NULL,
+  speaker_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  imitator_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  phrase_id INTEGER NOT NULL REFERENCES reverse_phrases(id),
+  phase TEXT NOT NULL DEFAULT 'recording_original',
+  options_json TEXT NOT NULL DEFAULT '[]',
+  correct_index INTEGER NOT NULL DEFAULT 0,
+  original_file TEXT,
+  reversed_file TEXT,
+  imitation_file TEXT,
+  imitation_back_file TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS reverse_answers (
+  id TEXT PRIMARY KEY,
+  round_id TEXT NOT NULL REFERENCES reverse_rounds(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  option_index INTEGER NOT NULL,
+  UNIQUE(round_id, player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reverse_rounds_room ON reverse_rounds(room_id, round_number);
+CREATE INDEX IF NOT EXISTS idx_reverse_answers_round ON reverse_answers(round_id);
