@@ -184,11 +184,19 @@ CREATE INDEX IF NOT EXISTS idx_fanty_truth_categories_truth ON fanty_truth_categ
 
 -- Наоборот (аудио-игра: фраза записывается, переворачивается, повторяется на слух)
 
+-- Блок — набор похожих фраз. В раунде загадывается одна случайная фраза
+-- блока, а в вариантах ответа — она и ещё три случайные из того же блока.
+CREATE TABLE IF NOT EXISTS reverse_blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  status TEXT NOT NULL DEFAULT 'active'
+);
+
 CREATE TABLE IF NOT EXISTS reverse_phrases (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   text TEXT NOT NULL UNIQUE,
   decoys TEXT NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL DEFAULT 'active'
+  status TEXT NOT NULL DEFAULT 'active',
+  block_id INTEGER REFERENCES reverse_blocks(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS reverse_state (

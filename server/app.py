@@ -19,7 +19,7 @@ from .auth import auth_bp
 from .fanty_routes import fanty_bp
 from .fanty_seed import seed_fanty_content
 from .reverse_routes import reverse_bp
-from .reverse_seed import seed_reverse_phrases
+from .reverse_seed import seed_reverse_blocks
 from .rooms_common import (
     BASE_DIR,
     UPLOAD_DIR,
@@ -79,7 +79,7 @@ with app.app_context():
     _db = get_db()
     seed_prompts(_db)
     seed_fanty_content(_db)
-    seed_reverse_phrases(_db)
+    seed_reverse_blocks(_db)
     close_db()
 
 

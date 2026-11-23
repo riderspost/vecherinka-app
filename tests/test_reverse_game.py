@@ -1,11 +1,12 @@
 import array
 import io
+import itertools
 import json
 import os
 import wave
 
-from server.reverse_game import MIN_PLAYERS, split_chunks, total_rounds_for, roles_for_round
-from server.reverse_seed import PHRASES
+from server.reverse_game import MIN_PLAYERS, OPTIONS_COUNT, split_chunks, total_rounds_for, roles_for_round
+from server.reverse_seed import BLOCKS
 from server.rooms_common import UPLOAD_DIR
 
 EMOJIS = ["🐸", "🦊", "🐼", "🐵", "🐶"]
@@ -100,26 +101,24 @@ def play_to_guessing(client, code, tokens):
     return speaker, imitator
 
 
-def test_seed_has_twenty_phrases_loaded(raw_db):
-    count = raw_db.execute("SELECT COUNT(*) AS c FROM reverse_phrases WHERE status = 'active'").fetchone()["c"]
-    assert count >= len(PHRASES) >= 20
+def test_seed_blocks_are_loaded(raw_db):
+    blocks = raw_db.execute("SELECT COUNT(*) AS c FROM reverse_blocks WHERE status = 'active'").fetchone()["c"]
+    phrases = raw_db.execute("SELECT COUNT(*) AS c FROM reverse_phrases").fetchone()["c"]
+    assert blocks >= len(BLOCKS) >= 20
+    assert phrases >= sum(len(b) for b in BLOCKS)
 
 
-def test_seed_phrases_have_lookalike_decoys():
-    texts = [entry["text"] for entry in PHRASES]
-    assert len(set(texts)) == len(texts)
-    for entry in PHRASES:
-        decoys = entry["decoys"]
-        assert len(decoys) >= 3
-        assert entry["text"] not in decoys
-        assert len(set(decoys)) == len(decoys)
-        # Lookalikes: about the same number of words as the answer, so the
-        # length of the recording alone doesn't give the right one away.
-        assert all(abs(len(d.split()) - len(entry["text"].split())) <= 1 for d in decoys)
-        # And not just the same phrase with a different last letter or two:
-        # each decoy must still share most of its words with the answer.
-        answer_words = set(entry["text"].lower().split())
-        assert all(len(answer_words & set(d.lower().split())) >= len(answer_words) // 2 for d in decoys)
+def test_seed_blocks_are_made_of_lookalike_phrases():
+    all_texts = [t for block in BLOCKS for t in block]
+    assert len(set(all_texts)) == len(all_texts)  # a phrase lives in exactly one block
+    for block in BLOCKS:
+        assert len(block) >= OPTIONS_COUNT
+        assert len(set(block)) == len(block)
+        for a, b in itertools.combinations(block, 2):
+            # Similar length, so the recording's duration alone doesn't give the answer away...
+            assert abs(len(a.split()) - len(b.split())) <= 2, (a, b)
+            # ...and built from largely the same words, only swapped for sound-alikes.
+            assert set(a.lower().split()) & set(b.lower().split()), (a, b)
 
 
 def test_join_reports_game_type(client):
@@ -509,3 +508,121 @@ def test_host_can_end_the_game_early(client):
     assert state["room"]["status"] == "finished"
     assert len(state["summary"]) == 1  # only the round that was actually played
     assert client.post(f"/api/reverse/rooms/{code}/end", json={"token": host_token}).status_code == 400
+
+
+def block_of(raw_db, text):
+    return raw_db.execute("SELECT block_id FROM reverse_phrases WHERE text = ?", (text,)).fetchone()["block_id"]
+
+
+def test_options_all_come_from_one_block_and_include_the_spoken_phrase(client, raw_db):
+    for _ in range(5):
+        code, tokens, host_token = setup_game(client, players=3)
+        speaker, imitator = play_to_guessing(client, code, tokens)
+        rv = get_state(client, code, tokens[imitator])["reverse"]
+        assert len(set(rv["options"])) == OPTIONS_COUNT
+        assert len({block_of(raw_db, text) for text in rv["options"]}) == 1
+        spoken = raw_db.execute(
+            "SELECT p.text FROM reverse_rounds rr JOIN reverse_phrases p ON p.id = rr.phrase_id"
+        ).fetchone()["text"]
+        assert spoken in rv["options"]
+        client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
+
+
+def test_every_phrase_of_a_block_can_be_the_spoken_one(client, raw_db):
+    """No phrase is 'the real one' with the rest as decoys — the answer is a random member."""
+    raw_db.execute("UPDATE reverse_blocks SET status = 'disabled'")
+    block_id = raw_db.execute("INSERT INTO reverse_blocks (status) VALUES ('active')").lastrowid
+    members = [f"Тестовая фраза номер {n}" for n in ("раз", "два", "три", "четыре", "пять")]
+    raw_db.executemany(
+        "INSERT INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+        [(t, block_id) for t in members],
+    )
+    raw_db.commit()
+    try:
+        spoken, absent = set(), []
+        for _ in range(40):
+            code, tokens, host_token = setup_game(client, players=2)
+            speaker, _imitator, _rv = round_roles(client, code, tokens)
+            rv = get_state(client, code, tokens[speaker])["reverse"]
+            spoken.add(rv["phrase"])
+            options = raw_db.execute("SELECT options_json FROM reverse_rounds").fetchone()["options_json"]
+            absent.append(len(set(members) - set(json.loads(options))))
+            client.post(f"/api/rooms/{code}/discard", json={"token": host_token})
+        assert spoken == set(members)  # each of the 5 was spoken at least once in 40 games
+        assert set(absent) == {1}  # 4 of 5 shown every time; exactly one member left out
+    finally:
+        raw_db.execute("DELETE FROM reverse_phrases WHERE block_id = ?", (block_id,))
+        raw_db.execute("DELETE FROM reverse_blocks WHERE id = ?", (block_id,))
+        raw_db.execute("UPDATE reverse_blocks SET status = 'active'")
+        raw_db.commit()
+
+
+def test_a_block_is_not_reused_within_one_game(client, raw_db):
+    code, tokens, host_token = setup_game(client, players=4)  # 12 rounds, 20 blocks available
+    for _ in range(11):
+        client.post(f"/api/reverse/rooms/{code}/skip", json={"token": host_token})
+    blocks = [
+        block_of(raw_db, r["text"])
+        for r in raw_db.execute(
+            "SELECT p.text FROM reverse_rounds rr JOIN reverse_phrases p ON p.id = rr.phrase_id"
+        ).fetchall()
+    ]
+    assert len(blocks) == 12
+    assert len(set(blocks)) == 12
+
+
+def test_blocks_with_too_few_phrases_are_never_played(client, raw_db):
+    raw_db.execute("UPDATE reverse_blocks SET status = 'disabled'")
+    small = raw_db.execute("INSERT INTO reverse_blocks (status) VALUES ('active')").lastrowid
+    raw_db.executemany(
+        "INSERT INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+        [(f"Короткий блок {i}", small) for i in range(OPTIONS_COUNT - 1)],
+    )
+    raw_db.commit()
+    try:
+        room = create_room(client)
+        join(client, room["code"], "G", "🐸")
+        resp = client.post(f"/api/reverse/rooms/{room['code']}/start", json={"token": room["token"]})
+        assert resp.status_code == 400  # nothing playable, and it says so rather than crashing
+        assert get_state(client, room["code"], room["token"])["room"]["status"] == "lobby"
+    finally:
+        raw_db.execute("DELETE FROM reverse_phrases WHERE block_id = ?", (small,))
+        raw_db.execute("DELETE FROM reverse_blocks WHERE id = ?", (small,))
+        raw_db.execute("UPDATE reverse_blocks SET status = 'active'")
+        raw_db.commit()
+
+
+def test_old_phrase_with_decoys_rows_become_blocks(tmp_path, monkeypatch):
+    """A database from before blocks existed: each phrase + its decoys turns into a five-phrase block."""
+    import sqlite3
+    import server.db as dbmod
+
+    path = str(tmp_path / "old.db")
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE reverse_phrases (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          text TEXT NOT NULL UNIQUE,
+          decoys TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'active'
+        );
+        INSERT INTO reverse_phrases (text, decoys) VALUES
+          ('Первая фраза', '["Первая фраза два", "Первая фраза три", "Первая фраза четыре", "Первая фраза пять"]'),
+          ('Вторая фраза', '["Вторая фраза два", "Вторая фраза три", "Вторая фраза четыре"]');
+        """
+    )
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(dbmod, "DATABASE_PATH", path)
+    dbmod.init_db()
+    dbmod.init_db()  # running again must not duplicate anything
+
+    conn = sqlite3.connect(path)
+    sizes = sorted(
+        r[0] for r in conn.execute("SELECT COUNT(*) FROM reverse_phrases GROUP BY block_id").fetchall()
+    )
+    assert sizes == [4, 5]
+    assert conn.execute("SELECT COUNT(*) FROM reverse_blocks").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM reverse_phrases WHERE block_id IS NULL").fetchone()[0] == 0
+    conn.close()

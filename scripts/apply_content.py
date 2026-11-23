@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a content dump (from dump_content.py) into this environment's DB.
 
-Upserts by unique text: a matching row gets its fields/categories/locations/decoys
+Upserts by unique text: a matching row gets its fields/categories/locations
 updated, new text gets inserted. By default never deletes — content added
 directly on this environment that isn't in the dump is left untouched, so
 it's safe to run against an environment that's also edited by hand.
@@ -32,16 +32,57 @@ def upsert_prompt(db, p):
     return "inserted"
 
 
-def upsert_reverse_phrase(db, ph):
-    decoys = json.dumps(ph["decoys"], ensure_ascii=False)
-    row = db.execute("SELECT id FROM reverse_phrases WHERE text = ?", (ph["text"],)).fetchone()
-    if row:
-        db.execute("UPDATE reverse_phrases SET decoys = ?, status = ? WHERE id = ?", (decoys, ph["status"], row[0]))
-        return "updated"
-    db.execute(
-        "INSERT INTO reverse_phrases (text, decoys, status) VALUES (?, ?, ?)", (ph["text"], decoys, ph["status"])
-    )
-    return "inserted"
+def upsert_reverse_block(db, block, matched):
+    """A block has no unique key of its own, so it's matched through its phrases:
+    a block holding any phrase from the dump is the same block. Phrases are
+    added to it, never removed (that's --replace's job)."""
+    texts = block["phrases"]
+    block_id = None
+    for text in texts:
+        row = db.execute("SELECT block_id FROM reverse_phrases WHERE text = ?", (text,)).fetchone()
+        if row:
+            block_id = row[0]
+            break
+    if block_id is None:
+        block_id = db.execute("INSERT INTO reverse_blocks (status) VALUES (?)", (block["status"],)).lastrowid
+        action = "inserted"
+    else:
+        db.execute("UPDATE reverse_blocks SET status = ? WHERE id = ?", (block["status"], block_id))
+        action = "updated"
+    for text in texts:
+        row = db.execute("SELECT block_id FROM reverse_phrases WHERE text = ?", (text,)).fetchone()
+        if row is None:
+            db.execute(
+                "INSERT INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+                (text, block_id),
+            )
+        elif row[0] != block_id:
+            print(f"  warning: phrase {text!r} already belongs to another block here — left there", file=sys.stderr)
+    matched.setdefault(block_id, set()).update(texts)
+    return action
+
+
+def _remove_unmatched_reverse(db, matched, counts):
+    removed = 0
+    blocked = 0
+    for block_id, keep in matched.items():
+        for row in db.execute("SELECT id, text FROM reverse_phrases WHERE block_id = ?", (block_id,)).fetchall():
+            if row[1] in keep:
+                continue
+            try:
+                db.execute("DELETE FROM reverse_phrases WHERE id = ?", (row[0],))
+                removed += 1
+            except sqlite3.IntegrityError:
+                blocked += 1
+    for row in db.execute("SELECT id FROM reverse_blocks").fetchall():
+        if row[0] in matched:
+            continue
+        try:
+            db.execute("DELETE FROM reverse_blocks WHERE id = ?", (row[0],))
+            removed += 1
+        except sqlite3.IntegrityError:
+            blocked += 1
+    counts["reverseRemoved"] = {"removed": removed, "blocked": blocked}
 
 
 def upsert_truth(db, t):
@@ -167,20 +208,21 @@ def main():
         "prompts": {"inserted": 0, "updated": 0},
         "truths": {"inserted": 0, "updated": 0},
         "dares": {"inserted": 0, "updated": 0},
-        "reverse_phrases": {"inserted": 0, "updated": 0},
+        "reverse_blocks": {"inserted": 0, "updated": 0},
     }
     # Dumps made before "Наоборот" existed have no such key — treat that as
-    # "nothing to say about phrases", never as "the full set is empty", or a
-    # --replace run would wipe every phrase on the target.
-    reverse_phrases = dump.get("reverse_phrases")
+    # "nothing to say about blocks", never as "the full set is empty", or a
+    # --replace run would wipe every block on the target.
+    reverse_blocks = dump.get("reverse_blocks")
+    matched_reverse = {}
     for p in dump["prompts"]:
         counts["prompts"][upsert_prompt(db, p)] += 1
     for t in dump["truths"]:
         counts["truths"][upsert_truth(db, t)] += 1
     for d in dump["dares"]:
         counts["dares"][upsert_dare(db, d, upload_dir)] += 1
-    for ph in reverse_phrases or []:
-        counts["reverse_phrases"][upsert_reverse_phrase(db, ph)] += 1
+    for block in reverse_blocks or []:
+        counts["reverse_blocks"][upsert_reverse_block(db, block, matched_reverse)] += 1
 
     if replace:
         _remove_missing(db, "prompts", "text", "id", {p["text"] for p in dump["prompts"]}, "promptsRemoved", counts)
@@ -190,16 +232,8 @@ def main():
         _remove_missing(
             db, "fanty_truths", "text", "id", {t["text"] for t in dump["truths"]}, "truthsRemoved", counts
         )
-        if reverse_phrases is not None:
-            _remove_missing(
-                db,
-                "reverse_phrases",
-                "text",
-                "id",
-                {ph["text"] for ph in reverse_phrases},
-                "reversePhrasesRemoved",
-                counts,
-            )
+        if reverse_blocks is not None:
+            _remove_unmatched_reverse(db, matched_reverse, counts)
 
     db.commit()
     db.close()

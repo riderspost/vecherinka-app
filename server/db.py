@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 
@@ -27,6 +28,24 @@ def _ensure_column(db, table, column, ddl):
     existing = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in existing:
         db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
+def _migrate_reverse_phrases_to_blocks(db):
+    """Old rows were a phrase plus its own list of wrong options; each becomes a block.
+
+    The phrase and its former wrong options are now just five phrases of
+    equal standing. Rows already in a block are left alone, so this only
+    ever does work once.
+    """
+    old_rows = db.execute("SELECT id, decoys, status FROM reverse_phrases WHERE block_id IS NULL").fetchall()
+    for row in old_rows:
+        block_id = db.execute("INSERT INTO reverse_blocks (status) VALUES (?)", (row["status"],)).lastrowid
+        db.execute("UPDATE reverse_phrases SET block_id = ?, decoys = '[]' WHERE id = ?", (block_id, row["id"]))
+        for text in json.loads(row["decoys"] or "[]"):
+            db.execute(
+                "INSERT OR IGNORE INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+                (text, block_id),
+            )
 
 
 def init_db():
@@ -72,6 +91,11 @@ def init_db():
     _ensure_column(db, "reverse_rounds", "chunks_json", "chunks_json TEXT NOT NULL DEFAULT '[]'")
     _ensure_column(db, "reverse_rounds", "original_done", "original_done INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "reverse_rounds", "imitation_done", "imitation_done INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(
+        db, "reverse_phrases", "block_id", "block_id INTEGER REFERENCES reverse_blocks(id) ON DELETE CASCADE"
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_reverse_phrases_block ON reverse_phrases(block_id)")
+    _migrate_reverse_phrases_to_blocks(db)
     db.commit()
     db.close()
 

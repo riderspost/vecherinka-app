@@ -323,21 +323,22 @@ async function renderDashboard() {
     <div id="section-reverse" style="display:none">
       <div class="card">
         <div class="row-actions" style="justify-content:space-between;align-items:center">
-          <h2 style="margin:0">Фразы для «Наоборот»</h2>
-          <button class="btn" id="reverse-add-btn">+ Добавить новую</button>
+          <h2 style="margin:0">Блоки фраз для «Наоборот»</h2>
+          <button class="btn" id="reverse-add-btn">+ Добавить блок</button>
         </div>
         <p class="hint" style="margin-bottom:0">
-          Игрок записывает фразу голосом, её слушают задом наперёд, а потом угадывают среди четырёх вариантов.
+          Блок — набор <b>похожих друг на друга</b> фраз. В раунде выбирается блок, одна его случайная фраза
+          становится загаданной, а ещё три случайные из того же блока — неправильными вариантами. Любая фраза блока
+          может оказаться как правильной, так и неправильной, поэтому фразы должны быть одинаково правдоподобны.
           Лучше выдуманные фразы, а не пословицы и цитаты: знакомую фразу узнают по смыслу, не слушая запись.
-          Фраза записывается кусками по два слова, так что лучше 4–8 слов. Неправильные варианты — те же слова с одной-двумя заменами
-          на похожие по звучанию, одинаково правдоподобные и примерно той же длины.
+          Фразы в блоке — те же слова с одной-двумя заменами на похожие по звучанию, примерно одной длины.
+          Фраза записывается кусками по два слова, так что лучше 4–8 слов. Чем больше фраз в блоке (до 8),
+          тем меньше повторов между играми.
         </p>
         <form id="add-reverse-form" style="display:none;margin-top:16px">
-          <h3 style="margin-top:0" id="reverse-form-heading">Добавить вручную</h3>
-          <label>Фраза</label>
-          <textarea name="text" maxlength="150" placeholder="Тише едешь — дальше будешь" required></textarea>
-          <label>Похожие неправильные варианты — по одному в строке (от 3 до 8)</label>
-          <textarea name="decoys" rows="5" placeholder="Тише ходишь — дольше будешь&#10;Ближе едешь — тише будешь&#10;Тише едешь — ближе будешь" required></textarea>
+          <h3 style="margin-top:0" id="reverse-form-heading">Добавить блок</h3>
+          <label>Фразы блока — по одной в строке (от 4 до 8)</label>
+          <textarea name="phrases" rows="7" placeholder="Тёща купила зелёный чемодан&#10;Тёща купила зелёный диван&#10;Тётя купила зелёный баклажан&#10;Тёща сушила зелёный чемодан" required></textarea>
           <div class="error-box" id="add-reverse-error"></div>
           <div class="row-actions" style="margin-top:8px">
             <button type="submit" class="btn" id="reverse-submit-btn">Добавить</button>
@@ -348,11 +349,11 @@ async function renderDashboard() {
 
       <div class="card">
         <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h2 style="margin:0">Все фразы</h2>
+          <h2 style="margin:0">Все блоки</h2>
           <div class="prompt-count" id="reverse-count"></div>
         </div>
         <div class="filter-bar">
-          <input type="text" id="reverse-filter-search" class="filter-input" placeholder="Поиск по фразе или варианту..." />
+          <input type="text" id="reverse-filter-search" class="filter-input" placeholder="Поиск по фразе..." />
         </div>
         <div id="reverse-table"></div>
       </div>
@@ -870,7 +871,7 @@ async function renderDashboard() {
   function resetReverseForm() {
     reverseForm.reset();
     editingReverseId = null;
-    reverseFormHeading.textContent = "Добавить вручную";
+    reverseFormHeading.textContent = "Добавить блок";
     reverseSubmitBtn.textContent = "Добавить";
     document.getElementById("add-reverse-error").textContent = "";
   }
@@ -881,12 +882,11 @@ async function renderDashboard() {
     reverseForm.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
-  window.startEditingReversePhrase = function (phrase) {
+  window.startEditingReverseBlock = function (block) {
     resetReverseForm();
-    editingReverseId = phrase.id;
-    reverseForm.elements.text.value = phrase.text;
-    reverseForm.elements.decoys.value = phrase.decoys.join("\n");
-    reverseFormHeading.textContent = `Редактировать фразу #${phrase.id}`;
+    editingReverseId = block.id;
+    reverseForm.elements.phrases.value = block.phrases.join("\n");
+    reverseFormHeading.textContent = `Редактировать блок #${block.id}`;
     reverseSubmitBtn.textContent = "Сохранить изменения";
     reverseForm.style.display = "";
     reverseForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -899,23 +899,21 @@ async function renderDashboard() {
 
   reverseForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const text = reverseForm.elements.text.value.trim();
-    const decoys = reverseForm.elements.decoys.value
+    const phrases = reverseForm.elements.phrases.value
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
     const errorEl = document.getElementById("add-reverse-error");
     errorEl.textContent = "";
-    if (!text) return;
     try {
       if (editingReverseId) {
-        await api(`/reverse/phrases/${editingReverseId}`, { method: "PUT", body: JSON.stringify({ text, decoys }) });
+        await api(`/reverse/blocks/${editingReverseId}`, { method: "PUT", body: JSON.stringify({ phrases }) });
       } else {
-        await api("/reverse/phrases", { method: "POST", body: JSON.stringify({ text, decoys }) });
+        await api("/reverse/blocks", { method: "POST", body: JSON.stringify({ phrases }) });
       }
       resetReverseForm();
       reverseForm.style.display = "none";
-      await refreshReversePhrases();
+      await refreshReverseBlocks();
     } catch (err) {
       errorEl.textContent = err.message;
     }
@@ -939,12 +937,12 @@ async function renderDashboard() {
     refreshDaresTable
   );
   wireFilterInputs("truths", ["truths-filter-search", "truths-filter-category"], refreshTruthsTable);
-  wireFilterInputs("reverse", ["reverse-filter-search"], refreshReversePhrasesTable);
+  wireFilterInputs("reverse", ["reverse-filter-search"], refreshReverseBlocksTable);
 
   await refreshPrompts();
   await refreshDares();
   await refreshTruths();
-  await refreshReversePhrases();
+  await refreshReverseBlocks();
   await refreshUsers();
   await refreshRooms();
 }
@@ -1284,39 +1282,37 @@ function refreshTruthsTable() {
 
 // ---- Наоборот ----
 
-let allReversePhrases = [];
+let allReverseBlocks = [];
 
-async function refreshReversePhrases() {
-  allReversePhrases = await api("/reverse/phrases");
-  refreshReversePhrasesTable();
+async function refreshReverseBlocks() {
+  allReverseBlocks = await api("/reverse/blocks");
+  refreshReverseBlocksTable();
 }
 
-function refreshReversePhrasesTable() {
+function refreshReverseBlocksTable() {
   const search = document.getElementById("reverse-filter-search").value.trim().toLowerCase();
   const shown = search
-    ? allReversePhrases.filter(
-        (p) => p.text.toLowerCase().includes(search) || p.decoys.some((d) => d.toLowerCase().includes(search))
-      )
-    : allReversePhrases;
+    ? allReverseBlocks.filter((b) => b.phrases.some((p) => p.toLowerCase().includes(search)))
+    : allReverseBlocks;
 
-  document.getElementById("reverse-count").textContent = `Показано: ${shown.length} из ${allReversePhrases.length}`;
+  document.getElementById("reverse-count").textContent = `Показано: ${shown.length} из ${allReverseBlocks.length}`;
 
   const columns = [
-    { label: "Фраза", cellClass: "col-text", render: (p) => escapeHtml(p.text) },
     {
-      label: "Неправильные варианты",
+      label: "Фразы блока",
       cellClass: "col-text",
-      render: (p) => p.decoys.map((d) => `<div class="decoy-line">${escapeHtml(d)}</div>`).join(""),
+      render: (b) => b.phrases.map((p) => `<div class="block-phrase">${escapeHtml(p)}</div>`).join(""),
     },
-    { label: "Исп.", render: (p) => p.uses },
+    { label: "Фраз", render: (b) => b.phrases.length },
+    { label: "Исп.", render: (b) => b.uses },
   ];
   renderColumnTable(
     document.getElementById("reverse-table"),
-    "/reverse/phrases",
+    "/reverse/blocks",
     shown,
     columns,
-    startEditingReversePhrase,
-    refreshReversePhrases
+    startEditingReverseBlock,
+    refreshReverseBlocks
   );
 }
 

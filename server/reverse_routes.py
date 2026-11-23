@@ -71,6 +71,8 @@ def start_game(code):
         return error("Игра уже началась")
     if len(rg.get_active_players(db, room["id"])) < rg.MIN_PLAYERS:
         return error(f"Нужно минимум {rg.MIN_PLAYERS} игрока(ов)")
+    if not rg.has_playable_blocks(db):
+        return error("В базе нет подходящих блоков фраз — их нужно добавить в админке")
     rg.start_game(db, room)
     return jsonify({"ok": True})
 

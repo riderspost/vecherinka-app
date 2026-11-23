@@ -1,5 +1,4 @@
 import hmac
-import json
 import os
 import sqlite3
 import uuid
@@ -11,6 +10,7 @@ from werkzeug.utils import secure_filename
 from .db import get_db
 from . import ai_prompts
 from . import fanty_game
+from . import reverse_game
 from .rooms_common import UPLOAD_DIR, ALLOWED_AUDIO_EXT, delete_room_and_files
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -833,140 +833,140 @@ def admin_bulk_delete_truths():
     return _bulk_delete("fanty_truths", ids, used_ids)
 
 
-# ---- Наоборот: фразы и «ловушки» ----
+# ---- Наоборот: блоки фраз ----
 
 MAX_REVERSE_PHRASE_LEN = 150
-MIN_REVERSE_DECOYS = 3
-MAX_REVERSE_DECOYS = 8
+MIN_BLOCK_PHRASES = reverse_game.OPTIONS_COUNT
+MAX_BLOCK_PHRASES = 8
 
 
-def _parse_reverse_phrase_payload(data):
-    """Returns (text, decoys, error_message)."""
-    text = (data.get("text") or "").strip()
-    if not text:
-        return None, None, "Введите фразу"
-    if len(text) > MAX_REVERSE_PHRASE_LEN:
-        return None, None, f"Слишком длинная фраза (макс. {MAX_REVERSE_PHRASE_LEN} символов) — её надо успеть сказать за 12 секунд"
-
-    raw = data.get("decoys")
+def _parse_reverse_block_payload(data):
+    """Returns (phrases, error_message)."""
+    raw = data.get("phrases")
     if isinstance(raw, str):
         raw = raw.splitlines()
     if not isinstance(raw, list):
         raw = []
-    decoys = list(dict.fromkeys(d.strip() for d in raw if isinstance(d, str) and d.strip()))
-    if text in decoys:
-        return None, None, "Один из неправильных вариантов совпадает с самой фразой"
-    if any(len(d) > MAX_REVERSE_PHRASE_LEN for d in decoys):
-        return None, None, f"Слишком длинный вариант (макс. {MAX_REVERSE_PHRASE_LEN} символов)"
-    if len(decoys) < MIN_REVERSE_DECOYS:
-        return None, None, f"Нужно минимум {MIN_REVERSE_DECOYS} неправильных варианта, похожих на фразу"
-    if len(decoys) > MAX_REVERSE_DECOYS:
-        return None, None, f"Слишком много вариантов (макс. {MAX_REVERSE_DECOYS})"
-    return text, decoys, None
+    phrases = list(dict.fromkeys(t.strip() for t in raw if isinstance(t, str) and t.strip()))
+    if any(len(t) > MAX_REVERSE_PHRASE_LEN for t in phrases):
+        return None, f"Слишком длинная фраза (макс. {MAX_REVERSE_PHRASE_LEN} символов) — её надо успеть сказать за пару секунд"
+    if len(phrases) < MIN_BLOCK_PHRASES:
+        return None, f"В блоке должно быть минимум {MIN_BLOCK_PHRASES} разных фразы — столько вариантов ответа видят игроки"
+    if len(phrases) > MAX_BLOCK_PHRASES:
+        return None, f"Слишком много фраз в блоке (макс. {MAX_BLOCK_PHRASES})"
+    return phrases, None
 
 
-def _reverse_phrase_json(row, uses):
-    return {
-        "id": row["id"],
-        "text": row["text"],
-        "decoys": json.loads(row["decoys"] or "[]"),
-        "status": row["status"],
-        "uses": uses,
-    }
+def _reverse_block_json(db, block_id, status=None):
+    rows = db.execute("SELECT id, text FROM reverse_phrases WHERE block_id = ? ORDER BY id", (block_id,)).fetchall()
+    uses = db.execute(
+        """SELECT COUNT(*) AS c FROM reverse_rounds rr
+           JOIN reverse_phrases p ON p.id = rr.phrase_id WHERE p.block_id = ?""",
+        (block_id,),
+    ).fetchone()["c"]
+    if status is None:
+        status = db.execute("SELECT status FROM reverse_blocks WHERE id = ?", (block_id,)).fetchone()["status"]
+    return {"id": block_id, "status": status, "phrases": [r["text"] for r in rows], "uses": uses}
 
 
-def _reverse_phrase_uses(db, phrase_id):
-    return db.execute("SELECT COUNT(*) AS c FROM reverse_rounds WHERE phrase_id = ?", (phrase_id,)).fetchone()["c"]
-
-
-def _reverse_phrase_in_unfinished_game(db, phrase_id):
-    # A round keeps only a snapshot of the answer options, but the phrase
-    # text shown to the speaker and at the reveal is read fresh from this
-    # table — editing it mid-game would make them disagree with the options.
+def _reverse_block_in_unfinished_game(db, block_id):
+    # The speaker's screen and the reveal read the phrase text live from this
+    # table, so editing a block out from under a running game could change
+    # what the answer was.
     return (
         db.execute(
-            """SELECT 1 FROM reverse_rounds rr JOIN rooms r ON r.id = rr.room_id
-               WHERE r.status != 'finished' AND rr.phrase_id = ?""",
-            (phrase_id,),
+            """SELECT 1 FROM reverse_rounds rr
+               JOIN rooms r ON r.id = rr.room_id
+               JOIN reverse_phrases p ON p.id = rr.phrase_id
+               WHERE r.status != 'finished' AND p.block_id = ?""",
+            (block_id,),
         ).fetchone()
         is not None
     )
 
 
-@admin_bp.route("/api/reverse/phrases")
+def _phrase_taken_elsewhere(db, texts, block_id=None):
+    for text in texts:
+        row = db.execute("SELECT block_id FROM reverse_phrases WHERE text = ?", (text,)).fetchone()
+        if row and row["block_id"] != block_id:
+            return text
+    return None
+
+
+@admin_bp.route("/api/reverse/blocks")
 @admin_required
-def admin_list_reverse_phrases():
+def admin_list_reverse_blocks():
     db = get_db()
-    rows = db.execute(
-        """SELECT ph.*, (SELECT COUNT(*) FROM reverse_rounds rr WHERE rr.phrase_id = ph.id) AS uses
-           FROM reverse_phrases ph ORDER BY ph.id DESC"""
-    ).fetchall()
-    return jsonify([_reverse_phrase_json(r, r["uses"]) for r in rows])
+    blocks = db.execute("SELECT id, status FROM reverse_blocks ORDER BY id DESC").fetchall()
+    return jsonify([_reverse_block_json(db, b["id"], b["status"]) for b in blocks])
 
 
-@admin_bp.route("/api/reverse/phrases", methods=["POST"])
+@admin_bp.route("/api/reverse/blocks", methods=["POST"])
 @admin_required
-def admin_add_reverse_phrase():
+def admin_add_reverse_block():
     data = request.get_json(force=True, silent=True) or {}
-    text, decoys, err = _parse_reverse_phrase_payload(data)
+    phrases, err = _parse_reverse_block_payload(data)
     if err:
         return jsonify({"error": err}), 400
     db = get_db()
-    if db.execute("SELECT 1 FROM reverse_phrases WHERE text = ?", (text,)).fetchone():
-        return jsonify({"error": "Такая фраза уже есть"}), 400
-    cur = db.execute(
-        "INSERT INTO reverse_phrases (text, decoys, status) VALUES (?, ?, 'active')",
-        (text, json.dumps(decoys, ensure_ascii=False)),
+    taken = _phrase_taken_elsewhere(db, phrases)
+    if taken:
+        return jsonify({"error": f"Фраза «{taken}» уже есть в другом блоке"}), 400
+    block_id = db.execute("INSERT INTO reverse_blocks (status) VALUES ('active')").lastrowid
+    db.executemany(
+        "INSERT INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+        [(t, block_id) for t in phrases],
     )
     db.commit()
-    return jsonify({"id": cur.lastrowid, "text": text, "decoys": decoys, "status": "active", "uses": 0})
+    return jsonify(_reverse_block_json(db, block_id))
 
 
-@admin_bp.route("/api/reverse/phrases/<int:phrase_id>", methods=["PUT"])
+@admin_bp.route("/api/reverse/blocks/<int:block_id>", methods=["PUT"])
 @admin_required
-def admin_edit_reverse_phrase(phrase_id):
+def admin_edit_reverse_block(block_id):
     db = get_db()
-    existing = db.execute("SELECT * FROM reverse_phrases WHERE id = ?", (phrase_id,)).fetchone()
-    if not existing:
+    if not db.execute("SELECT 1 FROM reverse_blocks WHERE id = ?", (block_id,)).fetchone():
         return jsonify({"error": "Не найдено"}), 404
-    if _reverse_phrase_in_unfinished_game(db, phrase_id):
-        return jsonify({"error": "Эта фраза используется в ещё не завершённой игре — подождите, пока она закончится"}), 400
+    if _reverse_block_in_unfinished_game(db, block_id):
+        return jsonify({"error": "Фразы из этого блока используются в ещё не завершённой игре — подождите, пока она закончится"}), 400
     data = request.get_json(force=True, silent=True) or {}
-    text, decoys, err = _parse_reverse_phrase_payload(data)
+    phrases, err = _parse_reverse_block_payload(data)
     if err:
         return jsonify({"error": err}), 400
-    if db.execute("SELECT 1 FROM reverse_phrases WHERE text = ? AND id != ?", (text, phrase_id)).fetchone():
-        return jsonify({"error": "Такая фраза уже есть"}), 400
-    db.execute(
-        "UPDATE reverse_phrases SET text = ?, decoys = ? WHERE id = ?",
-        (text, json.dumps(decoys, ensure_ascii=False), phrase_id),
-    )
-    db.commit()
-    return jsonify(
-        {
-            "id": phrase_id,
-            "text": text,
-            "decoys": decoys,
-            "status": existing["status"],
-            "uses": _reverse_phrase_uses(db, phrase_id),
-        }
-    )
+    taken = _phrase_taken_elsewhere(db, phrases, block_id)
+    if taken:
+        return jsonify({"error": f"Фраза «{taken}» уже есть в другом блоке"}), 400
 
-
-@admin_bp.route("/api/reverse/phrases/<int:phrase_id>", methods=["DELETE"])
-@admin_required
-def admin_delete_reverse_phrase(phrase_id):
-    db = get_db()
-    if not db.execute("SELECT 1 FROM reverse_phrases WHERE id = ?", (phrase_id,)).fetchone():
-        return jsonify({"error": "Не найдено"}), 404
-    if _reverse_phrase_in_unfinished_game(db, phrase_id):
-        return jsonify({"error": "Эта фраза сейчас используется в игре — подождите, пока она закончится"}), 400
+    current = {r["text"]: r["id"] for r in db.execute("SELECT id, text FROM reverse_phrases WHERE block_id = ?", (block_id,))}
     try:
-        db.execute("DELETE FROM reverse_phrases WHERE id = ?", (phrase_id,))
+        for text, phrase_id in current.items():
+            if text not in phrases:
+                db.execute("DELETE FROM reverse_phrases WHERE id = ?", (phrase_id,))
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return jsonify({"error": f"Нельзя убрать фразу «{text}» — она уже использовалась в игре"}), 400
+    db.executemany(
+        "INSERT INTO reverse_phrases (text, decoys, status, block_id) VALUES (?, '[]', 'active', ?)",
+        [(t, block_id) for t in phrases if t not in current],
+    )
+    db.commit()
+    return jsonify(_reverse_block_json(db, block_id))
+
+
+@admin_bp.route("/api/reverse/blocks/<int:block_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_reverse_block(block_id):
+    db = get_db()
+    if not db.execute("SELECT 1 FROM reverse_blocks WHERE id = ?", (block_id,)).fetchone():
+        return jsonify({"error": "Не найдено"}), 404
+    if _reverse_block_in_unfinished_game(db, block_id):
+        return jsonify({"error": "Этот блок сейчас используется в игре — подождите, пока она закончится"}), 400
+    try:
+        db.execute("DELETE FROM reverse_blocks WHERE id = ?", (block_id,))
         db.commit()
     except sqlite3.IntegrityError:
         db.rollback()
-        return jsonify({"error": "Нельзя удалить — эта фраза уже использовалась в игре"}), 400
+        return jsonify({"error": "Нельзя удалить — фразы этого блока уже использовались в игре"}), 400
     return jsonify({"ok": True})
 
 

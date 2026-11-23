@@ -165,37 +165,48 @@ def guessers_for_round(db, rnd):
     return [p for p in get_active_players(db, rnd["room_id"]) if p["id"] != rnd["speaker_id"]]
 
 
-def _word_count(text):
-    return len(text.split())
+def _playable_blocks(db):
+    """Active blocks holding enough active phrases to fill every answer option."""
+    return db.execute(
+        """SELECT b.id FROM reverse_blocks b
+           WHERE b.status = 'active'
+             AND (SELECT COUNT(*) FROM reverse_phrases p
+                  WHERE p.block_id = b.id AND p.status = 'active') >= ?""",
+        (OPTIONS_COUNT,),
+    ).fetchall()
 
 
-def _pick_options(db, phrase):
-    """Correct phrase + (OPTIONS_COUNT - 1) lookalikes, shuffled."""
-    decoys = [d for d in json.loads(phrase["decoys"] or "[]") if d != phrase["text"]]
-    random.shuffle(decoys)
-    chosen = decoys[: OPTIONS_COUNT - 1]
-    if len(chosen) < OPTIONS_COUNT - 1:
-        # У фразы мало своих «ловушек» — добираем чужими фразами, ближайшими по длине.
-        others = db.execute(
-            "SELECT text FROM reverse_phrases WHERE status = 'active' AND id != ?", (phrase["id"],)
+def has_playable_blocks(db):
+    return bool(_playable_blocks(db))
+
+
+def _pick_phrase_and_options(db, room_id):
+    """Picks a block, then the phrase to speak and the options to show.
+
+    The spoken phrase is a random member of the block and the other options
+    are random *other* members of the same block — every phrase in a block
+    is equally likely to be the answer, so nothing marks the right one out.
+    A block isn't reused in the same game until all of them have been played.
+    """
+    used_blocks = {
+        row["block_id"]
+        for row in db.execute(
+            """SELECT DISTINCT p.block_id FROM reverse_rounds rr
+               JOIN reverse_phrases p ON p.id = rr.phrase_id WHERE rr.room_id = ?""",
+            (room_id,),
         ).fetchall()
-        target = _word_count(phrase["text"])
-        pool = sorted((o["text"] for o in others if o["text"] not in chosen), key=lambda t: abs(_word_count(t) - target))
-        chosen += pool[: OPTIONS_COUNT - 1 - len(chosen)]
-    options = chosen + [phrase["text"]]
-    random.shuffle(options)
-    return options, options.index(phrase["text"])
-
-
-def _pick_phrase(db, room_id):
-    used = {
-        row["phrase_id"]
-        for row in db.execute("SELECT phrase_id FROM reverse_rounds WHERE room_id = ?", (room_id,)).fetchall()
     }
-    rows = db.execute("SELECT * FROM reverse_phrases WHERE status = 'active'").fetchall()
-    fresh = [r for r in rows if r["id"] not in used]
-    pool = fresh or rows
-    return random.choice(pool)
+    blocks = [row["id"] for row in _playable_blocks(db)]
+    block_id = random.choice([b for b in blocks if b not in used_blocks] or blocks)
+
+    members = db.execute(
+        "SELECT * FROM reverse_phrases WHERE block_id = ? AND status = 'active'", (block_id,)
+    ).fetchall()
+    answer = random.choice(members)
+    others = random.sample([m for m in members if m["id"] != answer["id"]], OPTIONS_COUNT - 1)
+    options = [m["text"] for m in others] + [answer["text"]]
+    random.shuffle(options)
+    return answer, options, options.index(answer["text"])
 
 
 def total_rounds_for(player_count):
@@ -239,8 +250,7 @@ def start_next_round(db, room):
         db.commit()
         return None
     speaker_id, imitator_id = roles_for_round(order, number)
-    phrase = _pick_phrase(db, room["id"])
-    options, correct_index = _pick_options(db, phrase)
+    phrase, options, correct_index = _pick_phrase_and_options(db, room["id"])
     round_id = gen_id()
     db.execute(
         """INSERT INTO reverse_rounds

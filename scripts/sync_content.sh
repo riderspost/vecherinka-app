@@ -1,5 +1,5 @@
 #!/bin/bash
-# Push locally-curated prompts/dares/truths/"Наоборот" phrases onto staging or prod.
+# Push locally-curated prompts/dares/truths/"Наоборот" blocks onto staging or prod.
 # Merges by text (see apply_content.py) — never deletes, so it's safe even
 # if you also edit content directly on the target's admin panel.
 #

@@ -348,8 +348,7 @@ input.filter-input[type=text] { width: 220px; }
   transition: opacity 0.15s;
 }
 
-.decoy-line {
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.5;
+.block-phrase {
+  font-size: 14px;
+  line-height: 1.6;
 }
