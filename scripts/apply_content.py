@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a content dump (from dump_content.py) into this environment's DB.
 
-Upserts by unique text: a matching row gets its fields/categories/locations
+Upserts by unique text: a matching row gets its fields/categories/locations/decoys
 updated, new text gets inserted. By default never deletes — content added
 directly on this environment that isn't in the dump is left untouched, so
 it's safe to run against an environment that's also edited by hand.
@@ -29,6 +29,18 @@ def upsert_prompt(db, p):
         db.execute("UPDATE prompts SET status = ? WHERE id = ?", (p["status"], row[0]))
         return "updated"
     db.execute("INSERT INTO prompts (text, status) VALUES (?, ?)", (p["text"], p["status"]))
+    return "inserted"
+
+
+def upsert_reverse_phrase(db, ph):
+    decoys = json.dumps(ph["decoys"], ensure_ascii=False)
+    row = db.execute("SELECT id FROM reverse_phrases WHERE text = ?", (ph["text"],)).fetchone()
+    if row:
+        db.execute("UPDATE reverse_phrases SET decoys = ?, status = ? WHERE id = ?", (decoys, ph["status"], row[0]))
+        return "updated"
+    db.execute(
+        "INSERT INTO reverse_phrases (text, decoys, status) VALUES (?, ?, ?)", (ph["text"], decoys, ph["status"])
+    )
     return "inserted"
 
 
@@ -155,13 +167,20 @@ def main():
         "prompts": {"inserted": 0, "updated": 0},
         "truths": {"inserted": 0, "updated": 0},
         "dares": {"inserted": 0, "updated": 0},
+        "reverse_phrases": {"inserted": 0, "updated": 0},
     }
+    # Dumps made before "Наоборот" existed have no such key — treat that as
+    # "nothing to say about phrases", never as "the full set is empty", or a
+    # --replace run would wipe every phrase on the target.
+    reverse_phrases = dump.get("reverse_phrases")
     for p in dump["prompts"]:
         counts["prompts"][upsert_prompt(db, p)] += 1
     for t in dump["truths"]:
         counts["truths"][upsert_truth(db, t)] += 1
     for d in dump["dares"]:
         counts["dares"][upsert_dare(db, d, upload_dir)] += 1
+    for ph in reverse_phrases or []:
+        counts["reverse_phrases"][upsert_reverse_phrase(db, ph)] += 1
 
     if replace:
         _remove_missing(db, "prompts", "text", "id", {p["text"] for p in dump["prompts"]}, "promptsRemoved", counts)
@@ -171,6 +190,16 @@ def main():
         _remove_missing(
             db, "fanty_truths", "text", "id", {t["text"] for t in dump["truths"]}, "truthsRemoved", counts
         )
+        if reverse_phrases is not None:
+            _remove_missing(
+                db,
+                "reverse_phrases",
+                "text",
+                "id",
+                {ph["text"] for ph in reverse_phrases},
+                "reversePhrasesRemoved",
+                counts,
+            )
 
     db.commit()
     db.close()

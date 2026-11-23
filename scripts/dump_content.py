@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dump admin-curated content (prompts, fanty dares, fanty truths) to JSON.
+"""Dump admin-curated content (prompts, fanty dares/truths, "Наоборот" phrases) to JSON.
 
 Usage: python scripts/dump_content.py > content.json
 
@@ -69,9 +69,14 @@ def main():
         ]
         truths.append({"text": r["text"], "status": r["status"], "categories": categories})
 
+    reverse_phrases = [
+        {"text": r["text"], "decoys": json.loads(r["decoys"] or "[]"), "status": r["status"]}
+        for r in db.execute("SELECT text, decoys, status FROM reverse_phrases").fetchall()
+    ]
+
     db.close()
     json.dump(
-        {"prompts": prompts, "dares": dares, "truths": truths},
+        {"prompts": prompts, "dares": dares, "truths": truths, "reverse_phrases": reverse_phrases},
         sys.stdout,
         ensure_ascii=False,
         indent=2,

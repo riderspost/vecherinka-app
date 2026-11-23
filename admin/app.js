@@ -142,6 +142,7 @@ async function renderDashboard() {
     <div class="tabs" id="main-tabs">
       <button class="tab-btn active" data-target="prompts">Продолжи предложение</button>
       <button class="tab-btn" data-target="fanty">Фанты</button>
+      <button class="tab-btn" data-target="reverse">Наоборот</button>
       <button class="tab-btn" data-target="users">Пользователи</button>
       <button class="tab-btn" data-target="rooms">Комнаты</button>
     </div>
@@ -319,6 +320,43 @@ async function renderDashboard() {
       </div>
     </div>
 
+    <div id="section-reverse" style="display:none">
+      <div class="card">
+        <div class="row-actions" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">Фразы для «Наоборот»</h2>
+          <button class="btn" id="reverse-add-btn">+ Добавить новую</button>
+        </div>
+        <p class="hint" style="margin-bottom:0">
+          Игрок записывает фразу голосом, её слушают задом наперёд, а потом угадывают среди четырёх вариантов.
+          Фраза должна легко читаться вслух за пару секунд, а неправильные варианты — быть похожими на неё
+          по ритму и звучанию (поменяйте одно-два слова), иначе правильный ответ можно угадать с первого взгляда.
+        </p>
+        <form id="add-reverse-form" style="display:none;margin-top:16px">
+          <h3 style="margin-top:0" id="reverse-form-heading">Добавить вручную</h3>
+          <label>Фраза</label>
+          <textarea name="text" maxlength="150" placeholder="Тише едешь — дальше будешь" required></textarea>
+          <label>Похожие неправильные варианты — по одному в строке (от 3 до 8)</label>
+          <textarea name="decoys" rows="5" placeholder="Тише ходишь — дольше будешь&#10;Ближе едешь — тише будешь&#10;Тише едешь — ближе будешь" required></textarea>
+          <div class="error-box" id="add-reverse-error"></div>
+          <div class="row-actions" style="margin-top:8px">
+            <button type="submit" class="btn" id="reverse-submit-btn">Добавить</button>
+            <button type="button" class="btn secondary" id="reverse-cancel-edit-btn">Отмена</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="row-actions" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2 style="margin:0">Все фразы</h2>
+          <div class="prompt-count" id="reverse-count"></div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="reverse-filter-search" class="filter-input" placeholder="Поиск по фразе или варианту..." />
+        </div>
+        <div id="reverse-table"></div>
+      </div>
+    </div>
+
     <div id="section-users" style="display:none">
       <div class="card">
         <h2 style="margin-top:0">Зарегистрированные пользователи</h2>
@@ -346,6 +384,7 @@ async function renderDashboard() {
   setupTabs(document.querySelectorAll("#main-tabs .tab-btn"), {
     prompts: document.getElementById("section-prompts"),
     fanty: document.getElementById("section-fanty"),
+    reverse: document.getElementById("section-reverse"),
     users: document.getElementById("section-users"),
     rooms: document.getElementById("section-rooms"),
   });
@@ -820,6 +859,67 @@ async function renderDashboard() {
     }
   });
 
+  const reverseForm = document.getElementById("add-reverse-form");
+  const reverseAddBtn = document.getElementById("reverse-add-btn");
+  const reverseFormHeading = document.getElementById("reverse-form-heading");
+  const reverseSubmitBtn = document.getElementById("reverse-submit-btn");
+  const reverseCancelEditBtn = document.getElementById("reverse-cancel-edit-btn");
+  let editingReverseId = null;
+
+  function resetReverseForm() {
+    reverseForm.reset();
+    editingReverseId = null;
+    reverseFormHeading.textContent = "Добавить вручную";
+    reverseSubmitBtn.textContent = "Добавить";
+    document.getElementById("add-reverse-error").textContent = "";
+  }
+
+  reverseAddBtn.addEventListener("click", () => {
+    resetReverseForm();
+    reverseForm.style.display = "";
+    reverseForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  window.startEditingReversePhrase = function (phrase) {
+    resetReverseForm();
+    editingReverseId = phrase.id;
+    reverseForm.elements.text.value = phrase.text;
+    reverseForm.elements.decoys.value = phrase.decoys.join("\n");
+    reverseFormHeading.textContent = `Редактировать фразу #${phrase.id}`;
+    reverseSubmitBtn.textContent = "Сохранить изменения";
+    reverseForm.style.display = "";
+    reverseForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  reverseCancelEditBtn.addEventListener("click", () => {
+    resetReverseForm();
+    reverseForm.style.display = "none";
+  });
+
+  reverseForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = reverseForm.elements.text.value.trim();
+    const decoys = reverseForm.elements.decoys.value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const errorEl = document.getElementById("add-reverse-error");
+    errorEl.textContent = "";
+    if (!text) return;
+    try {
+      if (editingReverseId) {
+        await api(`/reverse/phrases/${editingReverseId}`, { method: "PUT", body: JSON.stringify({ text, decoys }) });
+      } else {
+        await api("/reverse/phrases", { method: "POST", body: JSON.stringify({ text, decoys }) });
+      }
+      resetReverseForm();
+      reverseForm.style.display = "none";
+      await refreshReversePhrases();
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  });
+
   document.getElementById("rooms-refresh-btn").addEventListener("click", refreshRooms);
 
   wireFilterInputs("prompts", ["prompts-filter-search"], refreshPromptsTable);
@@ -838,10 +938,12 @@ async function renderDashboard() {
     refreshDaresTable
   );
   wireFilterInputs("truths", ["truths-filter-search", "truths-filter-category"], refreshTruthsTable);
+  wireFilterInputs("reverse", ["reverse-filter-search"], refreshReversePhrasesTable);
 
   await refreshPrompts();
   await refreshDares();
   await refreshTruths();
+  await refreshReversePhrases();
   await refreshUsers();
   await refreshRooms();
 }
@@ -1179,6 +1281,44 @@ function refreshTruthsTable() {
   renderColumnTable(document.getElementById("truths-table"), "/fanty/truths", active, columns, startEditingTruth, refreshTruths);
 }
 
+// ---- Наоборот ----
+
+let allReversePhrases = [];
+
+async function refreshReversePhrases() {
+  allReversePhrases = await api("/reverse/phrases");
+  refreshReversePhrasesTable();
+}
+
+function refreshReversePhrasesTable() {
+  const search = document.getElementById("reverse-filter-search").value.trim().toLowerCase();
+  const shown = search
+    ? allReversePhrases.filter(
+        (p) => p.text.toLowerCase().includes(search) || p.decoys.some((d) => d.toLowerCase().includes(search))
+      )
+    : allReversePhrases;
+
+  document.getElementById("reverse-count").textContent = `Показано: ${shown.length} из ${allReversePhrases.length}`;
+
+  const columns = [
+    { label: "Фраза", cellClass: "col-text", render: (p) => escapeHtml(p.text) },
+    {
+      label: "Неправильные варианты",
+      cellClass: "col-text",
+      render: (p) => p.decoys.map((d) => `<div class="decoy-line">${escapeHtml(d)}</div>`).join(""),
+    },
+    { label: "Исп.", render: (p) => p.uses },
+  ];
+  renderColumnTable(
+    document.getElementById("reverse-table"),
+    "/reverse/phrases",
+    shown,
+    columns,
+    startEditingReversePhrase,
+    refreshReversePhrases
+  );
+}
+
 // ---- Users ----
 
 async function refreshUsers() {
@@ -1212,7 +1352,7 @@ async function refreshUsers() {
   `;
 }
 
-const ROOM_GAME_TYPE_LABEL = { fanty: "Фанты", sentence: "Продолжи предложение" };
+const ROOM_GAME_TYPE_LABEL = { fanty: "Фанты", sentence: "Продолжи предложение", reverse: "Наоборот" };
 
 async function refreshRooms() {
   const rooms = await api("/rooms");

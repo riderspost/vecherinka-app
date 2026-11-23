@@ -1,4 +1,5 @@
 import hmac
+import json
 import os
 import sqlite3
 import uuid
@@ -110,6 +111,10 @@ def admin_list_rooms():
         if r["game_type"] == "fanty":
             rounds_played = db.execute(
                 "SELECT COUNT(*) AS c FROM fanty_rounds WHERE room_id = ?", (r["id"],)
+            ).fetchone()["c"]
+        elif r["game_type"] == "reverse":
+            rounds_played = db.execute(
+                "SELECT COUNT(*) AS c FROM reverse_rounds WHERE room_id = ?", (r["id"],)
             ).fetchone()["c"]
         else:
             rounds_played = r["current_round"]
@@ -826,6 +831,143 @@ def admin_bulk_delete_truths():
         }
         used_ids |= {i for i in ids if _fanty_content_is_live(db, "current_truth_id", i)}
     return _bulk_delete("fanty_truths", ids, used_ids)
+
+
+# ---- Наоборот: фразы и «ловушки» ----
+
+MAX_REVERSE_PHRASE_LEN = 150
+MIN_REVERSE_DECOYS = 3
+MAX_REVERSE_DECOYS = 8
+
+
+def _parse_reverse_phrase_payload(data):
+    """Returns (text, decoys, error_message)."""
+    text = (data.get("text") or "").strip()
+    if not text:
+        return None, None, "Введите фразу"
+    if len(text) > MAX_REVERSE_PHRASE_LEN:
+        return None, None, f"Слишком длинная фраза (макс. {MAX_REVERSE_PHRASE_LEN} символов) — её надо успеть сказать за 12 секунд"
+
+    raw = data.get("decoys")
+    if isinstance(raw, str):
+        raw = raw.splitlines()
+    if not isinstance(raw, list):
+        raw = []
+    decoys = list(dict.fromkeys(d.strip() for d in raw if isinstance(d, str) and d.strip()))
+    if text in decoys:
+        return None, None, "Один из неправильных вариантов совпадает с самой фразой"
+    if any(len(d) > MAX_REVERSE_PHRASE_LEN for d in decoys):
+        return None, None, f"Слишком длинный вариант (макс. {MAX_REVERSE_PHRASE_LEN} символов)"
+    if len(decoys) < MIN_REVERSE_DECOYS:
+        return None, None, f"Нужно минимум {MIN_REVERSE_DECOYS} неправильных варианта, похожих на фразу"
+    if len(decoys) > MAX_REVERSE_DECOYS:
+        return None, None, f"Слишком много вариантов (макс. {MAX_REVERSE_DECOYS})"
+    return text, decoys, None
+
+
+def _reverse_phrase_json(row, uses):
+    return {
+        "id": row["id"],
+        "text": row["text"],
+        "decoys": json.loads(row["decoys"] or "[]"),
+        "status": row["status"],
+        "uses": uses,
+    }
+
+
+def _reverse_phrase_uses(db, phrase_id):
+    return db.execute("SELECT COUNT(*) AS c FROM reverse_rounds WHERE phrase_id = ?", (phrase_id,)).fetchone()["c"]
+
+
+def _reverse_phrase_in_unfinished_game(db, phrase_id):
+    # A round keeps only a snapshot of the answer options, but the phrase
+    # text shown to the speaker and at the reveal is read fresh from this
+    # table — editing it mid-game would make them disagree with the options.
+    return (
+        db.execute(
+            """SELECT 1 FROM reverse_rounds rr JOIN rooms r ON r.id = rr.room_id
+               WHERE r.status != 'finished' AND rr.phrase_id = ?""",
+            (phrase_id,),
+        ).fetchone()
+        is not None
+    )
+
+
+@admin_bp.route("/api/reverse/phrases")
+@admin_required
+def admin_list_reverse_phrases():
+    db = get_db()
+    rows = db.execute(
+        """SELECT ph.*, (SELECT COUNT(*) FROM reverse_rounds rr WHERE rr.phrase_id = ph.id) AS uses
+           FROM reverse_phrases ph ORDER BY ph.id DESC"""
+    ).fetchall()
+    return jsonify([_reverse_phrase_json(r, r["uses"]) for r in rows])
+
+
+@admin_bp.route("/api/reverse/phrases", methods=["POST"])
+@admin_required
+def admin_add_reverse_phrase():
+    data = request.get_json(force=True, silent=True) or {}
+    text, decoys, err = _parse_reverse_phrase_payload(data)
+    if err:
+        return jsonify({"error": err}), 400
+    db = get_db()
+    if db.execute("SELECT 1 FROM reverse_phrases WHERE text = ?", (text,)).fetchone():
+        return jsonify({"error": "Такая фраза уже есть"}), 400
+    cur = db.execute(
+        "INSERT INTO reverse_phrases (text, decoys, status) VALUES (?, ?, 'active')",
+        (text, json.dumps(decoys, ensure_ascii=False)),
+    )
+    db.commit()
+    return jsonify({"id": cur.lastrowid, "text": text, "decoys": decoys, "status": "active", "uses": 0})
+
+
+@admin_bp.route("/api/reverse/phrases/<int:phrase_id>", methods=["PUT"])
+@admin_required
+def admin_edit_reverse_phrase(phrase_id):
+    db = get_db()
+    existing = db.execute("SELECT * FROM reverse_phrases WHERE id = ?", (phrase_id,)).fetchone()
+    if not existing:
+        return jsonify({"error": "Не найдено"}), 404
+    if _reverse_phrase_in_unfinished_game(db, phrase_id):
+        return jsonify({"error": "Эта фраза используется в ещё не завершённой игре — подождите, пока она закончится"}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    text, decoys, err = _parse_reverse_phrase_payload(data)
+    if err:
+        return jsonify({"error": err}), 400
+    if db.execute("SELECT 1 FROM reverse_phrases WHERE text = ? AND id != ?", (text, phrase_id)).fetchone():
+        return jsonify({"error": "Такая фраза уже есть"}), 400
+    db.execute(
+        "UPDATE reverse_phrases SET text = ?, decoys = ? WHERE id = ?",
+        (text, json.dumps(decoys, ensure_ascii=False), phrase_id),
+    )
+    db.commit()
+    return jsonify(
+        {
+            "id": phrase_id,
+            "text": text,
+            "decoys": decoys,
+            "status": existing["status"],
+            "uses": _reverse_phrase_uses(db, phrase_id),
+        }
+    )
+
+
+@admin_bp.route("/api/reverse/phrases/<int:phrase_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_reverse_phrase(phrase_id):
+    db = get_db()
+    if not db.execute("SELECT 1 FROM reverse_phrases WHERE id = ?", (phrase_id,)).fetchone():
+        return jsonify({"error": "Не найдено"}), 404
+    if _reverse_phrase_in_unfinished_game(db, phrase_id):
+        return jsonify({"error": "Эта фраза сейчас используется в игре — подождите, пока она закончится"}), 400
+    try:
+        db.execute("DELETE FROM reverse_phrases WHERE id = ?", (phrase_id,))
+        db.commit()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return jsonify({"error": "Нельзя удалить — эта фраза уже использовалась в игре"}), 400
+    return jsonify({"ok": True})
 
 
 @admin_bp.route("/")
