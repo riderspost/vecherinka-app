@@ -371,6 +371,15 @@ export function mountReverseRoomPage(container, code) {
     }
   }
 
+  // Stands out on purpose: if the group is sitting together and the speaker
+  // records out loud next to them, the whole round is spoiled.
+  function secretWarning(html) {
+    const el = document.createElement("div");
+    el.className = "secret-warning";
+    el.innerHTML = html;
+    return el;
+  }
+
   function progressDots(done, total) {
     const el = document.createElement("div");
     el.className = "chunk-progress";
@@ -386,6 +395,11 @@ export function mountReverseRoomPage(container, code) {
     if (rv.isSpeaker) {
       const index = rv.originalDone;
       wrap.appendChild(heading(`Твоя фраза · часть ${index + 1} из ${rv.chunkCount}`));
+      wrap.appendChild(
+        secretWarning(
+          "<b>🤫 Никто не должен слышать, как ты записываешь!</b><br/>Если вы сидите рядом — отойди в другую комнату или хотя бы подальше от всех. Иначе остальные узнают фразу ещё до игры."
+        )
+      );
 
       const card = document.createElement("div");
       card.className = "prompt-text phrase-card";
@@ -418,6 +432,9 @@ export function mountReverseRoomPage(container, code) {
     wrap.appendChild(heading("🎙 Запись фразы"));
     wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу по частям…`));
     wrap.appendChild(progressDots(rv.originalDone, rv.chunkCount));
+    wrap.appendChild(
+      secretWarning("<b>🤫 Не подслушивайте!</b><br/>Пока идёт запись, фразу не должен слышать никто, кроме загадывающего.")
+    );
     if (rv.isImitator) {
       wrap.appendChild(
         p("tagline", "Дальше ты послушаешь эту запись задом наперёд и повторишь её по частям. Приготовься!")
