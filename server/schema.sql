@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS reverse_rounds (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Фраза записывается и повторяется кусками по два слова. Здесь лежат
+-- Фраза записывается и повторяется двумя половинами. Здесь лежат
 -- отдельные куски; склеенные целиком записи — в reverse_rounds.
 CREATE TABLE IF NOT EXISTS reverse_chunks (
   id TEXT PRIMARY KEY,

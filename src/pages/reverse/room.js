@@ -3,7 +3,7 @@ import { loadSession, saveSession, clearSession, getDeviceId } from "../../stora
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
-import { createPlayButton, stopAllAudio, MAX_CHUNK_SECONDS } from "../../audioTools.js";
+import { createPlayButton, stopAllAudio, MAX_CHUNK_SECONDS, MAX_RECORD_SECONDS } from "../../audioTools.js";
 import { createRecorderPanel } from "./recorderPanel.js";
 
 const POLL_MS = 1500;
@@ -393,8 +393,7 @@ export function mountReverseRoomPage(container, code) {
 
   function renderRecordingOriginal(wrap, state, token, rv) {
     if (rv.isSpeaker) {
-      const index = rv.originalDone;
-      wrap.appendChild(heading(`Твоя фраза · часть ${index + 1} из ${rv.chunkCount}`));
+      wrap.appendChild(heading("Твоя фраза"));
       wrap.appendChild(
         secretWarning(
           "<b>🤫 Никто не должен слышать, как ты записываешь!</b><br/>Если вы сидите рядом — отойди в другую комнату или хотя бы подальше от всех. Иначе остальные узнают фразу ещё до игры."
@@ -405,33 +404,38 @@ export function mountReverseRoomPage(container, code) {
       card.className = "prompt-text phrase-card";
       rv.chunks.forEach((text, i) => {
         const piece = document.createElement("span");
-        piece.className = "phrase-piece" + (i < index ? " done" : i === index ? " current" : "");
+        piece.className = "phrase-piece";
         piece.textContent = text;
         card.appendChild(piece);
-        if (i < rv.chunks.length - 1) card.appendChild(document.createTextNode(" "));
+        if (i < rv.chunks.length - 1) {
+          const mark = document.createElement("span");
+          mark.className = "phrase-pause";
+          mark.textContent = " | ";
+          mark.setAttribute("aria-label", "пауза");
+          card.appendChild(mark);
+        }
       });
       wrap.appendChild(card);
-      wrap.appendChild(progressDots(index, rv.chunkCount));
       wrap.appendChild(
         p(
           "tagline",
-          "Фраза записывается кусками по два слова. Прочитай вслух выделенный кусок чётко и не торопясь. Остальные услышат всё только задом наперёд."
+          rv.chunks.length > 1
+            ? "Прочитай всю фразу вслух за один раз, чётко и не торопясь. На отметке | сделай маленькую паузу — так запись правильно разделится на две части. Остальные услышат её только задом наперёд."
+            : "Прочитай фразу вслух чётко и не торопясь. Остальные услышат её только задом наперёд."
         )
       );
-      const isLast = index === rv.chunkCount - 1;
       const panel = createRecorderPanel({
-        idleLabel: `🎙 Записать «${rv.chunks[index]}»`,
-        submitLabel: isLast ? "✅ Отправить последнюю часть" : "✅ Отправить и дальше",
-        maxSeconds: MAX_CHUNK_SECONDS,
-        onSubmit: (blob) => reverseApi.uploadOriginal(code, token, blob, index),
+        idleLabel: "🎙 Записать фразу",
+        submitLabel: "✅ Отправить",
+        maxSeconds: MAX_RECORD_SECONDS,
+        onSubmit: (blob) => reverseApi.uploadOriginal(code, token, blob),
       });
       panels.push(panel);
       wrap.appendChild(panel.element);
       return;
     }
     wrap.appendChild(heading("🎙 Запись фразы"));
-    wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу по частям…`));
-    wrap.appendChild(progressDots(rv.originalDone, rv.chunkCount));
+    wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу…`));
     wrap.appendChild(
       secretWarning("<b>🤫 Не подслушивайте!</b><br/>Пока идёт запись, фразу не должен слышать никто, кроме загадывающего.")
     );

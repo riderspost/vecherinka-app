@@ -1514,9 +1514,14 @@ h2, h3 {
 }
 
 .phrase-piece {
-  opacity: 0.45;
   border-radius: 8px;
   padding: 2px 4px;
+}
+
+.phrase-pause {
+  color: var(--accent);
+  font-weight: 700;
+  padding: 0 4px;
 }
 
 .phrase-piece.current {

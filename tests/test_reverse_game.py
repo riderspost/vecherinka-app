@@ -5,7 +5,14 @@ import json
 import os
 import wave
 
-from server.reverse_game import MIN_PLAYERS, OPTIONS_COUNT, split_chunks, total_rounds_for, roles_for_round
+from server.reverse_game import (
+    MIN_PLAYERS,
+    OPTIONS_COUNT,
+    find_cut,
+    split_chunks,
+    total_rounds_for,
+    roles_for_round,
+)
 from server.reverse_seed import BLOCKS
 from server.rooms_common import UPLOAD_DIR
 
@@ -93,11 +100,31 @@ def upload_all(client, code, token, kind, count, seed_base=1):
     return sent
 
 
+def speech_take(seed=1, loud=8000, pause=2400):
+    """One take of a phrase: speech, a short pause in the middle, more speech."""
+    return distinct_chunk(loud, seed) + [0] * pause + distinct_chunk(loud, seed + 1)
+
+
+def upload_original(client, code, token, seed=1):
+    """The speaker's single take; returns the samples that were sent."""
+    samples = speech_take(seed)
+    resp = upload(client, code, token, "original", make_wav(samples))
+    assert resp.status_code == 200, resp.get_json()
+    return samples
+
+
+def original_pieces(raw_db):
+    """The pieces the server cut the take into, in reading order."""
+    rows = raw_db.execute(
+        "SELECT file FROM reverse_chunks WHERE kind = 'original' ORDER BY idx"
+    ).fetchall()
+    return [read_samples(r["file"]) for r in rows]
+
+
 def play_to_guessing(client, code, tokens):
     speaker, imitator, rv = round_roles(client, code, tokens)
-    count = rv["chunkCount"]
-    upload_all(client, code, tokens[speaker], "original", count)
-    upload_all(client, code, tokens[imitator], "imitation", count)
+    upload_original(client, code, tokens[speaker])
+    upload_all(client, code, tokens[imitator], "imitation", rv["chunkCount"])
     return speaker, imitator
 
 
@@ -178,11 +205,16 @@ def test_phrase_only_visible_to_speaker(client):
             assert "options" not in rv
 
 
-def test_split_chunks_makes_pieces_of_two_words():
+def test_split_chunks_makes_two_halves_between_words():
     assert split_chunks("Тёща купила зелёный чемодан") == ["Тёща купила", "зелёный чемодан"]
-    assert split_chunks("Дядя Миша ловит синих лягушек") == ["Дядя Миша", "ловит синих", "лягушек"]
+    assert split_chunks("Дядя Миша ловит синих лягушек") == ["Дядя Миша ловит", "синих лягушек"]
     assert split_chunks("Поезд опоздал из-за пингвина") == ["Поезд опоздал", "из-за пингвина"]
+    # balanced by spoken length (vowels), not by word count
+    assert split_chunks("Я забыл пароль от соседского самоката")[0] != "Я забыл пароль от"
+    # a piece doesn't end on a preposition when there is a nearly-as-good cut
+    assert split_chunks("Я забыл пароль от соседского самоката") == ["Я забыл пароль", "от соседского самоката"]
     assert split_chunks("Один") == ["Один"]
+    assert split_chunks("Привет мир") == ["Привет", "мир"]
     # A dash standing alone sticks to the word before it instead of being a "word".
     assert split_chunks("Тише едешь — дальше будешь") == ["Тише едешь —", "дальше будешь"]
 
@@ -201,54 +233,62 @@ def test_round_has_chunks_and_only_speaker_sees_the_text(client):
             assert "chunks" not in rv
 
 
-def test_original_chunk_upload_rules(client):
+def test_original_upload_rules(client):
     code, tokens, _ = setup_game(client)
     speaker, imitator, rv = round_roles(client, code, tokens)
-    good = make_wav(distinct_chunk(4000, 1))
-    assert upload(client, code, tokens[imitator], "original", good, index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", b"not a wav", index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", make_wav(channels=2), index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", make_wav(seconds=0.05), index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", make_wav(seconds=9), index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", make_wav(rate=4000), index=0).status_code == 400
-    assert upload(client, code, tokens[speaker], "original", good, index=1).status_code == 400  # out of order
+    good = make_wav(speech_take())
+    assert upload(client, code, tokens[imitator], "original", good).status_code == 400
+    assert upload(client, code, tokens[speaker], "original", b"not a wav").status_code == 400
+    assert upload(client, code, tokens[speaker], "original", make_wav(channels=2)).status_code == 400
+    assert upload(client, code, tokens[speaker], "original", make_wav(seconds=0.05)).status_code == 400
+    assert upload(client, code, tokens[speaker], "original", make_wav(seconds=13)).status_code == 400
+    assert upload(client, code, tokens[speaker], "original", make_wav(rate=4000)).status_code == 400
     assert get_state(client, code, tokens[speaker])["reverse"]["originalDone"] == 0
 
-    assert upload(client, code, tokens[speaker], "original", good, index=0).status_code == 200
+    # a whole phrase may be longer than one imitation piece is allowed to be
+    assert upload(client, code, tokens[speaker], "original", make_wav(seconds=10)).status_code == 200
     state = get_state(client, code, tokens[speaker])["reverse"]
-    assert state["originalDone"] == 1
-    assert state["phase"] == "recording_original"  # more pieces still to come
-    assert upload(client, code, tokens[speaker], "original", good, index=0).status_code == 400  # already recorded
-
-    for i in range(1, rv["chunkCount"]):
-        assert upload(client, code, tokens[speaker], "original", good, index=i).status_code == 200
-    assert get_state(client, code, tokens[speaker])["reverse"]["phase"] == "recording_imitation"
+    assert state["phase"] == "recording_imitation"
+    assert state["originalDone"] == rv["chunkCount"]
     assert upload(client, code, tokens[speaker], "original", good).status_code == 400  # phase moved on
 
 
-def test_chunks_with_a_different_sample_rate_are_rejected(client):
+def test_imitation_pieces_with_a_different_sample_rate_are_rejected(client):
     code, tokens, _ = setup_game(client)
-    speaker, _imitator, _ = round_roles(client, code, tokens)
-    assert upload(client, code, tokens[speaker], "original", make_wav(rate=16000), index=0).status_code == 200
-    resp = upload(client, code, tokens[speaker], "original", make_wav(rate=22050), index=1)
+    speaker, imitator, _ = round_roles(client, code, tokens)
+    upload_original(client, code, tokens[speaker])
+    assert upload(client, code, tokens[imitator], "imitation", make_wav(rate=16000), index=0).status_code == 200
+    resp = upload(client, code, tokens[imitator], "imitation", make_wav(rate=22050), index=1)
     assert resp.status_code == 400
-    assert get_state(client, code, tokens[speaker])["reverse"]["originalDone"] == 1
+    assert get_state(client, code, tokens[imitator])["reverse"]["imitationDone"] == 1
 
 
-def test_whole_recording_is_the_pieces_glued_and_reversed(client, raw_db):
+def test_take_is_cut_into_the_text_pieces_in_the_pause(client, raw_db):
     code, tokens, _ = setup_game(client)
     speaker, _imitator, rv = round_roles(client, code, tokens)
-    sent = upload_all(client, code, tokens[speaker], "original", rv["chunkCount"])
+    sent = upload_original(client, code, tokens[speaker])
+    pieces = original_pieces(raw_db)
+    assert len(pieces) == rv["chunkCount"] == 2
+    assert [x for piece in pieces for x in piece] == sent
+    # the cut lands in the pause, so neither piece swallows speech from the other
+    assert all(v == 0 for v in pieces[0][-200:]) or all(v == 0 for v in pieces[1][:200])
+    assert max(abs(v) for v in pieces[0][:8000]) > 0 and max(abs(v) for v in pieces[1][-8000:]) > 0
+
+
+def test_whole_recording_is_the_take_and_its_reverse(client, raw_db):
+    code, tokens, _ = setup_game(client)
+    speaker, _imitator, rv = round_roles(client, code, tokens)
+    sent = upload_original(client, code, tokens[speaker])
     row = raw_db.execute("SELECT original_file, reversed_file FROM reverse_rounds").fetchone()
-    glued = [x for chunk in sent for x in chunk]
-    assert read_samples(row["original_file"]) == glued
-    assert read_samples(row["reversed_file"]) == glued[::-1]
+    assert read_samples(row["original_file"]) == sent
+    assert read_samples(row["reversed_file"]) == sent[::-1]
 
 
 def test_imitator_gets_whole_reversed_clip_then_pieces_last_words_first(client, raw_db):
     code, tokens, _ = setup_game(client)
     speaker, imitator, rv = round_roles(client, code, tokens)
-    sent = upload_all(client, code, tokens[speaker], "original", rv["chunkCount"])
+    upload_original(client, code, tokens[speaker])
+    sent = original_pieces(raw_db)
 
     for pid, token in tokens.items():
         view = get_state(client, code, token)["reverse"]
@@ -270,7 +310,7 @@ def test_imitation_chunk_upload_rules(client):
     speaker, imitator, rv = round_roles(client, code, tokens)
     good = make_wav(distinct_chunk(4000, 1))
     assert upload(client, code, tokens[imitator], "imitation", good, index=0).status_code == 400  # too early
-    upload_all(client, code, tokens[speaker], "original", rv["chunkCount"])
+    upload_original(client, code, tokens[speaker])
     assert upload(client, code, tokens[speaker], "imitation", good, index=0).status_code == 400
     assert upload(client, code, tokens[imitator], "imitation", good, index=1).status_code == 400
     assert upload(client, code, tokens[imitator], "imitation", good, index=0).status_code == 200
@@ -284,7 +324,7 @@ def test_imitation_chunk_upload_rules(client):
 def test_guessers_hear_the_imitations_glued_in_order_and_reversed(client, raw_db):
     code, tokens, _ = setup_game(client)
     speaker, imitator, rv = round_roles(client, code, tokens)
-    upload_all(client, code, tokens[speaker], "original", rv["chunkCount"])
+    upload_original(client, code, tokens[speaker])
     heard = upload_all(client, code, tokens[imitator], "imitation", rv["chunkCount"], seed_base=50)
     row = raw_db.execute("SELECT imitation_file, imitation_back_file FROM reverse_rounds").fetchone()
     glued = [x for chunk in heard for x in chunk]
@@ -297,13 +337,13 @@ def test_perfect_imitation_reproduces_the_original(client, raw_db):
     """If the imitator repeats every portion exactly, the guessers hear the original phrase."""
     code, tokens, _ = setup_game(client)
     speaker, imitator, rv = round_roles(client, code, tokens)
-    sent = upload_all(client, code, tokens[speaker], "original", rv["chunkCount"])
+    sent = upload_original(client, code, tokens[speaker])
     view = get_state(client, code, tokens[imitator])["reverse"]
     for j, url in enumerate(view["portions"]):
         portion = read_samples(url.rsplit("/", 1)[1])
         assert upload(client, code, tokens[imitator], "imitation", make_wav(portion), index=j).status_code == 200
     row = raw_db.execute("SELECT imitation_back_file FROM reverse_rounds").fetchone()
-    assert read_samples(row["imitation_back_file"]) == [x for chunk in sent for x in chunk]
+    assert read_samples(row["imitation_back_file"]) == sent
 
 
 def test_guessing_options_and_scoring(client, raw_db):
@@ -626,3 +666,50 @@ def test_old_phrase_with_decoys_rows_become_blocks(tmp_path, monkeypatch):
     assert conn.execute("SELECT COUNT(*) FROM reverse_blocks").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM reverse_phrases WHERE block_id IS NULL").fetchone()[0] == 0
     conn.close()
+
+
+# --- finding the cut ---
+
+
+def tone(n, amp=8000, period=40):
+    return [amp if (i // (period // 2)) % 2 == 0 else -amp for i in range(n)]
+
+
+def test_find_cut_lands_in_the_middle_of_a_pause():
+    rate = 16000
+    # 1 s of speech, a 0.3 s pause, 1 s of speech; the text says "about half"
+    samples = tone(rate) + [0] * 4800 + tone(rate)
+    cut = find_cut(samples, rate, 0.5)
+    assert rate <= cut <= rate + 4800
+    assert abs(cut - (rate + 2400)) < 400
+
+
+def test_find_cut_finds_a_pause_that_is_not_exactly_where_the_text_says():
+    rate = 16000
+    samples = tone(int(0.9 * rate)) + [0] * 3200 + tone(int(1.5 * rate))  # pause at ~0.4 of the take
+    total = len(samples)
+    cut = find_cut(samples, rate, 0.5)
+    assert 0.9 * rate <= cut <= 0.9 * rate + 3200
+    assert cut < 0.5 * total
+
+
+def test_find_cut_without_a_pause_takes_the_quietest_spot_near_the_middle():
+    rate = 16000
+    quiet = [300] * 800  # a dip, not silence
+    samples = tone(rate) + quiet + tone(rate)
+    cut = find_cut(samples, rate, 0.5)
+    assert rate - 100 <= cut <= rate + 900
+
+
+def test_find_cut_keeps_both_pieces_long_enough():
+    rate = 16000
+    samples = [0] * 400 + tone(rate)  # the quietest spot is the very start
+    cut = find_cut(samples, rate, 0.5)
+    assert 0.3 * rate <= cut <= len(samples) - 0.3 * rate
+
+
+def test_find_cut_on_a_flat_signal_uses_the_text_proportion():
+    rate = 16000
+    samples = tone(2 * rate)
+    cut = find_cut(samples, rate, 0.4)
+    assert abs(cut - 0.4 * len(samples)) < 0.25 * len(samples)

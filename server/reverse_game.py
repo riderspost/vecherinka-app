@@ -11,14 +11,16 @@ from .rooms_common import gen_id, UPLOAD_DIR
 
 MIN_PLAYERS = 2
 OPTIONS_COUNT = 4
-WORDS_PER_CHUNK = 2
+CHUNKS_PER_PHRASE = 2  # a phrase is recorded in two halves
 
-# Фраза записывается кусками по два слова, так что каждая запись короткая.
+# Лимиты на запись (меньше — для одной части повтора, больше — для всей фразы).
 # Всё, что длиннее/тяжелее, почти наверняка не речь, а мусор или попытка
 # забить диск.
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
 MIN_AUDIO_SECONDS = 0.25
 MAX_AUDIO_SECONDS = 8.0
+MAX_ORIGINAL_SECONDS = 12.0  # the speaker records the whole phrase in one take
+MIN_PIECE_SECONDS = 0.3
 MIN_SAMPLE_RATE = 8000
 MAX_SAMPLE_RATE = 48000
 
@@ -57,8 +59,8 @@ def parse_wav(data):
     return rate, samples
 
 
-def read_wav(data):
-    """Validates an uploaded chunk and returns (rate, samples)."""
+def read_wav(data, max_seconds=MAX_AUDIO_SECONDS):
+    """Validates an uploaded clip and returns (rate, samples)."""
     if len(data) > MAX_AUDIO_BYTES:
         raise AudioError("Запись слишком большая")
     rate, samples = parse_wav(data)
@@ -67,7 +69,7 @@ def read_wav(data):
     duration = len(samples) / float(rate)
     if duration < MIN_AUDIO_SECONDS:
         raise AudioError("Запись слишком короткая")
-    if duration > MAX_AUDIO_SECONDS:
+    if duration > max_seconds:
         raise AudioError("Запись слишком длинная")
     return rate, samples
 
@@ -118,14 +120,83 @@ def _glue(clips):
     return rate, joined
 
 
+def find_cut(samples, rate, fraction):
+    """Where to cut a recording of a phrase into two pieces, as a sample index.
+
+    `fraction` is how far into the phrase the cut falls by spoken length. The
+    speaker is asked to pause there, so the quietest spot near that place is
+    normally a real gap between words; without a pause it is simply the
+    quietest point, which can fall inside a word but never leaves a piece
+    shorter than MIN_PIECE_SECONDS.
+    """
+    n = len(samples)
+    frame = max(1, rate // 100)  # 10 ms
+    frames = n // frame
+    min_piece = max(1, int(MIN_PIECE_SECONDS * 100))
+    if frames < 2 * min_piece:
+        return max(1, min(n - 1, int(n * fraction)))
+
+    rms = []
+    for f in range(frames):
+        chunk = samples[f * frame : (f + 1) * frame]
+        rms.append((sum(v * v for v in chunk) / len(chunk)) ** 0.5)
+    # smooth over ~50 ms so a single quiet sample inside a word doesn't count as a gap
+    env = []
+    for f in range(frames):
+        lo_f, hi_f = max(0, f - 2), min(frames, f + 3)
+        env.append(sum(rms[lo_f:hi_f]) / (hi_f - lo_f))
+    peak = max(env) or 1.0
+
+    target = fraction * frames
+    reach = 0.2 * frames
+    first = max(min_piece, int(target - reach))
+    last = min(frames - min_piece, int(target + reach))
+    if last < first:
+        first = last = max(min_piece, min(frames - min_piece, int(target)))
+
+    def cost(f):
+        return env[f] / peak + 0.15 * abs(f - target) / max(1.0, reach)
+
+    best = min(range(first, last + 1), key=cost)
+    # a pause is a stretch of quiet, not one frame: cut in the middle of it
+    limit = env[best] * 1.5 + 0.02 * peak
+    left = best
+    while left - 1 >= first and env[left - 1] <= limit:
+        left -= 1
+    right = best
+    while right + 1 <= last and env[right + 1] <= limit:
+        right += 1
+    return ((left + right) // 2) * frame + frame // 2
+
+
 # --- нарезка фразы ---
 
 
-def split_chunks(text, size=WORDS_PER_CHUNK):
-    """Cuts a phrase into pieces of `size` words (the last may be shorter).
+_VOWELS = set("аеёиоуыэюяaeiouyАЕЁИОУЫЭЮЯAEIOUY")
 
-    A dash or other punctuation standing alone belongs to the word before it
-    instead of counting as a word of its own.
+
+# Little words that lean on the word after them: a piece shouldn't end on one
+# ("уснул на | собственной презентации" reads and records badly).
+_CLINGING = {
+    "в", "во", "на", "от", "из", "к", "ко", "с", "со", "по", "за", "до", "у", "о", "об", "обо",
+    "и", "а", "но", "не", "ни", "без", "для", "при", "про", "над", "под", "из-за", "из-под",
+    "через", "между", "перед", "около", "если", "что", "как", "чтобы", "или", "то",
+}
+_CLING_PENALTY = 3
+
+
+def _syllables(word):
+    # Length of a spoken word is best judged by its vowels, not its letters.
+    return max(1, sum(1 for ch in word if ch in _VOWELS))
+
+
+def split_chunks(text, parts=CHUNKS_PER_PHRASE):
+    """Cuts a phrase into `parts` pieces of about the same spoken length.
+
+    Cuts only fall between words, never inside one; the place is chosen so the
+    pieces hold a similar number of syllables and, where possible, a piece
+    doesn't end on a preposition or conjunction. A dash or other punctuation
+    standing alone belongs to the word before it instead of counting as a word.
     """
     words = []
     for token in text.split():
@@ -133,7 +204,28 @@ def split_chunks(text, size=WORDS_PER_CHUNK):
             words[-1] += " " + token
         else:
             words.append(token)
-    return [" ".join(words[i : i + size]) for i in range(0, len(words), size)] or [text]
+    if len(words) < 2 or parts < 2:
+        return [" ".join(words)] if words else [text]
+
+    parts = min(parts, len(words))
+    weights = [_syllables(w) for w in words]
+    total = sum(weights)
+    cuts = []
+    done = 0
+    for k in range(1, parts):
+        target = total * k / parts
+        # leave at least one word for every piece still to come
+        lo = (cuts[-1] if cuts else 0) + 1
+        hi = len(words) - (parts - k)
+
+        def cost(i):
+            ends_on_little_word = words[i - 1].strip(".,!?…«»\"").lower() in _CLINGING
+            return abs(sum(weights[:i]) - target) + (_CLING_PENALTY if ends_on_little_word else 0)
+
+        best = min(range(lo, hi + 1), key=cost)
+        cuts.append(best)
+    bounds = [0] + cuts + [len(words)]
+    return [" ".join(words[a:b]) for a, b in zip(bounds, bounds[1:])]
 
 
 def round_chunks(rnd, phrase_text=""):
@@ -278,11 +370,36 @@ def start_next_round(db, room):
 # --- запись кусков ---
 
 
-def store_chunk(db, rnd, kind, index, data, chunk_count):
-    """Saves one recorded piece; once the last one is in, glues them and moves on.
+def store_original(db, rnd, data, chunks):
+    """Saves the speaker's single take and cuts it into the pieces the imitator will hear.
 
-    The speaker records the phrase piece by piece in reading order. The
-    imitator then hears the pieces in the order of the *reversed* recording —
+    The phrase is recorded once; the cut falls near where the text's halves
+    meet. Gluing the pieces back gives exactly the take that was uploaded.
+    """
+    if rnd["original_done"]:
+        raise AudioError("Фраза уже записана")
+    rate, samples = read_wav(data, MAX_ORIGINAL_SECONDS)
+    if len(chunks) >= 2:
+        weights = [sum(_syllables(w) for w in c.split()) for c in chunks]
+        cut = find_cut(samples, rate, weights[0] / float(sum(weights)))
+        pieces = [samples[:cut], samples[cut:]]
+    else:
+        pieces = [samples]
+    for idx, piece in enumerate(pieces):
+        forward, reverse = _save_pair(rate, piece)
+        db.execute(
+            "INSERT INTO reverse_chunks (id, round_id, kind, idx, file, reversed_file) VALUES (?, ?, ?, ?, ?, ?)",
+            (gen_id(), rnd["id"], KIND_ORIGINAL, idx, forward, reverse),
+        )
+    db.execute("UPDATE reverse_rounds SET original_done = ? WHERE id = ?", (len(pieces), rnd["id"]))
+    _finish_kind(db, rnd, KIND_ORIGINAL)
+    db.commit()
+
+
+def store_chunk(db, rnd, kind, index, data, chunk_count):
+    """Saves one piece of the imitation; once the last one is in, glues them and moves on.
+
+    The imitator hears the pieces in the order of the *reversed* recording —
     last words first, each piece itself reversed — and records what they hear
     in that same order. Gluing the imitator's pieces in the order they were
     recorded and reversing the whole thing puts the pieces back in reading

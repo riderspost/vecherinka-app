@@ -98,7 +98,7 @@ export const fantyApi = {
 function uploadAudio(code, token, kind, blob, index) {
   const form = new FormData();
   form.append("token", token);
-  form.append("index", String(index));
+  if (index !== undefined) form.append("index", String(index));
   form.append("file", blob, "recording.wav");
   return request("POST", `/api/reverse/rooms/${code}/${kind}`, form);
 }
@@ -108,7 +108,7 @@ export const reverseApi = {
   start: (code, token) => request("POST", `/api/reverse/rooms/${code}/start`, { token }),
   getState: (code, token) =>
     request("GET", `/api/reverse/rooms/${code}/state?token=${encodeURIComponent(token)}`),
-  uploadOriginal: (code, token, blob, index) => uploadAudio(code, token, "original", blob, index),
+  uploadOriginal: (code, token, blob) => uploadAudio(code, token, "original", blob),
   uploadImitation: (code, token, blob, index) => uploadAudio(code, token, "imitation", blob, index),
   answer: (code, token, optionIndex) =>
     request("POST", `/api/reverse/rooms/${code}/answer`, { token, optionIndex }),

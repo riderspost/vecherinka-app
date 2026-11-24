@@ -113,7 +113,11 @@ def _upload_chunk(code, kind, expected_phase, who_key, wrong_phase_msg, wrong_pl
     if err:
         return err
     try:
-        rg.store_chunk(db, rnd, kind, _chunk_index(), data, _chunk_count(db, rnd))
+        if kind == rg.KIND_ORIGINAL:
+            phrase = db.execute("SELECT text FROM reverse_phrases WHERE id = ?", (rnd["phrase_id"],)).fetchone()
+            rg.store_original(db, rnd, data, rg.round_chunks(rnd, phrase["text"] if phrase else ""))
+        else:
+            rg.store_chunk(db, rnd, kind, _chunk_index(), data, _chunk_count(db, rnd))
     except rg.AudioError as e:
         db.rollback()
         return error(str(e))
