@@ -27,27 +27,6 @@ export function renderReverseHome(container) {
   wrap.appendChild(formHost);
   container.appendChild(wrap);
 
-  function showChoiceScreen() {
-    formHost.innerHTML = "";
-    const cards = document.createElement("div");
-    cards.className = "game-cards";
-    cards.innerHTML = `
-      <button class="game-card" data-choice="create">
-        <span class="game-card-emoji">🆕</span>
-        <span class="game-card-title">Создать комнату</span>
-        <span class="game-card-desc">Начать новую игру</span>
-      </button>
-      <button class="game-card" data-choice="join">
-        <span class="game-card-emoji">🔑</span>
-        <span class="game-card-title">У меня есть код</span>
-        <span class="game-card-desc">Присоединиться к уже созданной комнате</span>
-      </button>
-    `;
-    cards.querySelector('[data-choice="create"]').addEventListener("click", showCreateForm);
-    cards.querySelector('[data-choice="join"]').addEventListener("click", () => renderJoinCodeStep(""));
-    formHost.appendChild(cards);
-  }
-
   async function showCreateForm() {
     formHost.innerHTML = "";
 
@@ -117,14 +96,8 @@ export function renderReverseHome(container) {
       }
     });
 
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", showChoiceScreen);
-
     const row = document.createElement("div");
     row.className = "row-actions";
-    row.appendChild(backBtn);
     row.appendChild(btn);
 
     formHost.appendChild(nameInput);
@@ -133,130 +106,5 @@ export function renderReverseHome(container) {
     formHost.appendChild(row);
   }
 
-  function renderJoinCodeStep(prefillCode) {
-    formHost.innerHTML = "";
-
-    const h = document.createElement("h2");
-    h.textContent = "Код комнаты";
-    formHost.appendChild(h);
-    const desc = document.createElement("p");
-    desc.className = "tagline";
-    desc.textContent = "Введите код, который вам прислал организатор.";
-    formHost.appendChild(desc);
-
-    const codeInput = document.createElement("input");
-    codeInput.className = "text-input code-input";
-    codeInput.placeholder = "КОД КОМНАТЫ";
-    codeInput.maxLength = 5;
-    codeInput.style.textTransform = "uppercase";
-    codeInput.value = prefillCode;
-
-    const errorEl = document.createElement("div");
-    errorEl.className = "error-msg";
-
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", showChoiceScreen);
-    const nextBtn = document.createElement("button");
-    nextBtn.className = "btn btn-primary";
-    nextBtn.textContent = "Далее";
-    row.appendChild(backBtn);
-    row.appendChild(nextBtn);
-
-    nextBtn.addEventListener("click", async () => {
-      const code = codeInput.value.trim().toUpperCase();
-      if (code.length !== 5) {
-        errorEl.textContent = "Введите код комнаты";
-        return;
-      }
-      nextBtn.disabled = true;
-      errorEl.textContent = "";
-      try {
-        const res = await api.getTakenEmojis(code);
-        if (res.gameType !== "reverse") {
-          throw new Error("Этот код от другой игры");
-        }
-        if (res.status !== "lobby") {
-          throw new Error("Игра уже началась, подключиться нельзя");
-        }
-        renderJoinDetailsStep(code, res);
-      } catch (e) {
-        errorEl.textContent = e.message;
-        nextBtn.disabled = false;
-      }
-    });
-
-    formHost.appendChild(codeInput);
-    formHost.appendChild(errorEl);
-    formHost.appendChild(row);
-  }
-
-  function renderJoinDetailsStep(code, info) {
-    formHost.innerHTML = "";
-
-    const h = document.createElement("h2");
-    h.textContent = `Комната ${code}`;
-    formHost.appendChild(h);
-    const desc = document.createElement("p");
-    desc.className = "tagline";
-    desc.textContent = "Представьтесь остальным игрокам.";
-    formHost.appendChild(desc);
-
-    const nameInput = document.createElement("input");
-    nameInput.className = "text-input";
-    nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 20;
-
-    const picker = createAvatarPicker(null, info.taken || []);
-
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
-
-    const errorEl = document.createElement("div");
-    errorEl.className = "error-msg";
-
-    btn.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      if (!name) {
-        errorEl.textContent = "Введите имя";
-        return;
-      }
-      if (picker.isUploading()) {
-        errorEl.textContent = "Дождитесь загрузки фото";
-        return;
-      }
-      btn.disabled = true;
-      errorEl.textContent = "";
-      try {
-        const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar, deviceId: getDeviceId() });
-        saveSession(res.code, { token: res.token, playerId: res.playerId });
-        navigate(`/reverse/r/${res.code}`);
-      } catch (e) {
-        errorEl.textContent = e.message;
-        btn.disabled = false;
-      }
-    });
-
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", () => renderJoinCodeStep(code));
-
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    row.appendChild(backBtn);
-    row.appendChild(btn);
-
-    formHost.appendChild(nameInput);
-    formHost.appendChild(picker.element);
-    formHost.appendChild(errorEl);
-    formHost.appendChild(row);
-  }
-
-  showChoiceScreen();
+  showCreateForm();
 }

@@ -52,6 +52,14 @@ export const api = {
   },
   contact: (email, message) => request("POST", "/api/contact", { email, message }),
   discardRoom: (code, token) => request("POST", `/api/rooms/${code}/discard`, { token }),
+  // Taking a lost seat back (sentence and reverse games)
+  getSeats: (code) => request("GET", `/api/rooms/${code}/seats`),
+  createClaim: (code, playerId, deviceId) => request("POST", `/api/rooms/${code}/claims`, { playerId, deviceId }),
+  getClaim: (code, claimId, secret) =>
+    request("GET", `/api/rooms/${code}/claims/${claimId}?secret=${encodeURIComponent(secret)}`),
+  resolveClaim: (code, token, claimId, approve) =>
+    request("POST", `/api/rooms/${code}/claims/${claimId}/resolve`, { token, approve }),
+  kickPlayer: (code, token, playerId) => request("POST", `/api/rooms/${code}/kick`, { token, playerId }),
 };
 
 export const authApi = {

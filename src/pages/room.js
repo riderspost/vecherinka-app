@@ -1,8 +1,18 @@
 import { api, authApi } from "../api.js";
 import { loadSession, saveSession, clearSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
-import { createAvatarPicker, avatarHtml } from "../avatarPicker.js";
+import { createAvatarPicker, avatarHtml, parseAvatarValue } from "../avatarPicker.js";
 import { escapeHtml } from "../utils.js";
+import { stepsBarHtml, shareLinks, mountWizardFrame } from "../wizard.js";
+import { pickTestPlayer, renderTestLinks, testJoinMode } from "../devTools.js";
+import { renderSeatClaim } from "../seatClaim.js";
+import {
+  clearClaimRequests,
+  closePlayersPanel,
+  openPlayersPanel,
+  refreshPlayersPanel,
+  syncClaimRequests,
+} from "../hostTools.js";
 
 const POLL_MS = 1500;
 
@@ -45,10 +55,15 @@ export function mountRoomPage(container, code, opts) {
   let pollTimer = null;
   let lastAnsweringKey = null;
   let stopped = false;
+  let menuOpen = false;
+  let lastState = null;
+  let lastView = null; // { state, token } of the latest render, for redrawing the top bar
 
   function stop() {
     stopped = true;
     if (pollTimer) clearTimeout(pollTimer);
+    clearClaimRequests();
+    closePlayersPanel();
   }
   window.addEventListener("vecherinka:navigate", stop, { once: true });
 
@@ -57,8 +72,24 @@ export function mountRoomPage(container, code, opts) {
     startPolling(session.token);
   } else if (asDisplay) {
     joinAsDisplay();
+  } else if (testJoinMode() === "auto") {
+    joinAsTestPlayer();
   } else {
     renderJoinForm();
+  }
+
+  // ?test=auto: a throwaway player for trying the game alone (see devTools.js).
+  async function joinAsTestPlayer() {
+    container.innerHTML = `<div class="screen center-screen"><p>Заходим тестовым игроком...</p></div>`;
+    try {
+      const info = await api.getTakenEmojis(code);
+      const me = pickTestPlayer(info.taken);
+      const res = await api.joinRoom(code, { ...me, deviceId: getDeviceId() });
+      saveSession(code, { token: res.token, playerId: res.playerId });
+      startPolling(res.token);
+    } catch (e) {
+      renderJoinForm();
+    }
   }
 
   async function joinAsDisplay() {
@@ -73,37 +104,93 @@ export function mountRoomPage(container, code, opts) {
   }
 
   async function renderJoinForm() {
-    container.innerHTML = "";
-    const wrap = document.createElement("div");
-    wrap.className = "screen home-screen";
-    wrap.innerHTML = `<h1 class="logo">🎉 Комната ${escapeHtml(code)}</h1><p class="tagline">Введите имя, чтобы присоединиться</p>`;
-    container.appendChild(wrap);
+    const body = mountWizardFrame(container, {
+      current: 1,
+      total: 0,
+      title: `Комната ${code}`,
+      onBack: () => navigate("/"),
+    });
+    const form = document.createElement("div");
+    form.className = "wz-form";
+    body.appendChild(form);
 
+    let takenEmojis = [];
+    let roomStatus = "lobby";
+    try {
+      const res = await api.getTakenEmojis(code);
+      takenEmojis = res.taken || [];
+      roomStatus = res.status;
+    } catch (e) {
+      takenEmojis = [];
+    }
+
+    // The game is already on: new players can't join, but someone who lost
+    // their session can ask the host for their old seat back.
+    if (roomStatus !== "lobby") {
+      body.innerHTML = "";
+      if (roomStatus === "final_results" || roomStatus === "finished") {
+        const done = document.createElement("p");
+        done.className = "wz-note";
+        done.textContent = "Эта игра уже завершена.";
+        body.appendChild(done);
+        return;
+      }
+      let seats = [];
+      try {
+        seats = (await api.getSeats(code)).seats;
+      } catch (e) {
+        // fall through with an empty list
+      }
+      renderSeatClaim(body, {
+        code,
+        seats,
+        onApproved: (token) => startPolling(token),
+        onBack: () => navigate("/"),
+      });
+      return;
+    }
+
+    let profile = null;
+    try {
+      const session = await authApi.session();
+      if (session.authenticated && session.profileComplete) profile = session;
+    } catch (e) {
+      // guest — a blank form
+    }
+
+    const nameLabel = document.createElement("label");
+    nameLabel.className = "wz-field";
+    nameLabel.innerHTML = `<span>Как вас зовут?</span>`;
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
     nameInput.maxLength = 20;
+    nameInput.autocomplete = "nickname";
+    if (profile) nameInput.value = profile.name;
+    nameLabel.appendChild(nameInput);
 
-    let takenEmojis = [];
-    try {
-      const res = await api.getTakenEmojis(code);
-      takenEmojis = res.taken || [];
-    } catch (e) {
-      takenEmojis = [];
-    }
-    const picker = createAvatarPicker(null, takenEmojis);
-
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
+    const avatarField = document.createElement("div");
+    avatarField.className = "wz-field";
+    avatarField.innerHTML = `<span>Аватар</span>`;
+    const initial =
+      profile && !takenEmojis.includes(parseAvatarValue(profile.avatarValue).emoji)
+        ? { avatarType: profile.avatarType, avatarValue: profile.avatarValue }
+        : null;
+    const picker = createAvatarPicker(initial, takenEmojis);
+    avatarField.appendChild(picker.element);
 
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
 
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wz-cta";
+    btn.textContent = "Присоединиться";
     btn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Введите имя";
+        nameInput.focus();
         return;
       }
       if (picker.isUploading()) {
@@ -123,10 +210,10 @@ export function mountRoomPage(container, code, opts) {
       }
     });
 
-    wrap.appendChild(nameInput);
-    wrap.appendChild(picker.element);
-    wrap.appendChild(errorEl);
-    wrap.appendChild(btn);
+    form.appendChild(nameLabel);
+    form.appendChild(avatarField);
+    form.appendChild(errorEl);
+    form.appendChild(btn);
   }
 
   function startPolling(token) {
@@ -134,6 +221,11 @@ export function mountRoomPage(container, code, opts) {
       if (stopped) return;
       try {
         const state = await api.getState(code, token);
+        lastState = state;
+        if (state.me.isHost) {
+          syncClaimRequests({ code, token, claims: state.pendingClaims });
+          refreshPlayersPanel();
+        }
         render(state, token);
       } catch (e) {
         // Only a definitive "you're not in this room" response from the
@@ -154,6 +246,87 @@ export function mountRoomPage(container, code, opts) {
     tick();
   }
 
+  // Who I am, plus a menu with the rarely needed actions (the TV screen link
+  // and leaving). It lives in its own host so opening the menu redraws only
+  // this bar, not the screen below it (which may hold a half-typed answer).
+  function drawTopBar(host) {
+    const { state, token } = lastView;
+    host.innerHTML = "";
+    const bar = document.createElement("div");
+    bar.className = "pl-top";
+
+    const me = document.createElement("div");
+    me.className = "pl-me";
+    me.innerHTML = `<span class="pl-me-avatar">${avatarHtml(state.me)}</span><span class="pl-me-name">${escapeHtml(state.me.name)}</span>`;
+    bar.appendChild(me);
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "pl-menu-btn";
+    toggle.setAttribute("aria-label", "Меню комнаты");
+    toggle.setAttribute("aria-expanded", String(menuOpen));
+    toggle.textContent = "⋯";
+    toggle.addEventListener("click", () => {
+      menuOpen = !menuOpen;
+      drawTopBar(host);
+    });
+    bar.appendChild(toggle);
+    host.appendChild(bar);
+
+    if (!menuOpen) return;
+    const menu = document.createElement("div");
+    menu.className = "pl-menu";
+
+    const displayUrl = `${window.location.origin}/r/${code}/display`;
+    const tvBtn = document.createElement("button");
+    tvBtn.type = "button";
+    tvBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
+    tvBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(displayUrl).catch(() => {});
+      tvBtn.textContent = "✅ Ссылка скопирована";
+      setTimeout(() => {
+        menuOpen = false;
+        drawTopBar(host);
+      }, 900);
+    });
+
+    // Closing the tab already abandoned a room just fine; this makes leaving
+    // an explicit, intentional action instead of giving up silently.
+    const leaveBtn = document.createElement("button");
+    leaveBtn.type = "button";
+    leaveBtn.className = "danger";
+    leaveBtn.textContent = "🚪 Выйти из комнаты";
+    leaveBtn.addEventListener("click", async () => {
+      leaveBtn.disabled = true;
+      const left = await leaveRoom(state, token, code);
+      if (!left) leaveBtn.disabled = false;
+    });
+
+    // In the lobby the player list on the screen already does this.
+    if (state.me.isHost && state.room.status !== "lobby") {
+      const playersBtn = document.createElement("button");
+      playersBtn.type = "button";
+      playersBtn.textContent = "👥 Игроки";
+      playersBtn.addEventListener("click", () => {
+        menuOpen = false;
+        drawTopBar(host);
+        openPlayersPanel({
+          code,
+          token,
+          getState: () => lastState,
+          onChanged: async () => {
+            lastState = await api.getState(code, token);
+            render(lastState, token);
+          },
+        });
+      });
+      menu.appendChild(playersBtn);
+    }
+    menu.appendChild(tvBtn);
+    menu.appendChild(leaveBtn);
+    host.appendChild(menu);
+  }
+
   function render(state, token) {
     const status = state.room.status;
 
@@ -167,42 +340,14 @@ export function mountRoomPage(container, code, opts) {
 
     container.innerHTML = "";
     const page = document.createElement("div");
-    page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
+    page.className = "room-page" + (state.me.isDisplay ? " display-page" : " pl-room");
+    lastView = { state, token };
 
     if (!state.me.isDisplay) {
-      const meBadge = document.createElement("div");
-      meBadge.className = "me-badge";
-      meBadge.innerHTML = `${avatarHtml(state.me)}<span>${escapeHtml(state.me.name)}</span>`;
-      page.appendChild(meBadge);
-
-      // Kept outside the lobby-only renderLobby() on purpose — someone
-      // setting up the TV screen partway through the game (not just before
-      // it starts) needs this link too, and a full re-render on every poll
-      // tick is fine since it's just a button, same as meBadge above it.
-      const displayUrl = `${window.location.origin}/r/${code}/display`;
-      const displayBtn = document.createElement("button");
-      displayBtn.className = "link-btn";
-      displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
-      displayBtn.addEventListener("click", () => {
-        navigator.clipboard.writeText(displayUrl).catch(() => {});
-        displayBtn.textContent = "Скопировано!";
-        setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
-      });
-      page.appendChild(displayBtn);
-
-      // Same "always available, not tucked into one screen" reasoning as
-      // the TV-link button above — closing the tab already abandoned a
-      // room just fine, this just makes leaving an explicit, intentional
-      // action instead of the only option being "give up silently".
-      const leaveBtn = document.createElement("button");
-      leaveBtn.className = "link-btn danger-text";
-      leaveBtn.textContent = "🚪 Выйти из комнаты";
-      leaveBtn.addEventListener("click", async () => {
-        leaveBtn.disabled = true;
-        const left = await leaveRoom(state, token, code);
-        if (!left) leaveBtn.disabled = false;
-      });
-      page.appendChild(leaveBtn);
+      const barHost = document.createElement("div");
+      barHost.className = "pl-top-host";
+      page.appendChild(barHost);
+      drawTopBar(barHost);
     } else {
       page.appendChild(renderDisplayHeader(state, code));
     }
@@ -268,37 +413,124 @@ function playersList(players) {
   return list;
 }
 
+// The lobby is redrawn on every poll, so a half-done "remove this player?"
+// has to live outside the redrawn buttons.
+let armedKick = { id: null, until: 0 };
+
 function renderLobby(wrap, state, token, code) {
   const shareUrl = `${window.location.origin}/r/${code}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data=${encodeURIComponent(shareUrl)}`;
+  const isDisplay = state.me.isDisplay;
+  const isHost = state.me.isHost;
+  const players = state.players.filter((p) => !p.isDisplay);
+  const needed = state.minPlayers;
 
-  wrap.innerHTML = `
-    <h1 class="logo">🎉 Комната ${escapeHtml(code)}</h1>
-    <img class="qr-code" src="${qrUrl}" alt="QR код" />
-    ${
-      state.me.isDisplay
-        ? `<p class="tagline">Отсканируйте, чтобы присоединиться: ${shareUrl}</p>`
-        : `<p class="tagline">Позовите друзей: <b>${shareUrl}</b></p>`
-    }
-    <p class="players-count">Игроков: ${state.players.filter((p) => !p.isDisplay).length} (минимум ${state.minPlayers})</p>
+  wrap.innerHTML = "";
+  const root = document.createElement("div");
+  root.className = "wz wz-inline";
+  root.innerHTML = `
+    ${isHost && !isDisplay ? stepsBarHtml(3, 3) : ""}
+    <div class="wz-nav wz-nav-static">
+      <b class="wz-title">${isDisplay ? "Присоединяйтесь" : isHost ? "Зовите друзей" : "Комната"}</b>
+      ${isHost && !isDisplay ? '<span class="wz-count">шаг 3 из 3</span>' : ""}
+    </div>
+    <div class="wz-invite">
+      <img class="wz-qr" src="${qrUrl}" alt="QR-код для входа в комнату" />
+      <div class="wz-code-label">Код комнаты</div>
+      <div class="wz-code">${escapeHtml(code)}</div>
+      ${isDisplay ? `<p class="wz-note">Отсканируйте QR или откройте ${escapeHtml(shareUrl)}</p>` : ""}
+    </div>
   `;
-  wrap.appendChild(playersList(state.players));
+  wrap.appendChild(root);
 
-  if (!state.me.isDisplay) {
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "btn";
-    copyBtn.textContent = "Скопировать ссылку";
+  if (!isDisplay) {
+    const text = `Играем в «Продолжи предложение», код комнаты ${code}.`;
+    const links = shareLinks(shareUrl, text);
+    const share = document.createElement("div");
+    share.className = "wz-share";
+    share.innerHTML = `
+      <a class="wz-share-btn" href="${links.telegram}" target="_blank" rel="noopener"><span aria-hidden="true">✈️</span>Telegram</a>
+      <a class="wz-share-btn" href="${links.whatsapp}" target="_blank" rel="noopener"><span aria-hidden="true">💬</span>WhatsApp</a>
+      <button type="button" class="wz-share-btn"><span aria-hidden="true">🔗</span><b>Ссылка</b></button>
+    `;
+    const copyBtn = share.querySelector("button");
     copyBtn.addEventListener("click", () => {
       navigator.clipboard.writeText(shareUrl).catch(() => {});
-      copyBtn.textContent = "Скопировано!";
-      setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
+      copyBtn.querySelector("b").textContent = "Скопировано";
+      setTimeout(() => (copyBtn.querySelector("b").textContent = "Ссылка"), 1500);
     });
-    wrap.appendChild(copyBtn);
+    root.appendChild(share);
+  }
 
-    if (state.me.isHost) {
+  // who is here, and how many more are needed
+  const progress = document.createElement("div");
+  progress.className = "wz-progress";
+  const pct = Math.min(100, Math.round((players.length / needed) * 100));
+  progress.innerHTML = `
+    <div class="wz-bar"><i style="width:${pct}%"></i></div>
+    <small><span>Игроков: ${players.length} из ${needed} нужных</span></small>
+  `;
+  root.appendChild(progress);
+
+  const seats = document.createElement("div");
+  seats.className = "wz-seats";
+  players.forEach((p) => {
+    const seat = document.createElement("div");
+    seat.className = "wz-seat" + (p.online ? "" : " offline");
+    const isMe = p.id === state.me.id;
+    const tag = isMe ? (p.isHost ? "вы · хост" : "вы") : p.isHost ? "хост" : "";
+    seat.innerHTML = `
+      <span class="wz-seat-avatar">${avatarHtml(p)}</span>
+      <span class="wz-seat-who"><span class="wz-seat-name">${escapeHtml(p.name)}</span>${
+        p.online ? "" : '<small class="wz-seat-offline">не в сети</small>'
+      }</span>
+      <span class="players-dot ${p.online ? "on" : ""}" title="${p.online ? "в сети" : "не в сети"}"></span>
+      ${tag ? `<span class="wz-seat-tag${isMe ? " me" : ""}">${tag}</span>` : ""}
+    `;
+    // the host can remove anyone who is not coming (two taps, so it isn't an accident)
+    if (isHost && !isDisplay && !p.isHost && !isMe) {
+      const kickBtn = document.createElement("button");
+      kickBtn.type = "button";
+      kickBtn.className = "wz-seat-kick";
+      const armed = armedKick.id === p.id && Date.now() < armedKick.until;
+      kickBtn.textContent = armed ? "Точно?" : "Убрать";
+      kickBtn.classList.toggle("armed", armed);
+      kickBtn.addEventListener("click", async () => {
+        if (!(armedKick.id === p.id && Date.now() < armedKick.until)) {
+          armedKick = { id: p.id, until: Date.now() + 6000 };
+          kickBtn.textContent = "Точно?";
+          kickBtn.classList.add("armed");
+          return;
+        }
+        kickBtn.disabled = true;
+        armedKick = { id: null, until: 0 };
+        try {
+          await api.kickPlayer(code, token, p.id);
+          seat.remove();
+        } catch (e) {
+          alert(e.message);
+          kickBtn.disabled = false;
+        }
+      });
+      seat.appendChild(kickBtn);
+    }
+    seats.appendChild(seat);
+  });
+  // one placeholder is enough: more players can always join
+  const empty = document.createElement("div");
+  empty.className = "wz-seat empty";
+  empty.innerHTML = `<span class="wz-seat-avatar">＋</span><span class="wz-seat-name">ждём игрока…</span>`;
+  seats.appendChild(empty);
+  root.appendChild(seats);
+
+  if (!isDisplay) {
+    const testLinks = renderTestLinks(`/r/${code}`);
+    if (testLinks) root.appendChild(testLinks);
+    if (isHost) {
       const startBtn = document.createElement("button");
-      startBtn.className = "btn btn-primary";
-      startBtn.textContent = state.canStart ? "Начать игру" : `Нужно ещё игроков (мин. ${state.minPlayers})`;
+      startBtn.type = "button";
+      startBtn.className = "wz-cta";
+      startBtn.textContent = state.canStart ? "Начать игру" : `Ждём игроков: ${players.length} из ${needed}`;
       startBtn.disabled = !state.canStart;
       startBtn.addEventListener("click", async () => {
         startBtn.disabled = true;
@@ -309,14 +541,28 @@ function renderLobby(wrap, state, token, code) {
           startBtn.disabled = false;
         }
       });
-      wrap.appendChild(startBtn);
+      root.appendChild(startBtn);
     } else {
       const waitMsg = document.createElement("p");
-      waitMsg.className = "tagline";
-      waitMsg.textContent = "Ждём, пока хост начнёт игру...";
-      wrap.appendChild(waitMsg);
+      waitMsg.className = "wz-note";
+      waitMsg.textContent = "Ждём, пока хост начнёт игру…";
+      root.appendChild(waitMsg);
     }
   }
+}
+
+// "Раунд 2 из 5", a row of dots for the rounds, and what part of the round this is.
+function roundHeaderHtml(state, partLabel) {
+  const total = state.room.totalRounds;
+  const current = state.room.currentRound;
+  let dots = "";
+  for (let i = 1; i <= total; i++) dots += `<i class="${i < current ? "done" : i === current ? "now" : ""}"></i>`;
+  return `
+    <div class="pl-round">
+      <div class="pl-round-row"><b>Раунд ${current} из ${total}</b><span>${escapeHtml(partLabel)}</span></div>
+      <div class="pl-round-dots">${dots}</div>
+    </div>
+  `;
 }
 
 function renderAnswering(wrap, state, token, code) {
@@ -353,7 +599,7 @@ function renderAnswering(wrap, state, token, code) {
     return;
   }
   wrap.innerHTML = `
-    <p class="round-label">Раунд ${state.room.currentRound} из ${state.room.totalRounds} · ${a.answeredCount + 1}/${a.totalCount}</p>
+    ${roundHeaderHtml(state, `Фраза ${a.answeredCount + 1} из ${a.totalCount}`)}
     <h2 class="prompt-text">${escapeHtml(a.currentPrompt.text)}</h2>
   `;
   const textarea = document.createElement("textarea");
@@ -361,7 +607,7 @@ function renderAnswering(wrap, state, token, code) {
   textarea.maxLength = 300;
   textarea.placeholder = "Ваше продолжение...";
   const btn = document.createElement("button");
-  btn.className = "btn btn-primary";
+  btn.className = "wz-cta";
   btn.textContent = "Ответить";
   const errorEl = document.createElement("div");
   errorEl.className = "error-msg";
@@ -400,7 +646,7 @@ function renderVoting(wrap, state, token, code) {
     return;
   }
   wrap.innerHTML = `
-    <p class="round-label">Раунд ${state.room.currentRound} · Голосование ${v.index}/${v.total}</p>
+    ${roundHeaderHtml(state, `Голосование ${v.index} из ${v.total}`)}
     <h2 class="prompt-text">${escapeHtml(v.promptText)}</h2>
   `;
 
@@ -466,7 +712,7 @@ function renderHostNextButton(wrap, state, token, code, label) {
   if (state.me.isDisplay) return;
   if (state.me.isHost) {
     const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
+    btn.className = "wz-cta";
     btn.textContent = label;
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -493,7 +739,7 @@ function renderVotingResults(wrap, state, token, code) {
     return;
   }
   wrap.innerHTML = `
-    <p class="round-label">Раунд ${state.room.currentRound} · Результаты ${v.index}/${v.total}</p>
+    ${roundHeaderHtml(state, `Результаты ${v.index} из ${v.total}`)}
     <h2 class="prompt-text">${escapeHtml(v.promptText)}</h2>
   `;
   const list = document.createElement("div");
@@ -558,7 +804,7 @@ function renderFinalResults(wrap, state, token, code) {
 
   if (!state.me.isDisplay) {
     const homeBtn = document.createElement("button");
-    homeBtn.className = "btn btn-primary";
+    homeBtn.className = "wz-cta";
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;

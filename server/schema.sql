@@ -37,6 +37,19 @@ CREATE TABLE IF NOT EXISTS players (
   joined_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- A player who lost their session asks to take their seat back; the host
+-- approves. The new token is handed over once, to whoever knows `secret`.
+CREATE TABLE IF NOT EXISTS seat_claims (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+  player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  secret TEXT NOT NULL,
+  device_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  new_token TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS prompts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   text TEXT NOT NULL UNIQUE,

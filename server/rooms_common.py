@@ -1,6 +1,7 @@
 import io
 import os
 import random
+import time
 import uuid
 
 from PIL import Image, ImageOps
@@ -163,6 +164,52 @@ def get_player_or_404(db, room_id, token):
     ).fetchone()
 
 
+ONLINE_WINDOW_SECONDS = 40
+TOUCH_EVERY_SECONDS = 10
+
+
+def touch_player(db, player):
+    """Remembers that this player's device just talked to the server."""
+    now = time.time()
+    last = player["last_seen_at"]
+    if last is None or now - last >= TOUCH_EVERY_SECONDS:
+        db.execute("UPDATE players SET last_seen_at = ? WHERE id = ?", (now, player["id"]))
+        db.commit()
+
+
+def players_with_presence(rows):
+    """player_public() plus whether each player's device was heard from recently."""
+    now = time.time()
+    out = []
+    for row in rows:
+        item = player_public(row)
+        last = row["last_seen_at"]
+        item["online"] = bool(last is not None and now - last <= ONLINE_WINDOW_SECONDS)
+        out.append(item)
+    return out
+
+
+def pending_claims(db, room_id):
+    """Open requests to take a seat back, for the host to answer."""
+    rows = db.execute(
+        """SELECT c.id, c.player_id, p.name, p.avatar_type, p.avatar_value
+           FROM seat_claims c JOIN players p ON p.id = c.player_id
+           WHERE c.room_id = ? AND c.status = 'pending' AND p.left_at IS NULL
+           ORDER BY c.created_at""",
+        (room_id,),
+    ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "playerId": r["player_id"],
+            "name": r["name"],
+            "avatarType": r["avatar_type"],
+            "avatarValue": r["avatar_value"],
+        }
+        for r in rows
+    ]
+
+
 def player_public(row):
     return {
         "id": row["id"],
@@ -176,6 +223,18 @@ def player_public(row):
     }
 
 
+# An emoji avatar may sit on a coloured background. The colour travels inside
+# avatar_value as "emoji|#rrggbb", so everything that already forwards the
+# value keeps working; only these colours are accepted.
+AVATAR_COLORS = ("#ff5da2", "#ff9a3c", "#36d1dc", "#8a5cff", "#5dffa7", "#ffd23f")
+
+
+def split_avatar_value(value):
+    """'🦊|#ff9a3c' -> ('🦊', '#ff9a3c'); a plain emoji -> (emoji, None)."""
+    emoji, _sep, color = (value or "").partition("|")
+    return emoji, (color or None)
+
+
 def validate_avatar(avatar_type, avatar_value):
     if avatar_type not in ("emoji", "photo"):
         return "emoji", "🙂"
@@ -184,10 +243,11 @@ def validate_avatar(avatar_type, avatar_value):
         if not avatar_value or not os.path.isfile(path):
             return "emoji", "🙂"
         return "photo", os.path.basename(avatar_value)
-    value = (avatar_value or "🙂").strip()
-    if not value:
-        value = "🙂"
-    return "emoji", value[:8]
+    emoji, color = split_avatar_value((avatar_value or "").strip())
+    emoji = emoji.strip()[:8] or "🙂"
+    if color and color.lower() in AVATAR_COLORS:
+        return "emoji", f"{emoji}|{color.lower()}"
+    return "emoji", emoji
 
 
 def device_already_in_room(db, room_id, device_id):
@@ -265,8 +325,9 @@ def add_player(
     elif avatar_type == "emoji":
         taken = db.execute(
             """SELECT 1 FROM players
-               WHERE room_id = ? AND is_display = 0 AND avatar_type = 'emoji' AND avatar_value = ?""",
-            (room["id"], avatar_value),
+               WHERE room_id = ? AND is_display = 0 AND avatar_type = 'emoji'
+                 AND (avatar_value = ? OR avatar_value LIKE ?)""",
+            (room["id"], split_avatar_value(avatar_value)[0], split_avatar_value(avatar_value)[0] + "|%"),
         ).fetchone()
         if taken:
             raise RoomError("Этот эмодзи уже выбрал другой игрок, выберите другой")
@@ -299,4 +360,4 @@ def taken_emojis_for_room(db, room_id):
            WHERE room_id = ? AND is_display = 0 AND avatar_type = 'emoji'""",
         (room_id,),
     ).fetchall()
-    return [r["avatar_value"] for r in rows]
+    return [split_avatar_value(r["avatar_value"])[0] for r in rows]

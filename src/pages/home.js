@@ -2,55 +2,114 @@ import { api, authApi } from "../api.js";
 import { saveSession, getDeviceId } from "../storage.js";
 import { navigate } from "../router.js";
 import { createAvatarPicker } from "../avatarPicker.js";
+import { mountWizardFrame } from "../wizard.js";
+import { escapeHtml } from "../utils.js";
+
+const TOTAL_STEPS = 3;
+const SLIDES = [
+  {
+    emoji: "✍️",
+    title: "Допишите фразу",
+    text: "Каждому показывают начало фразы. Придумайте самое смешное продолжение.",
+    demo: { q: "Мой тайный талант на вечеринках это…", a: "угадывать пароли от чужого вайфая" },
+  },
+  {
+    emoji: "🗳️",
+    title: "Голосуйте за лучшее",
+    text: "Ответы показывают всем, а голосуют за самый смешной. За свою фразу голосовать нельзя.",
+  },
+  {
+    emoji: "🏆",
+    title: "Набирайте очки",
+    text: "Чем больше голосов, тем больше очков. Через 5 раундов узнаем победителя.",
+  },
+];
 
 export function renderHome(container) {
-  container.innerHTML = "";
+  // The setup always opens on the first step, however it was left last time.
+  showRulesStep();
 
-  const wrap = document.createElement("div");
-  wrap.className = "screen home-screen";
-  wrap.innerHTML = `
-    <h1 class="logo">✏️ Продолжи предложение</h1>
-    <p class="tagline">Придумывайте смешные продолжения фраз и голосуйте за лучшие</p>
-  `;
+  function showRulesStep() {
+    const body = mountWizardFrame(container, {
+      current: 1,
+      total: TOTAL_STEPS,
+      title: "Как играем",
+      onBack: () => navigate("/"),
+    });
 
-  const homeLink = document.createElement("a");
-  homeLink.className = "link-btn";
-  homeLink.href = "/";
-  homeLink.textContent = "← На главную";
-  homeLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/");
-  });
-  wrap.appendChild(homeLink);
+    const track = document.createElement("div");
+    track.className = "wz-slides";
+    SLIDES.forEach((s) => {
+      const slide = document.createElement("section");
+      slide.className = "wz-slide";
+      slide.innerHTML = `
+        <div class="wz-slide-art" aria-hidden="true">${s.emoji}</div>
+        <h2>${escapeHtml(s.title)}</h2>
+        <p>${escapeHtml(s.text)}</p>
+        ${
+          s.demo
+            ? `<div class="wz-demo"><span class="wz-demo-q">${escapeHtml(s.demo.q)}</span><span class="wz-demo-a"><em>${escapeHtml(s.demo.a)}</em></span></div>`
+            : ""
+        }
+      `;
+      track.appendChild(slide);
+    });
 
-  const formHost = document.createElement("div");
-  wrap.appendChild(formHost);
-  container.appendChild(wrap);
+    const dots = document.createElement("div");
+    dots.className = "wz-dots";
+    SLIDES.forEach(() => dots.appendChild(document.createElement("i")));
 
-  function showChoiceScreen() {
-    formHost.innerHTML = "";
+    let index = 0;
+    function setIndex(i) {
+      index = i;
+      [...dots.children].forEach((d, n) => d.classList.toggle("on", n === i));
+      next.textContent = i === SLIDES.length - 1 ? "Понятно, дальше" : "Дальше";
+    }
+    track.addEventListener("scroll", () => {
+      const i = Math.round(track.scrollLeft / track.clientWidth);
+      if (i !== index) setIndex(Math.max(0, Math.min(SLIDES.length - 1, i)));
+    });
 
-    const cards = document.createElement("div");
-    cards.className = "game-cards";
-    cards.innerHTML = `
-      <button class="game-card" data-choice="create">
-        <span class="game-card-emoji">🆕</span>
-        <span class="game-card-title">Создать комнату</span>
-        <span class="game-card-desc">Начать новую игру</span>
-      </button>
-      <button class="game-card" data-choice="join">
-        <span class="game-card-emoji">🔑</span>
-        <span class="game-card-title">У меня есть код</span>
-        <span class="game-card-desc">Присоединиться к уже созданной комнате</span>
-      </button>
-    `;
-    cards.querySelector('[data-choice="create"]').addEventListener("click", showCreateForm);
-    cards.querySelector('[data-choice="join"]').addEventListener("click", showJoinForm);
-    formHost.appendChild(cards);
+    const next = document.createElement("button");
+    next.type = "button";
+    next.className = "wz-cta";
+    next.addEventListener("click", () => {
+      if (index < SLIDES.length - 1) {
+        const target = index + 1;
+        setIndex(target);
+        track.scrollTo({ left: track.clientWidth * target, behavior: "smooth" });
+      } else {
+        finishRules();
+      }
+    });
+
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "wz-link";
+    skip.textContent = "Пропустить правила";
+    skip.addEventListener("click", finishRules);
+
+    body.appendChild(track);
+    body.appendChild(dots);
+    body.appendChild(next);
+    body.appendChild(skip);
+    setIndex(0);
   }
 
-  async function showCreateForm() {
-    formHost.innerHTML = "";
+  function finishRules() {
+    showWhoStep();
+  }
+
+  async function showWhoStep() {
+    const body = mountWizardFrame(container, {
+      current: 2,
+      total: TOTAL_STEPS,
+      title: "Кто вы",
+      onBack: showRulesStep,
+    });
+    const form = document.createElement("div");
+    form.className = "wz-form";
+    body.appendChild(form);
 
     let profile = null;
     let authenticated = false;
@@ -62,38 +121,37 @@ export function renderHome(container) {
       // not logged in or session check failed — fall back to a blank form
     }
 
-    if (!authenticated) {
-      const warning = document.createElement("div");
-      warning.className = "guest-warning";
-      warning.innerHTML = `⚠️ Вы не вошли в аккаунт — если случайно закроете игру, вернуться в эту комнату будет нельзя. <a href="/account">Войти</a>`;
-      warning.querySelector("a").addEventListener("click", (e) => {
-        e.preventDefault();
-        navigate("/account");
-      });
-      formHost.appendChild(warning);
-    }
-
+    const nameLabel = document.createElement("label");
+    nameLabel.className = "wz-field";
+    nameLabel.innerHTML = `<span>Имя</span>`;
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
-    nameInput.placeholder = "Ваше имя";
+    nameInput.placeholder = "Как вас зовут?";
     nameInput.maxLength = 20;
+    nameInput.autocomplete = "nickname";
     if (profile) nameInput.value = profile.name;
+    nameLabel.appendChild(nameInput);
 
+    const avatarField = document.createElement("div");
+    avatarField.className = "wz-field";
+    avatarField.innerHTML = `<span>Аватар</span>`;
     const picker = createAvatarPicker(
       profile ? { avatarType: profile.avatarType, avatarValue: profile.avatarValue } : undefined
     );
-
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Создать комнату";
+    avatarField.appendChild(picker.element);
 
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
 
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wz-cta";
+    btn.textContent = "Создать комнату";
     btn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Введите имя";
+        nameInput.focus();
         return;
       }
       if (picker.isUploading()) {
@@ -113,163 +171,20 @@ export function renderHome(container) {
       }
     });
 
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", showChoiceScreen);
+    form.appendChild(nameLabel);
+    form.appendChild(avatarField);
+    form.appendChild(errorEl);
+    form.appendChild(btn);
 
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    row.appendChild(backBtn);
-    row.appendChild(btn);
-
-    formHost.appendChild(nameInput);
-    formHost.appendChild(picker.element);
-    formHost.appendChild(errorEl);
-    formHost.appendChild(row);
+    if (!authenticated) {
+      const note = document.createElement("p");
+      note.className = "wz-note";
+      note.innerHTML = `<a href="/account">Войдите в аккаунт</a>, и вернуться в комнату можно будет с любого телефона`;
+      note.querySelector("a").addEventListener("click", (e) => {
+        e.preventDefault();
+        navigate("/account");
+      });
+      form.appendChild(note);
+    }
   }
-
-  function showJoinForm() {
-    renderJoinCodeStep("");
-  }
-
-  function renderJoinCodeStep(prefillCode) {
-    formHost.innerHTML = "";
-
-    const stepLabel = document.createElement("p");
-    stepLabel.className = "tagline";
-    stepLabel.textContent = "Шаг 1 из 2";
-    formHost.appendChild(stepLabel);
-
-    const h = document.createElement("h2");
-    h.textContent = "Код комнаты";
-    formHost.appendChild(h);
-    const desc = document.createElement("p");
-    desc.className = "tagline";
-    desc.textContent = "Введите код, который вам прислал организатор.";
-    formHost.appendChild(desc);
-
-    const codeInput = document.createElement("input");
-    codeInput.className = "text-input code-input";
-    codeInput.placeholder = "КОД КОМНАТЫ";
-    codeInput.maxLength = 5;
-    codeInput.style.textTransform = "uppercase";
-    codeInput.value = prefillCode;
-
-    const errorEl = document.createElement("div");
-    errorEl.className = "error-msg";
-
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", showChoiceScreen);
-    const nextBtn = document.createElement("button");
-    nextBtn.className = "btn btn-primary";
-    nextBtn.textContent = "Далее";
-    row.appendChild(backBtn);
-    row.appendChild(nextBtn);
-
-    nextBtn.addEventListener("click", async () => {
-      const code = codeInput.value.trim().toUpperCase();
-      if (code.length !== 5) {
-        errorEl.textContent = "Введите код комнаты";
-        return;
-      }
-      nextBtn.disabled = true;
-      errorEl.textContent = "";
-      try {
-        const res = await api.getTakenEmojis(code);
-        if (res.gameType !== "sentence") {
-          throw new Error("Этот код от другой игры");
-        }
-        if (res.status !== "lobby") {
-          throw new Error("Игра уже началась, подключиться нельзя");
-        }
-        if (res.deviceMode === "local") {
-          throw new Error("Эта комната только для локальных игроков — попросите организатора добавить вас");
-        }
-        renderJoinDetailsStep(code, res);
-      } catch (e) {
-        errorEl.textContent = e.message;
-        nextBtn.disabled = false;
-      }
-    });
-
-    formHost.appendChild(codeInput);
-    formHost.appendChild(errorEl);
-    formHost.appendChild(row);
-  }
-
-  function renderJoinDetailsStep(code, info) {
-    formHost.innerHTML = "";
-
-    const stepLabel = document.createElement("p");
-    stepLabel.className = "tagline";
-    stepLabel.textContent = "Шаг 2 из 2";
-    formHost.appendChild(stepLabel);
-
-    const h = document.createElement("h2");
-    h.textContent = `Комната ${code}`;
-    formHost.appendChild(h);
-    const desc = document.createElement("p");
-    desc.className = "tagline";
-    desc.textContent = "Представьтесь остальным игрокам.";
-    formHost.appendChild(desc);
-
-    const nameInput = document.createElement("input");
-    nameInput.className = "text-input";
-    nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 20;
-
-    const picker = createAvatarPicker(null, info.taken || []);
-
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
-
-    const errorEl = document.createElement("div");
-    errorEl.className = "error-msg";
-
-    btn.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      if (!name) {
-        errorEl.textContent = "Введите имя";
-        return;
-      }
-      if (picker.isUploading()) {
-        errorEl.textContent = "Дождитесь загрузки фото";
-        return;
-      }
-      btn.disabled = true;
-      errorEl.textContent = "";
-      try {
-        const avatar = picker.getValue();
-        const res = await api.joinRoom(code, { name, ...avatar, deviceId: getDeviceId() });
-        saveSession(res.code, { token: res.token, playerId: res.playerId });
-        navigate(`/r/${res.code}`);
-      } catch (e) {
-        errorEl.textContent = e.message;
-        btn.disabled = false;
-      }
-    });
-
-    const backBtn = document.createElement("button");
-    backBtn.className = "btn";
-    backBtn.textContent = "Назад";
-    backBtn.addEventListener("click", () => renderJoinCodeStep(code));
-
-    const row = document.createElement("div");
-    row.className = "row-actions";
-    row.appendChild(backBtn);
-    row.appendChild(btn);
-
-    formHost.appendChild(nameInput);
-    formHost.appendChild(picker.element);
-    formHost.appendChild(errorEl);
-    formHost.appendChild(row);
-  }
-
-  showChoiceScreen();
 }

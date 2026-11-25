@@ -1,7 +1,7 @@
 {
-  "name": "Вечеринка",
-  "short_name": "Вечеринка",
-  "description": "Игры для компании: «Продолжи предложение» и «Фанты»",
+  "name": "PLYNGER",
+  "short_name": "PLYNGER",
+  "description": "Игры для компании: «Продолжи предложение», «Фанты» и «Наоборот»",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

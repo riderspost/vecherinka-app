@@ -341,6 +341,20 @@ def start_next_round(db, room):
         db.execute("UPDATE rooms SET status = 'finished' WHERE id = ?", (room["id"],))
         db.commit()
         return None
+    # rounds that involve someone who was removed from the room are skipped
+    gone = {
+        row["id"]
+        for row in db.execute(
+            "SELECT id FROM players WHERE room_id = ? AND left_at IS NOT NULL", (room["id"],)
+        ).fetchall()
+    }
+    while number <= st["total_rounds"] and any(pid in gone for pid in roles_for_round(order, number)):
+        number += 1
+    if number > st["total_rounds"]:
+        db.execute("UPDATE reverse_state SET round_number = ? WHERE room_id = ?", (st["total_rounds"], room["id"]))
+        db.execute("UPDATE rooms SET status = 'finished' WHERE id = ?", (room["id"],))
+        db.commit()
+        return None
     speaker_id, imitator_id = roles_for_round(order, number)
     phrase, options, correct_index = _pick_phrase_and_options(db, room["id"])
     round_id = gen_id()
@@ -453,6 +467,19 @@ def portion_urls(db, rnd):
         (rnd["id"], KIND_ORIGINAL),
     ).fetchall()
     return [f"/uploads/{r['reversed_file']}" for r in rows]
+
+
+def reveal_if_everyone_answered(db, rnd):
+    """Moves a guessing round to reveal once every guesser still in the room has answered."""
+    if rnd["phase"] != PHASE_GUESSING:
+        return
+    guessers = {p["id"] for p in guessers_for_round(db, rnd)}
+    answered = {
+        r["player_id"]
+        for r in db.execute("SELECT player_id FROM reverse_answers WHERE round_id = ?", (rnd["id"],)).fetchall()
+    }
+    if guessers and guessers.issubset(answered):
+        score_and_reveal(db, rnd)
 
 
 def score_and_reveal(db, rnd):

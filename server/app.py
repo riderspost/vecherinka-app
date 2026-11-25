@@ -19,6 +19,7 @@ from .auth import auth_bp
 from .fanty_routes import fanty_bp
 from .fanty_seed import seed_fanty_content
 from .reverse_routes import reverse_bp
+from .seats import seats_bp
 from .reverse_seed import seed_reverse_blocks
 from .rooms_common import (
     BASE_DIR,
@@ -31,6 +32,9 @@ from .rooms_common import (
     get_room_or_404,
     get_player_or_404,
     player_public,
+    players_with_presence,
+    pending_claims,
+    touch_player,
     validate_avatar,
     create_room_and_host,
     add_player,
@@ -51,6 +55,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(fanty_bp)
 app.register_blueprint(reverse_bp)
+app.register_blueprint(seats_bp)
 
 
 def _load_secret_key():
@@ -129,7 +134,7 @@ def contact_developer():
     if len(message) > MAX_CONTACT_MESSAGE_LEN:
         return error(f"Слишком длинное сообщение (макс. {MAX_CONTACT_MESSAGE_LEN} символов)")
 
-    subject = f"Вечеринка: сообщение от {contact_email}"
+    subject = f"PLYNGER: сообщение от {contact_email}"
     body_html = (
         f"<p>Email отправителя: {html.escape(contact_email)}</p>"
         f"<p>{html.escape(message).replace(chr(10), '<br>')}</p>"
@@ -184,14 +189,20 @@ def my_rooms():
         return jsonify([])
     db = get_db()
     rows = db.execute(
-        """SELECT DISTINCT r.code AS code, r.game_type AS gameType, r.status AS status
+        """SELECT DISTINCT r.code AS code, r.game_type AS gameType, r.status AS status,
+                  p.is_host AS isHost,
+                  (SELECT COUNT(*) FROM players q
+                    WHERE q.room_id = r.id AND q.is_display = 0 AND q.left_at IS NULL) AS playerCount
            FROM players p
            JOIN rooms r ON r.id = p.room_id
            WHERE p.user_id = ? AND p.is_display = 0 AND p.left_at IS NULL
            ORDER BY r.created_at DESC""",
         (user_id,),
     ).fetchall()
-    return jsonify([dict(r) for r in rows])
+    rooms = [dict(r) for r in rows]
+    for r in rooms:
+        r["isHost"] = bool(r["isHost"])
+    return jsonify(rooms)
 
 
 @app.route("/api/rooms/<code>/resume", methods=["POST"])
@@ -288,7 +299,7 @@ def _build_state(db, room, player):
     game.tick(db, room)
     room = db.execute("SELECT * FROM rooms WHERE id = ?", (room["id"],)).fetchone()
     players = db.execute(
-        "SELECT * FROM players WHERE room_id = ? ORDER BY joined_at", (room["id"],)
+        "SELECT * FROM players WHERE room_id = ? AND left_at IS NULL ORDER BY joined_at", (room["id"],)
     ).fetchall()
     active_count = sum(1 for p in players if not p["is_display"])
 
@@ -299,11 +310,13 @@ def _build_state(db, room, player):
             "currentRound": room["current_round"],
             "totalRounds": game.TOTAL_ROUNDS,
         },
-        "players": [player_public(p) for p in players],
+        "players": players_with_presence(players),
         "me": player_public(player),
         "canStart": room["status"] == "lobby" and active_count >= game.MIN_PLAYERS,
         "minPlayers": game.MIN_PLAYERS,
     }
+    if player["is_host"]:
+        state["pendingClaims"] = pending_claims(db, room["id"])
 
     if room["status"] == "answering":
         if player["is_display"]:
@@ -405,7 +418,7 @@ def _build_state(db, room, player):
                    AND s.round_prompt_id IN (
                        SELECT id FROM round_prompts WHERE room_id = ? AND round_number = ?
                    )
-               WHERE p.room_id = ? AND p.is_display = 0
+               WHERE p.room_id = ? AND p.is_display = 0 AND p.left_at IS NULL
                GROUP BY p.id
                ORDER BY round_points DESC""",
             (room["id"], room["current_round"], room["id"]),
@@ -427,7 +440,7 @@ def _build_state(db, room, player):
     elif room["status"] == "overall_results":
         leaderboard = db.execute(
             """SELECT id, name, avatar_type, avatar_value, total_score FROM players
-               WHERE room_id = ? AND is_display = 0 ORDER BY total_score DESC""",
+               WHERE room_id = ? AND is_display = 0 AND left_at IS NULL ORDER BY total_score DESC""",
             (room["id"],),
         ).fetchall()
         state["overallResults"] = {
@@ -447,7 +460,7 @@ def _build_state(db, room, player):
     elif room["status"] == "final_results":
         leaderboard = db.execute(
             """SELECT id, name, avatar_type, avatar_value, total_score FROM players
-               WHERE room_id = ? AND is_display = 0 ORDER BY total_score DESC""",
+               WHERE room_id = ? AND is_display = 0 AND left_at IS NULL ORDER BY total_score DESC""",
             (room["id"],),
         ).fetchall()
         state["finalResults"] = {
@@ -475,6 +488,7 @@ def room_state(code):
     player = get_player_or_404(db, room["id"], request.args.get("token"))
     if not player:
         return error("Игрок не найден", 404)
+    touch_player(db, player)
     return jsonify(_build_state(db, room, player))
 
 

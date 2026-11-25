@@ -1,13 +1,14 @@
 import { api } from "./api.js";
+import { isTestTab, sessionStore, testDeviceId } from "./devTools.js";
 
 const PREFIX = "vecherinka:";
 
 export function saveSession(code, session) {
-  localStorage.setItem(PREFIX + code.toUpperCase(), JSON.stringify(session));
+  sessionStore().setItem(PREFIX + code.toUpperCase(), JSON.stringify(session));
 }
 
 export function loadSession(code) {
-  const raw = localStorage.getItem(PREFIX + code.toUpperCase());
+  const raw = sessionStore().getItem(PREFIX + code.toUpperCase());
   if (!raw) return null;
   try {
     return JSON.parse(raw);
@@ -17,7 +18,7 @@ export function loadSession(code) {
 }
 
 export function clearSession(code) {
-  localStorage.removeItem(PREFIX + code.toUpperCase());
+  sessionStore().removeItem(PREFIX + code.toUpperCase());
 }
 
 const DEVICE_ID_KEY = "vecherinka-device-id";
@@ -31,6 +32,8 @@ const DEVICE_ID_KEY = "vecherinka-device-id";
 // twice from one browser, not a defense against someone deliberately
 // clearing storage or switching browsers.
 export function getDeviceId() {
+  // a test tab pretends to be another device, so the server lets it in too
+  if (isTestTab()) return testDeviceId();
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
     id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;

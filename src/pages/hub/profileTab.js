@@ -1,0 +1,77 @@
+import { authApi } from "../../api.js";
+import { navigate } from "../../router.js";
+import { forgetAccountLinkedSessions } from "../../storage.js";
+import { createAvatarElement } from "../../avatarPicker.js";
+import { renderInstallSection } from "./gamesTab.js";
+
+function row(icon, text, onClick, className = "") {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `hub-row ${className}`.trim();
+  btn.innerHTML = `<span class="hub-row-icon" aria-hidden="true">${icon}</span><span></span><span class="hub-row-arrow" aria-hidden="true">›</span>`;
+  btn.children[1].textContent = text;
+  btn.addEventListener("click", onClick);
+  return btn;
+}
+
+export function renderProfileTab(shell) {
+  const { body } = shell;
+
+  shell.sessionPromise.then((session) => {
+    if (!session.authenticated) {
+      const gate = document.createElement("div");
+      gate.className = "hub-gate";
+      gate.innerHTML = `
+        <span class="hub-gate-emoji" aria-hidden="true">🎉</span>
+        <b>Играйте под своим именем</b>
+        <p>Аккаунт запоминает имя и аватарку и хранит ваши открытые комнаты.</p>
+      `;
+      const login = document.createElement("button");
+      login.type = "button";
+      login.className = "hub-login-btn";
+      login.textContent = "Войти или создать аккаунт";
+      login.addEventListener("click", () => navigate("/account"));
+      gate.appendChild(login);
+      body.appendChild(gate);
+      const list = document.createElement("div");
+      list.className = "hub-list";
+      list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
+      body.appendChild(list);
+      renderInstallSection(body);
+      return;
+    }
+
+    const head = document.createElement("div");
+    head.className = "hub-profile-head";
+    const av = document.createElement("span");
+    av.className = "hub-profile-avatar";
+    av.appendChild(createAvatarElement({ avatarType: session.avatarType, avatarValue: session.avatarValue, name: session.name }));
+    const name = document.createElement("b");
+    name.textContent = session.name || "Без имени";
+    const mail = document.createElement("small");
+    mail.textContent = session.email;
+    head.appendChild(av);
+    head.appendChild(name);
+    head.appendChild(mail);
+    body.appendChild(head);
+
+    const list = document.createElement("div");
+    list.className = "hub-list";
+    list.appendChild(row("🖼️", "Имя и аватар", () => navigate("/profile/edit")));
+    list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
+    const logout = row("🚪", "Выйти", async () => {
+      logout.disabled = true;
+      try {
+        await forgetAccountLinkedSessions();
+        await authApi.logout();
+        navigate("/");
+      } catch (e) {
+        logout.disabled = false;
+      }
+    }, "danger");
+    logout.querySelector(".hub-row-arrow").textContent = "";
+    list.appendChild(logout);
+    body.appendChild(list);
+    renderInstallSection(body);
+  });
+}

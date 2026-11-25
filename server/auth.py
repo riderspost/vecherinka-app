@@ -54,9 +54,9 @@ def _send_verification_code(db, user):
     db.commit()
     send_email(
         user["email"],
-        "Код подтверждения — Вечеринка",
+        "Код подтверждения — PLYNGER",
         f"""
-        <p>Ваш код подтверждения email в приложении «Вечеринка»:</p>
+        <p>Ваш код подтверждения email в приложении PLYNGER:</p>
         <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">{code}</p>
         <p>Код действителен 15 минут.</p>
         """,
@@ -226,9 +226,9 @@ def forgot_password():
     reset_url = f"{request.url_root}account?token={token}"
     send_email(
         user["email"],
-        "Восстановление пароля — Вечеринка",
+        "Восстановление пароля — PLYNGER",
         f"""
-        <p>Вы запросили восстановление пароля в приложении «Вечеринка».</p>
+        <p>Вы запросили восстановление пароля в приложении PLYNGER.</p>
         <p><a href="{reset_url}">Придумать новый пароль</a></p>
         <p>Ссылка действительна 1 час. Если это были не вы — просто проигнорируйте это письмо.</p>
         """,

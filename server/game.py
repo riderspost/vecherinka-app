@@ -28,7 +28,7 @@ def group_count_for(n):
 
 def get_active_players(db, room_id):
     return db.execute(
-        "SELECT * FROM players WHERE room_id = ? AND is_display = 0 ORDER BY joined_at",
+        "SELECT * FROM players WHERE room_id = ? AND is_display = 0 AND left_at IS NULL ORDER BY joined_at",
         (room_id,),
     ).fetchall()
 
@@ -143,13 +143,20 @@ def group_member_ids(db, group_id):
 
 
 def _answering_complete(db, room_id, round_number):
+    """Everyone still in the room has answered every prompt of their group.
+
+    A player who was removed mid-round is not waited for (what they already
+    wrote stays in the voting).
+    """
+    active = {p["id"] for p in get_active_players(db, room_id)}
     round_prompts = _round_prompts_for_round(db, room_id, round_number)
     for rp in round_prompts:
-        member_ids = group_member_ids(db, rp["group_id"])
-        answered = db.execute(
-            "SELECT COUNT(*) AS c FROM submissions WHERE round_prompt_id = ?", (rp["id"],)
-        ).fetchone()["c"]
-        if answered < len(member_ids):
+        member_ids = [m for m in group_member_ids(db, rp["group_id"]) if m in active]
+        answered = {
+            r["player_id"]
+            for r in db.execute("SELECT player_id FROM submissions WHERE round_prompt_id = ?", (rp["id"],)).fetchall()
+        }
+        if not set(member_ids).issubset(answered):
             return False
     return True
 
@@ -229,6 +236,9 @@ def advance_after_voting_results(db, room):
 def _voting_prompt_complete(db, room):
     rp, _total = current_voting_round_prompt(db, room)
     if rp is None:
+        return True
+    # a prompt nobody answered (its whole group was removed) has nothing to vote on
+    if not db.execute("SELECT 1 FROM submissions WHERE round_prompt_id = ? LIMIT 1", (rp["id"],)).fetchone():
         return True
     eligible = eligible_voter_ids(db, room["id"], rp["group_id"])
     if not eligible:

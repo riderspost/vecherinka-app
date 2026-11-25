@@ -79,7 +79,7 @@ async function main() {
 function renderLogin() {
   root.innerHTML = `
     <div class="login-wrap card">
-      <h1 style="margin-top:0">🎉 Вечеринка — админка</h1>
+      <h1 style="margin-top:0">PLYNGER — админка</h1>
       <p class="hint">Управление списком фраз для игры. Доступ только для администраторов.</p>
       <form id="login-form">
         <label>Логин</label>
@@ -135,7 +135,7 @@ function pendingReviewCard(idPrefix, title) {
 async function renderDashboard() {
   root.innerHTML = `
     <div class="admin-header">
-      <h1>🎉 Вечеринка — админка</h1>
+      <h1>PLYNGER — админка</h1>
       <button class="btn secondary" id="logout-btn">Выйти</button>
     </div>
 

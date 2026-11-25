@@ -1,10 +1,19 @@
 import { api, authApi, reverseApi } from "../../api.js";
 import { loadSession, saveSession, clearSession, getDeviceId } from "../../storage.js";
+import { pickTestPlayer, renderTestLinks, testJoinMode } from "../../devTools.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
 import { createPlayButton, stopAllAudio, MAX_CHUNK_SECONDS, MAX_RECORD_SECONDS } from "../../audioTools.js";
 import { createRecorderPanel } from "./recorderPanel.js";
+import { renderSeatClaim } from "../../seatClaim.js";
+import {
+  clearClaimRequests,
+  closePlayersPanel,
+  openPlayersPanel,
+  refreshPlayersPanel,
+  syncClaimRequests,
+} from "../../hostTools.js";
 
 const POLL_MS = 1500;
 const RANK_MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -92,7 +101,10 @@ function heading(text) {
 // `updater` patches the live bits, like the answered counter.
 function viewKey(state, introDoneRound) {
   const status = state.room.status;
-  if (status === "lobby") return `lobby:${state.players.length}:${state.canStart}:${state.me.isHost}`;
+  if (status === "lobby") {
+    const who = state.players.map((p) => `${p.id}${p.online ? "+" : "-"}`).join(",");
+    return `lobby:${who}:${state.canStart}:${state.me.isHost}`;
+  }
   if (status === "finished") return "finished";
   const rv = state.reverse;
   if (!rv) return "playing";
@@ -105,6 +117,7 @@ function viewKey(state, introDoneRound) {
 export function mountReverseRoomPage(container, code) {
   let pollTimer = null;
   let stopped = false;
+  let lastState = null;
   let lastKey = null;
   let updater = null;
   // The imitator first hears the whole reversed recording, then goes through
@@ -123,14 +136,32 @@ export function mountReverseRoomPage(container, code) {
     if (pollTimer) clearTimeout(pollTimer);
     teardownView();
     stopAllAudio();
+    clearClaimRequests();
+    closePlayersPanel();
   }
   window.addEventListener("vecherinka:navigate", stop, { once: true });
 
   const session = loadSession(code);
   if (session) {
     startPolling(session.token);
+  } else if (testJoinMode() === "auto") {
+    joinAsTestPlayer();
   } else {
     renderJoinForm();
+  }
+
+  // ?test=auto: a throwaway player for trying the game alone (see devTools.js).
+  async function joinAsTestPlayer() {
+    container.innerHTML = `<div class="screen center-screen"><p>Заходим тестовым игроком...</p></div>`;
+    try {
+      const info = await api.getTakenEmojis(code);
+      const me = pickTestPlayer(info.taken);
+      const res = await api.joinRoom(code, { ...me, deviceId: getDeviceId() });
+      saveSession(code, { token: res.token, playerId: res.playerId });
+      startPolling(res.token);
+    } catch (e) {
+      renderJoinForm();
+    }
   }
 
   async function renderJoinForm() {
@@ -139,6 +170,27 @@ export function mountReverseRoomPage(container, code) {
     wrap.className = "screen home-screen";
     wrap.innerHTML = `<h1 class="logo">⏪ Комната ${escapeHtml(code)}</h1><p class="tagline">Введите имя, чтобы присоединиться</p>`;
     container.appendChild(wrap);
+
+    // The game is already on: new players can't join, but someone who lost
+    // their session can ask the host for their old seat back.
+    try {
+      const info = await api.getTakenEmojis(code);
+      if (info.status !== "lobby") {
+        wrap.innerHTML = `<h1 class="logo">⏪ Комната ${escapeHtml(code)}</h1>`;
+        if (info.status === "finished") {
+          wrap.appendChild(Object.assign(document.createElement("p"), { className: "tagline", textContent: "Эта игра уже завершена." }));
+          return;
+        }
+        const seats = (await api.getSeats(code)).seats;
+        const host = document.createElement("div");
+        host.className = "wz wz-inline";
+        wrap.appendChild(host);
+        renderSeatClaim(host, { code, seats, onApproved: (token) => startPolling(token), onBack: () => navigate("/") });
+        return;
+      }
+    } catch (e) {
+      // fall back to the ordinary form
+    }
 
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
@@ -194,6 +246,11 @@ export function mountReverseRoomPage(container, code) {
       if (stopped) return;
       try {
         const state = await reverseApi.getState(code, token);
+        lastState = state;
+        if (state.me.isHost) {
+          syncClaimRequests({ code, token, claims: state.pendingClaims });
+          refreshPlayersPanel();
+        }
         const key = viewKey(state, introDoneRound);
         if (key !== lastKey) {
           lastKey = key;
@@ -243,6 +300,25 @@ export function mountReverseRoomPage(container, code) {
     });
     page.appendChild(leaveBtn);
 
+    if (state.me.isHost) {
+      const playersBtn = document.createElement("button");
+      playersBtn.className = "link-btn";
+      playersBtn.textContent = "👥 Игроки";
+      playersBtn.addEventListener("click", () =>
+        openPlayersPanel({
+          code,
+          token,
+          getState: () => lastState,
+          onChanged: async () => {
+            lastState = await reverseApi.getState(code, token);
+            lastKey = null;
+            renderFull(lastState, token);
+          },
+        })
+      );
+      page.insertBefore(playersBtn, leaveBtn);
+    }
+
     const wrap = document.createElement("div");
     wrap.className = "screen room-screen";
     page.appendChild(wrap);
@@ -272,10 +348,42 @@ export function mountReverseRoomPage(container, code) {
     list.className = "player-list";
     players.forEach((pl) => {
       const item = document.createElement("div");
-      item.className = "player-chip";
+      item.className = "player-chip" + (pl.online ? "" : " player-offline");
       item.innerHTML = `${avatarHtml(pl)}<span>${escapeHtml(pl.name)}</span>${
         pl.isHost ? '<span class="host-badge">хост</span>' : ""
-      }`;
+      }${pl.online ? "" : '<span class="offline-label">не в сети</span>'}`;
+      if (state.me.isHost && !pl.isHost && pl.id !== state.me.id) {
+        const kickBtn = document.createElement("button");
+        kickBtn.type = "button";
+        kickBtn.className = "chip-kick";
+        kickBtn.textContent = "✕";
+        kickBtn.title = "Убрать из комнаты";
+        let armed = false;
+        kickBtn.addEventListener("click", async () => {
+          if (!armed) {
+            armed = true;
+            kickBtn.textContent = "Убрать?";
+            kickBtn.classList.add("armed");
+            setTimeout(() => {
+              if (!kickBtn.disabled) {
+                armed = false;
+                kickBtn.textContent = "✕";
+                kickBtn.classList.remove("armed");
+              }
+            }, 4000);
+            return;
+          }
+          kickBtn.disabled = true;
+          try {
+            await api.kickPlayer(code, token, pl.id);
+            item.remove();
+          } catch (e) {
+            alert(e.message);
+            kickBtn.disabled = false;
+          }
+        });
+        item.appendChild(kickBtn);
+      }
       list.appendChild(item);
     });
     wrap.appendChild(list);
@@ -289,6 +397,9 @@ export function mountReverseRoomPage(container, code) {
       setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
     });
     wrap.appendChild(copyBtn);
+
+    const testLinks = renderTestLinks(`/reverse/r/${code}`);
+    if (testLinks) wrap.appendChild(testLinks);
 
     wrap.appendChild(p("tagline", "🎙 Каждому понадобится микрофон на своём телефоне."));
     if (players.length >= state.minPlayers) {

@@ -9,7 +9,7 @@ export function renderProfilePage(container) {
   const wrap = document.createElement("div");
   wrap.className = "screen home-screen";
   wrap.innerHTML = `
-    <h1 class="logo">👤 Профиль</h1>
+    <h1 class="logo">👤 Имя и аватар</h1>
     <p class="tagline">Укажите имя и аватарку — они будут предложены при создании или входе в игру</p>
   `;
 
@@ -37,11 +37,11 @@ export function renderProfilePage(container) {
     if (isEditing) {
       const backLink = document.createElement("a");
       backLink.className = "link-btn";
-      backLink.href = "/";
-      backLink.textContent = "← На главную";
+      backLink.href = "/profile";
+      backLink.textContent = "← В профиль";
       backLink.addEventListener("click", (e) => {
         e.preventDefault();
-        navigate("/");
+        navigate("/profile");
       });
       formHost.appendChild(backLink);
     }
@@ -78,7 +78,7 @@ export function renderProfilePage(container) {
       try {
         const avatar = picker.getValue();
         await authApi.updateProfile(name, avatar.avatarType, avatar.avatarValue);
-        navigate("/");
+        navigate(isEditing ? "/profile" : "/");
       } catch (e) {
         errorEl.textContent = e.message;
         btn.disabled = false;

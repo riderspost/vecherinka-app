@@ -1,5 +1,5 @@
 import { parseRoute } from "./router.js";
-import { renderGamePicker } from "./pages/gamePicker.js";
+import { renderHub } from "./pages/hub/index.js";
 import { renderHome } from "./pages/home.js";
 import { mountRoomPage } from "./pages/room.js";
 import { renderFantyHome } from "./pages/fanty/home.js";
@@ -23,7 +23,11 @@ const app = document.getElementById("app");
 function renderCurrentRoute() {
   const route = parseRoute(window.location.pathname);
   if (route.name === "gamePicker") {
-    renderGamePicker(app);
+    renderHub(app, "games");
+  } else if (route.name === "rooms") {
+    renderHub(app, "rooms");
+  } else if (route.name === "profile") {
+    renderHub(app, "profile");
   } else if (route.name === "sentenceHome") {
     renderHome(app);
   } else if (route.name === "room") {
@@ -44,7 +48,7 @@ function renderCurrentRoute() {
     mountReverseRoomPage(app, route.code);
   } else if (route.name === "account") {
     renderAccountPage(app);
-  } else if (route.name === "profile") {
+  } else if (route.name === "profileEdit") {
     renderProfilePage(app);
   } else if (route.name === "contact") {
     renderContactPage(app);

@@ -7,7 +7,7 @@ async function navigateAfterAuth() {
   try {
     const session = await authApi.session();
     if (session.authenticated && !session.profileComplete) {
-      navigate("/profile");
+      navigate("/profile/edit");
       return;
     }
   } catch (e) {

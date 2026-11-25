@@ -9,6 +9,9 @@ from .rooms_common import (
     get_room_or_404,
     get_player_or_404,
     player_public,
+    players_with_presence,
+    pending_claims,
+    touch_player,
     create_room_and_host,
     gen_id,
 )
@@ -175,10 +178,7 @@ def submit_answer(code):
     )
     db.commit()
 
-    guessers = rg.guessers_for_round(db, rnd)
-    answered = db.execute("SELECT COUNT(*) AS c FROM reverse_answers WHERE round_id = ?", (rnd["id"],)).fetchone()["c"]
-    if answered >= len(guessers):
-        rg.score_and_reveal(db, rnd)
+    rg.reveal_if_everyone_answered(db, rnd)
     return jsonify({"ok": True})
 
 
@@ -318,7 +318,8 @@ def _build_round_state(db, room, player, rnd):
         mine = next((a for a in answers if a["player_id"] == player["id"]), None)
         reverse["options"] = options
         reverse["guessUrl"] = _upload_url(rnd["imitation_back_file"])
-        reverse["answeredCount"] = len(answers)
+        present = {g["id"] for g in guessers}
+        reverse["answeredCount"] = sum(1 for a in answers if a["player_id"] in present)
         reverse["guesserCount"] = len(guessers)
         reverse["myAnswer"] = mine["option_index"] if mine else None
 
@@ -340,11 +341,13 @@ def _build_state(db, room, player):
     active = [p for p in players if not p["is_display"]]
     state = {
         "room": {"code": room["code"], "status": room["status"], "deviceMode": room["device_mode"]},
-        "players": [player_public(p) for p in players],
+        "players": players_with_presence(players),
         "me": player_public(player),
         "canStart": room["status"] == "lobby" and len(active) >= rg.MIN_PLAYERS,
         "minPlayers": rg.MIN_PLAYERS,
     }
+    if player["is_host"]:
+        state["pendingClaims"] = pending_claims(db, room["id"])
     if room["status"] == "finished":
         state["summary"] = _build_summary(db, room)
     elif room["status"] == "playing":
@@ -360,4 +363,5 @@ def state(code):
     room, player, err = _auth(db, code, request.args.get("token"))
     if err:
         return err
+    touch_player(db, player)
     return jsonify(_build_state(db, room, player))
