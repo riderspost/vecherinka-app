@@ -120,6 +120,7 @@ export function mountReverseRoomPage(container, code) {
   let pollTimer = null;
   let stopped = false;
   let lastState = null;
+  let sessionToken = null;
   let menuOpen = false;
   let lastKey = null;
   let updater = null;
@@ -141,7 +142,18 @@ export function mountReverseRoomPage(container, code) {
     stopAllAudio();
     clearClaimRequests();
     closePlayersPanel();
+    document.removeEventListener("click", closeMenuOnOutsideTap);
   }
+
+  // A tap anywhere outside the open menu closes it.
+  function closeMenuOnOutsideTap(e) {
+    if (!menuOpen) return;
+    if (e.target.closest(".pl-menu") || e.target.closest(".pl-menu-btn")) return;
+    menuOpen = false;
+    const host = document.querySelector(".pl-top-host");
+    if (host && lastState) drawTopBar(host, lastState, sessionToken);
+  }
+  document.addEventListener("click", closeMenuOnOutsideTap);
   window.addEventListener("vecherinka:navigate", stop, { once: true });
 
   const session = loadSession(code);
@@ -273,6 +285,7 @@ export function mountReverseRoomPage(container, code) {
   }
 
   function startPolling(token) {
+    sessionToken = token;
     async function tick() {
       if (stopped) return;
       try {
@@ -322,7 +335,7 @@ export function mountReverseRoomPage(container, code) {
     toggle.className = "pl-menu-btn";
     toggle.setAttribute("aria-label", "Меню комнаты");
     toggle.setAttribute("aria-expanded", String(menuOpen));
-    toggle.textContent = "⋯";
+    toggle.textContent = "⚙️";
     toggle.addEventListener("click", () => {
       menuOpen = !menuOpen;
       drawTopBar(host, state, token);

@@ -60,9 +60,20 @@ export function mountRoomPage(container, code, opts) {
   let lastState = null;
   let lastView = null; // { state, token } of the latest render, for redrawing the top bar
 
+  // A tap anywhere outside the open menu closes it.
+  function closeMenuOnOutsideTap(e) {
+    if (!menuOpen) return;
+    if (e.target.closest(".pl-menu") || e.target.closest(".pl-menu-btn")) return;
+    menuOpen = false;
+    const host = document.querySelector(".pl-top-host");
+    if (host && lastView) drawTopBar(host);
+  }
+  document.addEventListener("click", closeMenuOnOutsideTap);
+
   function stop() {
     stopped = true;
     if (pollTimer) clearTimeout(pollTimer);
+    document.removeEventListener("click", closeMenuOnOutsideTap);
     clearClaimRequests();
     closePlayersPanel();
   }
@@ -266,7 +277,7 @@ export function mountRoomPage(container, code, opts) {
     toggle.className = "pl-menu-btn";
     toggle.setAttribute("aria-label", "Меню комнаты");
     toggle.setAttribute("aria-expanded", String(menuOpen));
-    toggle.textContent = "⋯";
+    toggle.textContent = "⚙️";
     toggle.addEventListener("click", () => {
       menuOpen = !menuOpen;
       drawTopBar(host);
