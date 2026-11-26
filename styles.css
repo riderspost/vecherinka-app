@@ -4328,3 +4328,140 @@ h2, h3 {
 .hub-chip {
   cursor: default;
 }
+
+/* ---------- Fanty in the new look ---------- */
+
+.wz-form label:not(.radio-option):not(.checkbox-option):not(.wz-field) {
+  margin: 4px 0 -6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hub-dim);
+}
+
+.wz .radio-group,
+.wz .checkbox-group,
+.pl-room .radio-group,
+.pl-room .checkbox-group {
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.wz .option-row,
+.pl-room .option-row {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1.5px solid var(--hub-line);
+  background: var(--hub-surface);
+}
+
+.wz .radio-option,
+.wz .checkbox-option,
+.pl-room .radio-option,
+.pl-room .checkbox-option {
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--hub-text);
+}
+
+.wz .radio-option input,
+.wz .checkbox-option input,
+.pl-room .radio-option input,
+.pl-room .checkbox-option input {
+  accent-color: var(--hub-pink);
+}
+
+.wz .hint-toggle,
+.pl-room .hint-toggle {
+  color: var(--hub-dim);
+}
+
+.wz .hint-text,
+.pl-room .hint-text {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--hub-dim);
+  border-radius: 12px;
+}
+
+.wz .guest-warning {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 210, 63, 0.1);
+  border: 1px solid rgba(255, 210, 63, 0.35);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.pl-room .text-input {
+  background: var(--hub-surface);
+  border: 1.5px solid var(--hub-line);
+  border-radius: 14px;
+  color: var(--hub-text);
+}
+
+.pl-room .text-input:focus {
+  outline: none;
+  border-color: var(--hub-cyan);
+}
+
+.fanty-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(54, 209, 220, 0.16), rgba(138, 92, 255, 0.18));
+  border: 1px solid rgba(54, 209, 220, 0.4);
+  margin-bottom: 0;
+  font-size: 13px;
+  color: var(--hub-dim, #b3a9de);
+}
+
+.fanty-summary-mode {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--hub-text, #f6f2ff);
+}
+
+.pl-room .card-inline {
+  background: var(--hub-surface);
+  border: 1px solid var(--hub-line);
+  border-radius: 20px;
+}
+
+.pl-room .seat-avatar {
+  background: var(--hub-surface);
+  border: 1px solid var(--hub-line);
+}
+
+.seat-avatar .avatar-colored {
+  width: 100%;
+  height: 100%;
+}
+
+.pl-room .row-actions .btn {
+  border-radius: 16px;
+}
+
+.pl-room .btn.danger {
+  border-color: #ff8aa8;
+  color: #ff8aa8;
+  background: transparent;
+}
+
+.pl-room .big-timer {
+  font-family: var(--font-display);
+  color: var(--hub-text);
+}
+
+.pl-room .upload-label {
+  border-radius: 14px;
+  border-color: var(--hub-cyan);
+  color: var(--hub-cyan);
+}
+
+.pl-room .round-label {
+  color: var(--hub-dim);
+}

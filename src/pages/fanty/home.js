@@ -2,6 +2,7 @@ import { fantyApi, authApi } from "../../api.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
+import { mountWizardFrame } from "../../wizard.js";
 import {
   LOCATIONS,
   MOOD_CATEGORIES,
@@ -14,6 +15,7 @@ import {
 } from "./constants.js";
 
 const TOTAL_STEPS = 4;
+const STEP_TITLES = ["Тип игры", "Где играем", "Как играем", "Игроки"];
 
 function optionRow(labelEl, hint) {
   const row = document.createElement("div");
@@ -91,38 +93,9 @@ function checkboxGroup(options, defaultChecked) {
 }
 
 export function renderFantyHome(container) {
-  container.innerHTML = "";
-
-  const wrap = document.createElement("div");
-  wrap.className = "screen home-screen";
-  wrap.innerHTML = `
-    <h1 class="logo">🍾 Фанты</h1>
-    <p class="tagline">Правда, действие и командные фанты для компании</p>
-  `;
-
-  const homeLink = document.createElement("a");
-  homeLink.className = "link-btn";
-  homeLink.href = "/";
-  homeLink.textContent = "← На главную";
-  homeLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/");
-  });
-  wrap.appendChild(homeLink);
-
-  const submitLink = document.createElement("a");
-  submitLink.className = "link-btn";
-  submitLink.href = "/fanty/submit";
-  submitLink.textContent = "Предложить свой фант или вопрос";
-  submitLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/fanty/submit");
-  });
-  wrap.appendChild(submitLink);
-
-  const formHost = document.createElement("div");
-  wrap.appendChild(formHost);
-  container.appendChild(wrap);
+  // The setup is a wizard: every step is a screen of its own (see wizard.js).
+  let formHost = null;
+  let backHook = null;
 
   function showCreateForm() {
     const formState = {
@@ -138,37 +111,21 @@ export function renderFantyHome(container) {
     };
     let stepIndex = 0;
 
-    function stepHeading(title, description) {
-      const h = document.createElement("h2");
-      h.textContent = title;
-      formHost.appendChild(h);
+    // the step's title is in the frame above; this is the text under it
+    function stepHeading(_title, description) {
       const p = document.createElement("p");
-      p.className = "tagline";
+      p.className = "wz-note wz-note-left";
       p.textContent = description;
       formHost.appendChild(p);
     }
 
     function navButtons(nextLabel, onBack) {
-      const row = document.createElement("div");
-      row.className = "row-actions";
-      const backBtn = document.createElement("button");
-      backBtn.className = "btn";
-      backBtn.textContent = "Назад";
-      backBtn.addEventListener("click", () => {
-        if (onBack) onBack();
-        if (stepIndex > 0) {
-          stepIndex -= 1;
-          renderStep();
-        } else {
-          navigate("/");
-        }
-      });
-      row.appendChild(backBtn);
+      backHook = onBack || null;
       const nextBtn = document.createElement("button");
-      nextBtn.className = "btn btn-primary";
+      nextBtn.type = "button";
+      nextBtn.className = "wz-cta";
       nextBtn.textContent = nextLabel || "Далее";
-      row.appendChild(nextBtn);
-      formHost.appendChild(row);
+      formHost.appendChild(nextBtn);
       return nextBtn;
     }
 
@@ -315,7 +272,7 @@ export function renderFantyHome(container) {
 
       if (!authenticated) {
         const warning = document.createElement("div");
-        warning.className = "guest-warning";
+        warning.className = "guest-warning wz-note";
         warning.innerHTML = `⚠️ Вы не вошли в аккаунт — если случайно закроете игру, вернуться в эту комнату будет нельзя. <a href="/account">Войти</a>`;
         warning.querySelector("a").addEventListener("click", (e) => {
           e.preventDefault();
@@ -395,12 +352,22 @@ export function renderFantyHome(container) {
     }
 
     function renderStep() {
-      formHost.innerHTML = "";
-
-      const stepLabel = document.createElement("p");
-      stepLabel.className = "tagline";
-      stepLabel.textContent = `Шаг ${stepIndex + 1} из ${TOTAL_STEPS}`;
-      formHost.appendChild(stepLabel);
+      backHook = null;
+      formHost = mountWizardFrame(container, {
+        current: stepIndex + 1,
+        total: TOTAL_STEPS,
+        title: STEP_TITLES[stepIndex],
+        onBack: () => {
+          if (backHook) backHook();
+          if (stepIndex > 0) {
+            stepIndex -= 1;
+            renderStep();
+          } else {
+            navigate("/");
+          }
+        },
+      });
+      formHost.classList.add("wz-form");
 
       if (stepIndex === 0) renderGameModeStep();
       else if (stepIndex === 1) renderLocationStep();

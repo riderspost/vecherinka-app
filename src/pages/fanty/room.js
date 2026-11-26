@@ -6,6 +6,7 @@ import { escapeHtml, thumbUrl, createFireButton, truncatedNameHtml } from "../..
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
+import { mountWizardFrame } from "../../wizard.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
@@ -85,7 +86,10 @@ export function mountFantyRoomPage(container, code, opts) {
   let musicStopTimeoutId = null;
   let musicFadeIntervalId = null;
   let currentAudio = null;
-  let persistentMeBadgeEl = null;
+  let menuOpen = false;
+  let closeArmedUntil = 0;
+  let lastState = null;
+  let redrawTopBar = null; // set once the bar exists (it is defined while polling)
   let persistentCircleWrap = null;
   let persistentPage = null;
   let persistentWrap = null;
@@ -104,9 +108,20 @@ export function mountFantyRoomPage(container, code, opts) {
   // re-renders of the playing screen instead of collapsing every 1.5s.
   const manageUi = { open: false };
 
+  // A tap anywhere outside the open menu closes it.
+  function closeMenuOnOutsideTap(e) {
+    if (!menuOpen) return;
+    if (e.target.closest(".pl-menu") || e.target.closest(".pl-menu-btn")) return;
+    menuOpen = false;
+    const host = document.querySelector(".pl-top-host");
+    if (host && lastState && redrawTopBar) redrawTopBar(host, lastState, loadSession(code)?.token);
+  }
+  document.addEventListener("click", closeMenuOnOutsideTap);
+
   function stop() {
     stopped = true;
     if (pollTimer) clearTimeout(pollTimer);
+    document.removeEventListener("click", closeMenuOnOutsideTap);
   }
   window.addEventListener("vecherinka:navigate", stop, { once: true });
 
@@ -131,16 +146,15 @@ export function mountFantyRoomPage(container, code, opts) {
   }
 
   async function renderJoinForm() {
-    container.innerHTML = "";
-    const wrap = document.createElement("div");
-    wrap.className = "screen home-screen";
-    wrap.innerHTML = `<h1 class="logo">🍾 Комната ${escapeHtml(code)}</h1><p class="tagline">Введите имя, чтобы присоединиться</p>`;
-    container.appendChild(wrap);
-
-    const nameInput = document.createElement("input");
-    nameInput.className = "text-input";
-    nameInput.placeholder = "Ваше имя";
-    nameInput.maxLength = 20;
+    const body = mountWizardFrame(container, {
+      current: 1,
+      total: 0,
+      title: `Комната ${code}`,
+      onBack: () => navigate("/"),
+    });
+    const form = document.createElement("div");
+    form.className = "wz-form";
+    body.appendChild(form);
 
     let takenEmojis = [];
     let requireGender = false;
@@ -151,22 +165,41 @@ export function mountFantyRoomPage(container, code, opts) {
     } catch (e) {
       takenEmojis = [];
     }
+
+    const nameLabel = document.createElement("label");
+    nameLabel.className = "wz-field";
+    nameLabel.innerHTML = `<span>Как вас зовут?</span>`;
+    const nameInput = document.createElement("input");
+    nameInput.className = "text-input";
+    nameInput.placeholder = "Ваше имя";
+    nameInput.maxLength = 20;
+    nameInput.autocomplete = "nickname";
+    nameLabel.appendChild(nameInput);
+
+    const avatarField = document.createElement("div");
+    avatarField.className = "wz-field";
+    avatarField.innerHTML = `<span>Аватар</span>`;
     const picker = createAvatarPicker(null, takenEmojis);
+    avatarField.appendChild(picker.element);
 
-    const genderLabel = document.createElement("label");
-    genderLabel.textContent = "Пол";
+    const genderField = document.createElement("div");
+    genderField.className = "wz-field";
+    genderField.innerHTML = `<span>Пол</span>`;
     const genderGroup = genderRadioGroup(null);
+    genderField.appendChild(genderGroup.element);
 
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wz-cta";
+    btn.textContent = "Присоединиться";
 
     btn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Введите имя";
+        nameInput.focus();
         return;
       }
       const gender = requireGender ? genderGroup.getValue() : null;
@@ -191,14 +224,11 @@ export function mountFantyRoomPage(container, code, opts) {
       }
     });
 
-    wrap.appendChild(nameInput);
-    wrap.appendChild(picker.element);
-    if (requireGender) {
-      wrap.appendChild(genderLabel);
-      wrap.appendChild(genderGroup.element);
-    }
-    wrap.appendChild(errorEl);
-    wrap.appendChild(btn);
+    form.appendChild(nameLabel);
+    form.appendChild(avatarField);
+    if (requireGender) form.appendChild(genderField);
+    form.appendChild(errorEl);
+    form.appendChild(btn);
   }
 
   function startPolling(token) {
@@ -232,7 +262,93 @@ export function mountFantyRoomPage(container, code, opts) {
     }
     tick();
 
+    function drawTopBar(host, state, token) {
+      host.innerHTML = "";
+      const bar = document.createElement("div");
+      bar.className = "pl-top";
+      const me = document.createElement("div");
+      me.className = "pl-me";
+      const avatarWrap = document.createElement("span");
+      avatarWrap.className = "pl-me-avatar";
+      avatarWrap.appendChild(createAvatarElement(state.me));
+      const meName = document.createElement("span");
+      meName.className = "pl-me-name";
+      meName.textContent = state.me.name;
+      me.appendChild(avatarWrap);
+      me.appendChild(meName);
+      bar.appendChild(me);
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "pl-menu-btn";
+      toggle.setAttribute("aria-label", "Меню комнаты");
+      toggle.setAttribute("aria-expanded", String(menuOpen));
+      toggle.textContent = "⚙️";
+      toggle.addEventListener("click", () => {
+        menuOpen = !menuOpen;
+        drawTopBar(host, state, token);
+      });
+      bar.appendChild(toggle);
+      host.appendChild(bar);
+      if (!menuOpen) return;
+
+      const menu = document.createElement("div");
+      menu.className = "pl-menu";
+      const displayUrl = `${window.location.origin}/fanty/r/${code}/display`;
+      const tvBtn = document.createElement("button");
+      tvBtn.type = "button";
+      tvBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
+      tvBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(displayUrl).catch(() => {});
+        tvBtn.textContent = "✅ Ссылка скопирована";
+        setTimeout(() => {
+          menuOpen = false;
+          drawTopBar(host, state, token);
+        }, 900);
+      });
+      menu.appendChild(tvBtn);
+
+      const leaveBtn = document.createElement("button");
+      leaveBtn.type = "button";
+      leaveBtn.className = "danger";
+      leaveBtn.textContent = "🚪 Выйти из комнаты";
+      leaveBtn.addEventListener("click", async () => {
+        leaveBtn.disabled = true;
+        const left = await leaveRoom(state, token, code);
+        if (!left) leaveBtn.disabled = false;
+      });
+      menu.appendChild(leaveBtn);
+
+      if (state.me.isHost) {
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.className = "danger";
+        closeBtn.textContent = Date.now() < closeArmedUntil ? "⚠️ Точно закрыть для всех?" : "🗑 Закрыть комнату";
+        closeBtn.addEventListener("click", async () => {
+          if (Date.now() >= closeArmedUntil) {
+            closeArmedUntil = Date.now() + 6000;
+            drawTopBar(host, state, token);
+            return;
+          }
+          closeBtn.disabled = true;
+          try {
+            await fantyApi.discard(code, token);
+            clearSession(code);
+            navigate("/");
+          } catch (e) {
+            closeArmedUntil = 0;
+            alert(e.message);
+            closeBtn.disabled = false;
+          }
+        });
+        menu.appendChild(closeBtn);
+      }
+      host.appendChild(menu);
+    }
+
+    redrawTopBar = drawTopBar;
+
     function render(state, token) {
+      lastState = state;
       if (timerIntervalId) {
         clearInterval(timerIntervalId);
         timerIntervalId = null;
@@ -265,54 +381,16 @@ export function mountFantyRoomPage(container, code, opts) {
       if (statusChanged || !persistentPage) {
         container.innerHTML = "";
         const page = document.createElement("div");
-        page.className = "room-page" + (state.me.isDisplay ? " display-page" : "");
+        page.className = "room-page" + (state.me.isDisplay ? " display-page" : " pl-room");
 
         if (!state.me.isDisplay) {
-          // The badge's own avatar/name never change mid-game, so reuse the
-          // whole thing as one block instead of rebuilding (and
-          // reparenting its <img>) on every poll tick.
-          if (!persistentMeBadgeEl || persistentMeBadgeEl.__playerId !== state.me.id) {
-            const meBadge = document.createElement("div");
-            meBadge.className = "me-badge";
-            meBadge.__playerId = state.me.id;
-            meBadge.appendChild(createAvatarElement(state.me));
-            const meName = document.createElement("span");
-            meName.textContent = state.me.name;
-            meBadge.appendChild(meName);
-            persistentMeBadgeEl = meBadge;
-          }
-          page.appendChild(persistentMeBadgeEl);
-
-          // Lives here, not inside renderLobby, so it survives the
-          // lobby->playing transition instead of vanishing the moment the
-          // game starts — someone setting up the TV screen mid-game needs
-          // this link too. page/wrap are only rebuilt on a status change,
-          // so this button (like the badge above it) naturally persists
-          // through every poll tick within "playing" without re-appending.
-          const displayUrl = `${window.location.origin}/fanty/r/${code}/display`;
-          const displayBtn = document.createElement("button");
-          displayBtn.className = "link-btn";
-          displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана";
-          displayBtn.addEventListener("click", () => {
-            navigator.clipboard.writeText(displayUrl).catch(() => {});
-            displayBtn.textContent = "Скопировано!";
-            setTimeout(() => (displayBtn.textContent = "📺 Скопировать ссылку для ТВ-экрана"), 1500);
-          });
-          page.appendChild(displayBtn);
-
-          // Same "always available" reasoning as the TV-link button above
-          // — closing the tab already abandoned a room just fine, this
-          // just makes leaving an explicit, intentional action instead of
-          // the only option being "give up silently".
-          const leaveBtn = document.createElement("button");
-          leaveBtn.className = "link-btn danger-text";
-          leaveBtn.textContent = "🚪 Выйти из комнаты";
-          leaveBtn.addEventListener("click", async () => {
-            leaveBtn.disabled = true;
-            const left = await leaveRoom(state, token, code);
-            if (!left) leaveBtn.disabled = false;
-          });
-          page.appendChild(leaveBtn);
+          // Who I am and a gear menu (TV link, leave, close the room). The
+          // bar is built once per page rebuild and redrawn in place when the
+          // menu opens, so the poll-driven updates below never touch it.
+          const barHost = document.createElement("div");
+          barHost.className = "pl-top-host";
+          page.appendChild(barHost);
+          drawTopBar(barHost, state, token);
         }
 
         const wrap = document.createElement("div");
@@ -384,17 +462,18 @@ export function mountFantyRoomPage(container, code, opts) {
 
 function playersList(players, onRemove) {
   const list = document.createElement("div");
-  list.className = "player-list";
+  list.className = "wz-seats";
   players.forEach((p) => {
     const item = document.createElement("div");
-    item.className = "player-chip";
-    item.innerHTML = `${avatarHtml(p)}<span>${escapeHtml(p.name)}</span>${
-      p.isHost ? '<span class="host-badge">хост</span>' : ""
-    }`;
+    item.className = "wz-seat";
+    item.innerHTML = `<span class="wz-seat-avatar">${avatarHtml(p)}</span><span class="wz-seat-who"><span class="wz-seat-name">${escapeHtml(
+      p.name
+    )}</span></span>${p.isHost ? '<span class="wz-seat-tag">хост</span>' : ""}`;
     if (onRemove && !p.isHost) {
       const removeBtn = document.createElement("button");
-      removeBtn.className = "link-btn danger-text";
-      removeBtn.textContent = "Удалить";
+      removeBtn.type = "button";
+      removeBtn.className = "wz-seat-kick";
+      removeBtn.textContent = "Убрать";
       removeBtn.addEventListener("click", () => onRemove(p, removeBtn));
       item.appendChild(removeBtn);
     }
@@ -474,15 +553,28 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   const players = state.players.filter((p) => !p.isDisplay);
   const modeLabel = GAME_MODES.find((m) => m.value === state.settings.gameMode)?.label || state.settings.gameMode;
 
+  const enough = players.length >= state.minPlayers && !state.needsBothGenders;
+  const pct = Math.min(100, Math.round((players.length / state.minPlayers) * 100));
   wrap.innerHTML = `
-    <h1 class="logo">🍾 Комната ${escapeHtml(code)}</h1>
-    <p class="tagline">${escapeHtml(modeLabel)}</p>
-    <p class="tagline">${escapeHtml(locationLabel(state.settings.location))} · ${state.settings.categories
+    <div class="wz-nav wz-nav-static"><b class="wz-title">Комната ${escapeHtml(code)}</b></div>
+    <div class="fanty-summary-card">
+      <b class="fanty-summary-mode">🍾 ${escapeHtml(modeLabel)}</b>
+      <span>${escapeHtml(locationLabel(state.settings.location))} · ${state.settings.categories
     .map(categoryLabel)
     .map(escapeHtml)
-    .join(", ")}</p>
-    <p class="tagline">Бутылка выбирает: ${escapeHtml(pickModeLabel(state.settings.pickMode))}</p>
-    <p class="players-count">Игроков: ${players.length} (минимум ${state.minPlayers})</p>
+    .join(", ")}</span>
+      <span>Бутылка выбирает: ${escapeHtml(pickModeLabel(state.settings.pickMode))}</span>
+    </div>
+    <div class="wz-progress${enough ? " ready" : ""}">
+      <div class="wz-bar"><i style="width:${pct}%"></i></div>
+      <small>${
+        enough
+          ? `<b>Можно начинать.</b> Игроков: ${players.length}`
+          : state.needsBothGenders
+          ? `Игроков: ${players.length}. Нужен хотя бы один игрок каждого пола`
+          : `Игроков: ${players.length}. Для старта нужно минимум ${state.minPlayers}`
+      }</small>
+    </div>
   `;
   wrap.appendChild(playersList(players));
 
@@ -498,8 +590,8 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
 
   if (showAddForm) {
     const label = document.createElement("p");
-    label.className = "tagline";
-    label.textContent = "Добавить игрока за этим устройством:";
+    label.className = "wz-note wz-note-left";
+    label.textContent = "Добавьте игрока за этим устройством:";
     wrap.appendChild(label);
 
     const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
@@ -574,9 +666,7 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
     // start button at all until they come back from the form.
     const startBtn = document.createElement("button");
     startBtn.className = "btn btn-primary";
-    startBtn.textContent = state.needsBothGenders
-      ? "Нужен хотя бы один игрок каждого пола"
-      : `Нужно ещё игроков (мин. ${state.minPlayers})`;
+    startBtn.textContent = "Ждём игроков";
     startBtn.disabled = true;
     wrap.appendChild(startBtn);
   } else if (isLocalHost) {
@@ -586,11 +676,7 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   } else if (!isLocalHost && state.me.isHost) {
     const startBtn = document.createElement("button");
     startBtn.className = "btn btn-primary";
-    startBtn.textContent = state.canStart
-      ? "Начать игру"
-      : state.needsBothGenders
-      ? "Нужен хотя бы один игрок каждого пола"
-      : `Нужно ещё игроков (мин. ${state.minPlayers})`;
+    startBtn.textContent = state.canStart ? "Начать игру" : "Ждём игроков";
     startBtn.disabled = !state.canStart;
     startBtn.addEventListener("click", async () => {
       startBtn.disabled = true;
