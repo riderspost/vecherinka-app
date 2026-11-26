@@ -89,6 +89,10 @@ def init_db():
     _ensure_column(db, "players", "user_id", "user_id TEXT")
     _ensure_column(db, "players", "device_id", "device_id TEXT")
     _ensure_column(db, "players", "last_seen_at", "last_seen_at REAL")
+    # a player's suggestion is reviewed: approved ('active') or rejected, with the date and a reason
+    for table in ("fanty_dares", "fanty_truths"):
+        _ensure_column(db, table, "reviewed_at", "reviewed_at TEXT")
+        _ensure_column(db, table, "reject_reason", "reject_reason TEXT")
     _ensure_column(db, "reverse_rounds", "chunks_json", "chunks_json TEXT NOT NULL DEFAULT '[]'")
     _ensure_column(db, "reverse_rounds", "original_done", "original_done INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "reverse_rounds", "imitation_done", "imitation_done INTEGER NOT NULL DEFAULT 0")

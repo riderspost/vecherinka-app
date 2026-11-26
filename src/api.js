@@ -101,6 +101,7 @@ export const fantyApi = {
   unlikeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/unlike`),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
+  withdrawSubmission: (type, id) => request("DELETE", `/api/fanty/my-submissions/${type}/${id}`),
 };
 
 function uploadAudio(code, token, kind, blob, index) {

@@ -35,6 +35,7 @@ export function renderProfileTab(shell) {
       body.appendChild(gate);
       const list = document.createElement("div");
       list.className = "hub-list";
+      list.appendChild(row("💡", "Свои фанты и вопросы", () => navigate("/fanty/submit")));
       list.appendChild(installRow());
       list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
       body.appendChild(list);
@@ -58,6 +59,7 @@ export function renderProfileTab(shell) {
     const list = document.createElement("div");
     list.className = "hub-list";
     list.appendChild(row("🖼️", "Имя и аватар", () => navigate("/profile/edit")));
+    list.appendChild(row("💡", "Свои фанты и вопросы", () => navigate("/fanty/submit")));
     list.appendChild(installRow());
     list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
     const logout = row("🚪", "Выйти", async () => {

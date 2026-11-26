@@ -1081,6 +1081,7 @@ function renderPendingSection(idPrefix, apiBase, pending, all, onEdit, refreshFn
         <td>
           <div class="row-actions">
             <button class="btn" data-activate="${p.id}">Активировать</button>
+            ${p.createdBy && p.createdBy !== "admin" ? `<button class="btn secondary" data-reject="${p.id}">Отклонить</button>` : ""}
             ${iconActionsHtml(p.id, onEdit)}
           </div>
         </td>
@@ -1114,6 +1115,24 @@ function renderPendingSection(idPrefix, apiBase, pending, all, onEdit, refreshFn
       btn.disabled = true;
       try {
         await api(`${apiBase}/${btn.dataset.activate}/activate`, { method: "POST" });
+        await refreshFn();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+  // Turning a player's suggestion down keeps it, so the author sees what became of it.
+  pendingHost.querySelectorAll("[data-reject]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const reason = prompt("Почему отклоняем? Игрок увидит этот текст (можно оставить пустым):", "");
+      if (reason === null) return;
+      btn.disabled = true;
+      try {
+        await api(`${apiBase}/${btn.dataset.reject}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
         await refreshFn();
       } catch (err) {
         alert(err.message);

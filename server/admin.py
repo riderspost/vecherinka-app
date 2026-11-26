@@ -340,9 +340,31 @@ def _activate_one(table, item_id):
     db = get_db()
     if not db.execute(f"SELECT 1 FROM {table} WHERE id = ?", (item_id,)).fetchone():
         return jsonify({"error": "Не найдено"}), 404
-    db.execute(f"UPDATE {table} SET status = 'active' WHERE id = ?", (item_id,))
+    db.execute(
+        f"UPDATE {table} SET status = 'active', reviewed_at = COALESCE(reviewed_at, datetime('now')) WHERE id = ?",
+        (item_id,),
+    )
     db.commit()
     return jsonify({"ok": True})
+
+
+MAX_REJECT_REASON_LEN = 200
+
+
+def _reject_ids(table, ids, reason):
+    """Turns pending suggestions down: the row stays so the author can see what became of it."""
+    if not ids:
+        return jsonify({"error": "Не выбрано ни одного элемента"}), 400
+    reason = (reason or "").strip()[:MAX_REJECT_REASON_LEN] or None
+    db = get_db()
+    placeholders = ",".join("?" * len(ids))
+    cur = db.execute(
+        f"""UPDATE {table} SET status = 'rejected', reviewed_at = datetime('now'), reject_reason = ?
+            WHERE status = 'pending' AND id IN ({placeholders})""",
+        [reason, *ids],
+    )
+    db.commit()
+    return jsonify({"rejected": cur.rowcount})
 
 
 def _bulk_activate(table, ids):
@@ -350,7 +372,10 @@ def _bulk_activate(table, ids):
         return jsonify({"error": "Не выбрано ни одного элемента"}), 400
     db = get_db()
     placeholders = ",".join("?" * len(ids))
-    cur = db.execute(f"UPDATE {table} SET status = 'active' WHERE id IN ({placeholders})", ids)
+    cur = db.execute(
+        f"UPDATE {table} SET status = 'active', reviewed_at = COALESCE(reviewed_at, datetime('now')) WHERE id IN ({placeholders})",
+        ids,
+    )
     db.commit()
     return jsonify({"activated": cur.rowcount})
 
@@ -418,6 +443,7 @@ def admin_list_dares():
                   COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
+           WHERE d.status != 'rejected'
            ORDER BY d.id DESC"""
     ).fetchall()
     result = []
@@ -650,6 +676,20 @@ def admin_delete_dare(dare_id):
     return jsonify({"ok": True})
 
 
+@admin_bp.route("/api/fanty/dares/<int:dare_id>/reject", methods=["POST"])
+@admin_required
+def admin_reject_dare(dare_id):
+    data = request.get_json(force=True, silent=True) or {}
+    return _reject_ids("fanty_dares", [dare_id], data.get("reason"))
+
+
+@admin_bp.route("/api/fanty/truths/<int:truth_id>/reject", methods=["POST"])
+@admin_required
+def admin_reject_truth(truth_id):
+    data = request.get_json(force=True, silent=True) or {}
+    return _reject_ids("fanty_truths", [truth_id], data.get("reason"))
+
+
 @admin_bp.route("/api/fanty/dares/<int:dare_id>/activate", methods=["POST"])
 @admin_required
 def admin_activate_dare(dare_id):
@@ -691,6 +731,7 @@ def admin_list_truths():
                   COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.truth_id = t.id) AS uses
            FROM fanty_truths t LEFT JOIN users u ON u.id = t.created_by_user_id
+           WHERE t.status != 'rejected'
            ORDER BY t.id DESC"""
     ).fetchall()
     result = []

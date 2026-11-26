@@ -514,6 +514,14 @@ def state(code):
     return jsonify(_build_state(db, room, player))
 
 
+def _already_message(what, status):
+    if status == "rejected":
+        return f"{what} уже предлагали, и его отклонили"
+    if status == "pending":
+        return f"{what} уже предложен и ждёт проверки"
+    return f"{what} уже есть в игре"
+
+
 @fanty_bp.route("/submit", methods=["POST"])
 def submit_content():
     if not session.get("user_id"):
@@ -535,8 +543,9 @@ def submit_content():
         locations = [loc for loc in (data.get("locations") or []) if loc in fg.LOCATIONS]
         if not locations:
             return error("Выберите хотя бы одно место")
-        if db.execute("SELECT 1 FROM fanty_dares WHERE text = ?", (text,)).fetchone():
-            return error("Такой фант уже есть")
+        same = db.execute("SELECT status FROM fanty_dares WHERE text = ?", (text,)).fetchone()
+        if same:
+            return error(_already_message("Такой фант", same["status"]))
         cur = db.execute(
             "INSERT INTO fanty_dares (text, kind, status, created_by_user_id) VALUES (?, ?, 'pending', ?)",
             (text, kind, user_id),
@@ -551,8 +560,9 @@ def submit_content():
             [(dare_id, loc) for loc in locations],
         )
     elif content_type == "truth":
-        if db.execute("SELECT 1 FROM fanty_truths WHERE text = ?", (text,)).fetchone():
-            return error("Такой вопрос уже есть")
+        same = db.execute("SELECT status FROM fanty_truths WHERE text = ?", (text,)).fetchone()
+        if same:
+            return error(_already_message("Такой вопрос", same["status"]))
         cur = db.execute(
             "INSERT INTO fanty_truths (text, status, created_by_user_id) VALUES (?, 'pending', ?)",
             (text, user_id),
@@ -571,35 +581,64 @@ def submit_content():
 
 @fanty_bp.route("/my-submissions")
 def my_submissions():
+    """Everything the signed-in user has suggested, newest first, with what became of it."""
     user_id = session.get("user_id")
     if not user_id:
         return error("Предлагать свои фанты могут только зарегистрированные пользователи", 401)
 
     db = get_db()
     dares = db.execute(
-        "SELECT id, text, kind, status, created_at FROM fanty_dares WHERE created_by_user_id = ?",
+        """SELECT d.id, d.text, d.kind, d.status, d.created_at, d.reviewed_at, d.reject_reason, d.likes,
+                  (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS plays
+           FROM fanty_dares d WHERE d.created_by_user_id = ?""",
         (user_id,),
     ).fetchall()
     truths = db.execute(
-        "SELECT id, text, status, created_at FROM fanty_truths WHERE created_by_user_id = ?",
+        """SELECT t.id, t.text, t.status, t.created_at, t.reviewed_at, t.reject_reason, t.likes,
+                  (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.truth_id = t.id) AS plays
+           FROM fanty_truths t WHERE t.created_by_user_id = ?""",
         (user_id,),
     ).fetchall()
 
-    items = [
-        {
+    def item(kind, r):
+        status = {"active": "approved", "pending": "pending", "rejected": "rejected"}.get(r["status"], "pending")
+        out = {
             "id": r["id"],
-            "type": "dare",
+            "type": kind,
             "text": r["text"],
-            "kind": r["kind"],
-            "status": r["status"],
+            "status": status,
             "createdAt": r["created_at"],
+            "reviewedAt": r["reviewed_at"],
+            "rejectReason": r["reject_reason"],
         }
-        for r in dares
-    ] + [
-        {"id": r["id"], "type": "truth", "text": r["text"], "status": r["status"], "createdAt": r["created_at"]}
-        for r in truths
-    ]
-    items.sort(key=lambda i: i["createdAt"], reverse=True)
-    approved_count = sum(1 for i in items if i["status"] == "active")
+        if kind == "dare":
+            out["kind"] = r["kind"]
+        if status == "approved":
+            out["likes"] = r["likes"]
+            out["plays"] = r["plays"]
+        return out
 
-    return jsonify({"approvedCount": approved_count, "items": items})
+    items = [item("dare", r) for r in dares] + [item("truth", r) for r in truths]
+    items.sort(key=lambda i: i["createdAt"], reverse=True)
+    counts = {s: sum(1 for i in items if i["status"] == s) for s in ("pending", "approved", "rejected")}
+    return jsonify({"approvedCount": counts["approved"], "counts": counts, "items": items})
+
+
+@fanty_bp.route("/my-submissions/<kind>/<int:item_id>", methods=["DELETE"])
+def withdraw_submission(kind, item_id):
+    """The author takes back a suggestion that has not been reviewed yet."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return error("Нужно войти в аккаунт", 401)
+    table = {"dare": "fanty_dares", "truth": "fanty_truths"}.get(kind)
+    if not table:
+        return error("Некорректный тип")
+    db = get_db()
+    row = db.execute(f"SELECT status FROM {table} WHERE id = ? AND created_by_user_id = ?", (item_id, user_id)).fetchone()
+    if not row:
+        return error("Предложение не найдено", 404)
+    if row["status"] != "pending":
+        return error("Это предложение уже проверено, отозвать его нельзя")
+    db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
+    db.commit()
+    return jsonify({"ok": True})
