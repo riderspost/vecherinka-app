@@ -4307,3 +4307,24 @@ h2, h3 {
 .settings-body {
   gap: 14px;
 }
+
+.hub-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hub-title .hub-h {
+  margin: 6px 0 0;
+}
+
+.hub-desc {
+  margin: 0;
+  color: var(--hub-dim);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.hub-chip {
+  cursor: default;
+}

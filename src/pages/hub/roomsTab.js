@@ -155,6 +155,13 @@ function joinByCodeForm() {
 
 export function renderRoomsTab(shell) {
   const { body } = shell;
+  const title = document.createElement("div");
+  title.className = "hub-title";
+  title.innerHTML = `
+    <h2 class="hub-h">Комнаты</h2>
+    <p class="hub-desc">Войдите в игру друга по коду или вернитесь в свои открытые комнаты. Свою комнату можно закрыть.</p>
+  `;
+  body.appendChild(title);
   body.appendChild(joinByCodeForm());
 
   const h = document.createElement("h2");

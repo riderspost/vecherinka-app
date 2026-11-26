@@ -24,8 +24,9 @@ function link(path, className, child) {
 }
 
 function accountChip(session) {
-  const chip = link("/profile/edit", "hub-chip");
-  chip.title = "Имя и аватар";
+  // Only shows who you are. Name and avatar are changed in the settings behind the gear.
+  const chip = document.createElement("div");
+  chip.className = "hub-chip";
   const av = document.createElement("span");
   av.className = "hub-chip-avatar";
   av.appendChild(createAvatarElement({ avatarType: session.avatarType, avatarValue: session.avatarValue, name: session.name }));

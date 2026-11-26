@@ -4,11 +4,20 @@ import { deviceLabel, phonesIconHtml } from "./devices.js";
 import { renderInstallBanner } from "./install.js";
 import { escapeHtml } from "../../utils.js";
 
-function heading(text) {
+function heading(text, description) {
+  const wrap = document.createElement("div");
+  wrap.className = "hub-title";
   const h = document.createElement("h2");
   h.className = "hub-h";
   h.textContent = text;
-  return h;
+  wrap.appendChild(h);
+  if (description) {
+    const p = document.createElement("p");
+    p.className = "hub-desc";
+    p.textContent = description;
+    wrap.appendChild(p);
+  }
+  return wrap;
 }
 
 export function renderGamesTab(shell) {
@@ -18,7 +27,9 @@ export function renderGamesTab(shell) {
 
   const section = document.createElement("div");
   section.className = "hub-section";
-  section.appendChild(heading("Выберите игру"));
+  section.appendChild(
+    heading("Игры", "Выберите игру для компании. Значок на карточке показывает, играют с одного телефона или у каждого свой.")
+  );
 
   // Filter by how the game is played: one phone for everyone, or each on their own.
   const FILTERS = [

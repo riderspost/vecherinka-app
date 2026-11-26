@@ -96,7 +96,7 @@ export function renderIdeasTab(shell) {
   });
 
   function drawLoginRequired() {
-    title.innerHTML = `<h2 class="hub-h">Свои фанты и вопросы</h2>`;
+    title.innerHTML = `<h2 class="hub-h">Идеи</h2>`;
     const gate = document.createElement("div");
     gate.className = "hub-gate";
     gate.innerHTML = `
@@ -147,11 +147,15 @@ export function renderIdeasTab(shell) {
     title.innerHTML = "";
     const h = document.createElement("h2");
     h.className = "hub-h";
-    h.textContent = "Мои идеи";
+    h.textContent = "Идеи";
     title.appendChild(h);
     title.appendChild(addButton());
 
     view.innerHTML = "";
+    const desc = document.createElement("p");
+    desc.className = "hub-desc";
+    desc.textContent = "Придумайте свой фант или вопрос для игры «Фанты». Лучшие попадут в игру, а здесь видно, что стало с каждой идеей.";
+    view.appendChild(desc);
     if (notice) {
       const note = document.createElement("div");
       note.className = "wz-success";
