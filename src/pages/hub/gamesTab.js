@@ -1,5 +1,5 @@
 import { navigate } from "../../router.js";
-import { GAMES, gameById, roomStatus } from "../../games.js";
+import { GAMES } from "../../games.js";
 import { deviceLabel, phonesIconHtml } from "./devices.js";
 import { pwaInstallSectionHtml, wirePwaInstallButton } from "../../pwaInstall.js";
 import { escapeHtml } from "../../utils.js";
@@ -11,38 +11,8 @@ function heading(text) {
   return h;
 }
 
-function resumeCard(room) {
-  const game = gameById(room.gameType);
-  const status = roomStatus(room.status);
-  const a = document.createElement("a");
-  a.className = "hub-resume";
-  a.href = "/rooms";
-  a.innerHTML = `
-    <span class="hub-resume-emoji">${game.emoji}</span>
-    <span class="hub-resume-text">
-      <b>${escapeHtml(game.title)} · ${escapeHtml(room.code)}</b>
-      <small>${status.live ? '<i class="hub-live"></i>' : ""}${escapeHtml(status.text)}</small>
-    </span>
-    <span class="hub-resume-go">Войти →</span>
-  `;
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/rooms");
-  });
-  return a;
-}
-
 export function renderGamesTab(shell) {
   const { body } = shell;
-
-  const resumeSlot = document.createElement("div");
-  resumeSlot.className = "hub-section";
-  body.appendChild(resumeSlot);
-  shell.roomsPromise.then((rooms) => {
-    if (!rooms.length) return;
-    resumeSlot.appendChild(heading("Продолжить"));
-    resumeSlot.appendChild(resumeCard(rooms[0]));
-  });
 
   const section = document.createElement("div");
   section.className = "hub-section";
