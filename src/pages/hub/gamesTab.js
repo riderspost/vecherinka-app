@@ -1,7 +1,7 @@
 import { navigate } from "../../router.js";
 import { GAMES } from "../../games.js";
 import { deviceLabel, phonesIconHtml } from "./devices.js";
-import { pwaInstallSectionHtml, wirePwaInstallButton } from "../../pwaInstall.js";
+import { renderInstallBanner } from "./install.js";
 import { escapeHtml } from "../../utils.js";
 
 function heading(text) {
@@ -13,6 +13,8 @@ function heading(text) {
 
 export function renderGamesTab(shell) {
   const { body } = shell;
+
+  renderInstallBanner(body);
 
   const section = document.createElement("div");
   section.className = "hub-section";
@@ -71,15 +73,4 @@ export function renderGamesTab(shell) {
   soon.innerHTML = `<span aria-hidden="true">🎲</span><span>Новые игры скоро появятся здесь</span>`;
   section.appendChild(soon);
   body.appendChild(section);
-}
-
-export function renderInstallSection(parent) {
-  const pwa = document.createElement("div");
-  pwa.className = "hub-install";
-  pwa.innerHTML = `
-    <div class="hub-install-title">📲 Установить на телефон</div>
-    <div id="pwa-install-section">${pwaInstallSectionHtml()}</div>
-  `;
-  parent.appendChild(pwa);
-  wirePwaInstallButton(pwa);
 }

@@ -24,7 +24,8 @@ function link(path, className, child) {
 }
 
 function accountChip(session) {
-  const chip = link("/profile", "hub-chip");
+  const chip = link("/profile/edit", "hub-chip");
+  chip.title = "Имя и аватар";
   const av = document.createElement("span");
   av.className = "hub-chip-avatar";
   av.appendChild(createAvatarElement({ avatarType: session.avatarType, avatarValue: session.avatarValue, name: session.name }));

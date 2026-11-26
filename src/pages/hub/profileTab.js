@@ -2,7 +2,7 @@ import { authApi } from "../../api.js";
 import { navigate } from "../../router.js";
 import { forgetAccountLinkedSessions } from "../../storage.js";
 import { createAvatarElement } from "../../avatarPicker.js";
-import { renderInstallSection } from "./gamesTab.js";
+import { installRow } from "./install.js";
 
 function row(icon, text, onClick, className = "") {
   const btn = document.createElement("button");
@@ -35,9 +35,9 @@ export function renderProfileTab(shell) {
       body.appendChild(gate);
       const list = document.createElement("div");
       list.className = "hub-list";
+      list.appendChild(installRow());
       list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
       body.appendChild(list);
-      renderInstallSection(body);
       return;
     }
 
@@ -58,6 +58,7 @@ export function renderProfileTab(shell) {
     const list = document.createElement("div");
     list.className = "hub-list";
     list.appendChild(row("🖼️", "Имя и аватар", () => navigate("/profile/edit")));
+    list.appendChild(installRow());
     list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
     const logout = row("🚪", "Выйти", async () => {
       logout.disabled = true;
@@ -72,6 +73,5 @@ export function renderProfileTab(shell) {
     logout.querySelector(".hub-row-arrow").textContent = "";
     list.appendChild(logout);
     body.appendChild(list);
-    renderInstallSection(body);
   });
 }
