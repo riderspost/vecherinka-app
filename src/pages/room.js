@@ -57,6 +57,7 @@ export function mountRoomPage(container, code, opts) {
   let lastAnsweringKey = null;
   let stopped = false;
   let menuOpen = false;
+  let closeArmedUntil = 0; // "close the room for everyone" needs a second tap
   let lastState = null;
   let lastView = null; // { state, token } of the latest render, for redrawing the top bar
 
@@ -335,8 +336,36 @@ export function mountRoomPage(container, code, opts) {
       menu.appendChild(playersBtn);
     }
     menu.appendChild(tvBtn);
+    if (state.me.isHost) menu.appendChild(closeRoomButton(host, state, token));
     menu.appendChild(leaveBtn);
     host.appendChild(menu);
+  }
+
+  // The host can end the room for everybody, from inside the game.
+  function closeRoomButton(host, state, token) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "danger";
+    const armed = Date.now() < closeArmedUntil;
+    btn.textContent = armed ? "⚠️ Точно закрыть для всех?" : "🗑 Закрыть комнату";
+    btn.addEventListener("click", async () => {
+      if (Date.now() >= closeArmedUntil) {
+        closeArmedUntil = Date.now() + 6000;
+        drawTopBar(host);
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await api.discardRoom(code, token);
+        clearSession(code);
+        navigate("/");
+      } catch (e) {
+        closeArmedUntil = 0;
+        alert(e.message);
+        btn.disabled = false;
+      }
+    });
+    return btn;
   }
 
   function render(state, token) {

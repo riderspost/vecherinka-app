@@ -122,6 +122,7 @@ export function mountReverseRoomPage(container, code) {
   let lastState = null;
   let sessionToken = null;
   let menuOpen = false;
+  let closeArmedUntil = 0; // "close the room for everyone" needs a second tap
   let lastKey = null;
   let updater = null;
   // The imitator first hears the whole reversed recording, then goes through
@@ -376,6 +377,30 @@ export function mountReverseRoomPage(container, code) {
       const left = await leaveRoom(state, token, code);
       if (!left) leaveBtn.disabled = false;
     });
+    if (state.me.isHost) {
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "danger";
+      closeBtn.textContent = Date.now() < closeArmedUntil ? "⚠️ Точно закрыть для всех?" : "🗑 Закрыть комнату";
+      closeBtn.addEventListener("click", async () => {
+        if (Date.now() >= closeArmedUntil) {
+          closeArmedUntil = Date.now() + 6000;
+          drawTopBar(host, state, token);
+          return;
+        }
+        closeBtn.disabled = true;
+        try {
+          await api.discardRoom(code, token);
+          clearSession(code);
+          navigate("/");
+        } catch (e) {
+          closeArmedUntil = 0;
+          alert(e.message);
+          closeBtn.disabled = false;
+        }
+      });
+      menu.appendChild(closeBtn);
+    }
     menu.appendChild(leaveBtn);
     host.appendChild(menu);
   }
