@@ -3638,3 +3638,50 @@ h2, h3 {
   height: 4px;
   border: 0;
 }
+
+/* ---------- Contact and profile settings pages ---------- */
+
+.wz-note-left {
+  text-align: left;
+  font-size: 13.5px;
+}
+
+.wz-textarea {
+  min-height: 150px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1.5px solid var(--hub-line);
+  background: var(--hub-surface);
+  color: var(--hub-text);
+  font-family: inherit;
+  font-size: 16px;
+  resize: vertical;
+}
+
+.wz-textarea:focus {
+  outline: none;
+  border-color: var(--hub-cyan);
+}
+
+.wz-success {
+  color: #5dffa7;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.wz-success:empty {
+  display: none;
+}
+
+.wz .text-input {
+  background: var(--hub-surface);
+  border: 1.5px solid var(--hub-line);
+  border-radius: 14px;
+  color: var(--hub-text);
+}
+
+.wz .text-input:focus {
+  outline: none;
+  border-color: var(--hub-cyan);
+}

@@ -1,51 +1,54 @@
 import { api, authApi } from "../api.js";
 import { navigate } from "../router.js";
+import { mountWizardFrame } from "../wizard.js";
 
 const MAX_MESSAGE_LEN = 5000;
 
 export function renderContactPage(container) {
-  container.innerHTML = "";
-
-  const wrap = document.createElement("div");
-  wrap.className = "screen home-screen";
-  wrap.innerHTML = `
-    <h1 class="logo">✉️ Связаться с разработчиком</h1>
-    <p class="tagline">Нашли баг или есть идея? Напишите — ответим на почту.</p>
-  `;
-
-  const homeLink = document.createElement("a");
-  homeLink.className = "link-btn";
-  homeLink.href = "/";
-  homeLink.textContent = "← На главную";
-  homeLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    navigate("/");
+  const body = mountWizardFrame(container, {
+    current: 1,
+    total: 0,
+    title: "Связаться с разработчиком",
+    onBack: () => (window.history.length > 1 ? window.history.back() : navigate("/")),
   });
-  wrap.appendChild(homeLink);
+
+  const intro = document.createElement("p");
+  intro.className = "wz-note wz-note-left";
+  intro.textContent = "Нашли ошибку или есть идея? Напишите, и мы ответим на почту.";
+  body.appendChild(intro);
+
+  const form = document.createElement("div");
+  form.className = "wz-form";
+  body.appendChild(form);
 
   const emailLabel = document.createElement("label");
-  emailLabel.textContent = "Ваш email";
+  emailLabel.className = "wz-field";
+  emailLabel.innerHTML = `<span>Ваша почта</span>`;
   const emailInput = document.createElement("input");
   emailInput.className = "text-input";
   emailInput.type = "email";
   emailInput.placeholder = "you@example.com";
   emailInput.autocomplete = "email";
+  emailLabel.appendChild(emailInput);
 
   const messageLabel = document.createElement("label");
-  messageLabel.textContent = "Сообщение";
+  messageLabel.className = "wz-field";
+  messageLabel.innerHTML = `<span>Сообщение</span>`;
   const messageArea = document.createElement("textarea");
-  messageArea.className = "answer-input";
+  messageArea.className = "answer-input wz-textarea";
   messageArea.maxLength = MAX_MESSAGE_LEN;
-  messageArea.placeholder = "Опишите проблему или предложение...";
-
-  const btn = document.createElement("button");
-  btn.className = "btn btn-primary";
-  btn.textContent = "Отправить";
+  messageArea.placeholder = "Опишите проблему или предложение…";
+  messageLabel.appendChild(messageArea);
 
   const errorEl = document.createElement("div");
   errorEl.className = "error-msg";
   const successEl = document.createElement("div");
-  successEl.className = "success-msg";
+  successEl.className = "wz-success";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "wz-cta";
+  btn.textContent = "Отправить";
 
   btn.addEventListener("click", async () => {
     errorEl.textContent = "";
@@ -53,11 +56,13 @@ export function renderContactPage(container) {
     const email = emailInput.value.trim();
     const message = messageArea.value.trim();
     if (!email || !email.includes("@")) {
-      errorEl.textContent = "Введите корректный email";
+      errorEl.textContent = "Введите корректную почту";
+      emailInput.focus();
       return;
     }
     if (!message) {
       errorEl.textContent = "Введите сообщение";
+      messageArea.focus();
       return;
     }
 
@@ -73,15 +78,11 @@ export function renderContactPage(container) {
     }
   });
 
-  wrap.appendChild(emailLabel);
-  wrap.appendChild(emailInput);
-  wrap.appendChild(messageLabel);
-  wrap.appendChild(messageArea);
-  wrap.appendChild(errorEl);
-  wrap.appendChild(successEl);
-  wrap.appendChild(btn);
-
-  container.appendChild(wrap);
+  form.appendChild(emailLabel);
+  form.appendChild(messageLabel);
+  form.appendChild(errorEl);
+  form.appendChild(successEl);
+  form.appendChild(btn);
 
   authApi
     .session()
