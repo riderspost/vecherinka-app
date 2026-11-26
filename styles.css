@@ -3540,3 +3540,101 @@ h2, h3 {
   opacity: 0.45;
   cursor: default;
 }
+
+.wz-progress.ready .wz-bar i {
+  background: linear-gradient(90deg, #36d1dc, #5dffa7);
+}
+
+.wz-progress.ready small {
+  color: #5dffa7;
+}
+
+.wz-progress.ready small b {
+  font-weight: 700;
+}
+
+/* ---------- "Наоборот": in-game screens in the new look ---------- */
+
+.pl-room .btn {
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--hub-line);
+  background: var(--hub-surface);
+  color: var(--hub-text);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pl-room .btn-primary {
+  border: 0;
+  background: linear-gradient(90deg, var(--hub-pink), var(--hub-orange));
+  color: #2b0a1c;
+  font-weight: 700;
+}
+
+.pl-room .btn:disabled {
+  opacity: 0.5;
+}
+
+.pl-room .btn.playing {
+  border-color: var(--hub-cyan);
+  color: var(--hub-cyan);
+}
+
+.pl-room .link-btn {
+  color: var(--hub-dim);
+  font-family: inherit;
+}
+
+.pl-room .link-btn.danger-text {
+  color: #ff8aa8;
+}
+
+.pl-room .phrase-card {
+  padding: 20px 16px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 93, 162, 0.2), rgba(255, 154, 60, 0.16));
+  border: 1px solid rgba(255, 93, 162, 0.4);
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.pl-room .phrase-piece.current {
+  background: rgba(54, 209, 220, 0.18);
+  box-shadow: 0 0 0 2px var(--hub-cyan);
+}
+
+.pl-room .guess-option {
+  padding: 15px 16px;
+  border-radius: 18px;
+  border: 1.5px solid var(--hub-line);
+  background: var(--hub-surface);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.pl-room .guess-option.selected {
+  border-color: var(--hub-pink);
+  background: rgba(255, 93, 162, 0.14);
+}
+
+.pl-room .guess-result {
+  border-radius: 18px;
+  border: 1.5px solid var(--hub-line);
+  background: var(--hub-surface);
+}
+
+.pl-room .chunk-dot.current {
+  background: var(--hub-cyan);
+  box-shadow: 0 0 0 3px rgba(54, 209, 220, 0.3);
+}
+
+.pl-room .pl-round .wz-bar {
+  height: 4px;
+  border: 0;
+}

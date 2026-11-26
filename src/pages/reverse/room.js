@@ -1,8 +1,10 @@
 import { api, authApi, reverseApi } from "../../api.js";
 import { loadSession, saveSession, clearSession, getDeviceId } from "../../storage.js";
-import { pickTestPlayer, renderTestLinks, testJoinMode } from "../../devTools.js";
+import { pickTestPlayer, testJoinMode } from "../../devTools.js";
+import { renderLobbyView } from "../../lobby.js";
+import { mountWizardFrame } from "../../wizard.js";
 import { navigate } from "../../router.js";
-import { createAvatarPicker, avatarHtml } from "../../avatarPicker.js";
+import { createAvatarPicker, avatarHtml, parseAvatarValue } from "../../avatarPicker.js";
 import { escapeHtml } from "../../utils.js";
 import { createPlayButton, stopAllAudio, MAX_CHUNK_SECONDS, MAX_RECORD_SECONDS } from "../../audioTools.js";
 import { createRecorderPanel } from "./recorderPanel.js";
@@ -118,6 +120,7 @@ export function mountReverseRoomPage(container, code) {
   let pollTimer = null;
   let stopped = false;
   let lastState = null;
+  let menuOpen = false;
   let lastKey = null;
   let updater = null;
   // The imitator first hears the whole reversed recording, then goes through
@@ -165,57 +168,85 @@ export function mountReverseRoomPage(container, code) {
   }
 
   async function renderJoinForm() {
-    container.innerHTML = "";
-    const wrap = document.createElement("div");
-    wrap.className = "screen home-screen";
-    wrap.innerHTML = `<h1 class="logo">⏪ Комната ${escapeHtml(code)}</h1><p class="tagline">Введите имя, чтобы присоединиться</p>`;
-    container.appendChild(wrap);
+    const body = mountWizardFrame(container, {
+      current: 1,
+      total: 0,
+      title: `Комната ${code}`,
+      onBack: () => navigate("/"),
+    });
+
+    let takenEmojis = [];
+    let roomStatus = "lobby";
+    try {
+      const res = await api.getTakenEmojis(code);
+      takenEmojis = res.taken || [];
+      roomStatus = res.status;
+    } catch (e) {
+      takenEmojis = [];
+    }
 
     // The game is already on: new players can't join, but someone who lost
     // their session can ask the host for their old seat back.
-    try {
-      const info = await api.getTakenEmojis(code);
-      if (info.status !== "lobby") {
-        wrap.innerHTML = `<h1 class="logo">⏪ Комната ${escapeHtml(code)}</h1>`;
-        if (info.status === "finished") {
-          wrap.appendChild(Object.assign(document.createElement("p"), { className: "tagline", textContent: "Эта игра уже завершена." }));
-          return;
-        }
-        const seats = (await api.getSeats(code)).seats;
-        const host = document.createElement("div");
-        host.className = "wz wz-inline";
-        wrap.appendChild(host);
-        renderSeatClaim(host, { code, seats, onApproved: (token) => startPolling(token), onBack: () => navigate("/") });
+    if (roomStatus !== "lobby") {
+      if (roomStatus === "finished") {
+        body.appendChild(Object.assign(document.createElement("p"), { className: "wz-note", textContent: "Эта игра уже завершена." }));
         return;
       }
-    } catch (e) {
-      // fall back to the ordinary form
+      let seats = [];
+      try {
+        seats = (await api.getSeats(code)).seats;
+      } catch (e) {
+        // an empty list
+      }
+      renderSeatClaim(body, { code, seats, onApproved: (token) => startPolling(token), onBack: () => navigate("/") });
+      return;
     }
 
+    let profile = null;
+    try {
+      const session = await authApi.session();
+      if (session.authenticated && session.profileComplete) profile = session;
+    } catch (e) {
+      // guest
+    }
+
+    const form = document.createElement("div");
+    form.className = "wz-form";
+    body.appendChild(form);
+
+    const nameLabel = document.createElement("label");
+    nameLabel.className = "wz-field";
+    nameLabel.innerHTML = `<span>Как вас зовут?</span>`;
     const nameInput = document.createElement("input");
     nameInput.className = "text-input";
     nameInput.placeholder = "Ваше имя";
     nameInput.maxLength = 20;
+    nameInput.autocomplete = "nickname";
+    if (profile) nameInput.value = profile.name;
+    nameLabel.appendChild(nameInput);
 
-    let takenEmojis = [];
-    try {
-      const res = await api.getTakenEmojis(code);
-      takenEmojis = res.taken || [];
-    } catch (e) {
-      takenEmojis = [];
-    }
-    const picker = createAvatarPicker(null, takenEmojis);
+    const avatarField = document.createElement("div");
+    avatarField.className = "wz-field";
+    avatarField.innerHTML = `<span>Аватар</span>`;
+    const initial =
+      profile && !takenEmojis.includes(parseAvatarValue(profile.avatarValue).emoji)
+        ? { avatarType: profile.avatarType, avatarValue: profile.avatarValue }
+        : null;
+    const picker = createAvatarPicker(initial, takenEmojis);
+    avatarField.appendChild(picker.element);
 
-    const btn = document.createElement("button");
-    btn.className = "btn btn-primary";
-    btn.textContent = "Присоединиться";
     const errorEl = document.createElement("div");
     errorEl.className = "error-msg";
 
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wz-cta";
+    btn.textContent = "Присоединиться";
     btn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
       if (!name) {
         errorEl.textContent = "Введите имя";
+        nameInput.focus();
         return;
       }
       if (picker.isUploading()) {
@@ -235,10 +266,10 @@ export function mountReverseRoomPage(container, code) {
       }
     });
 
-    wrap.appendChild(nameInput);
-    wrap.appendChild(picker.element);
-    wrap.appendChild(errorEl);
-    wrap.appendChild(btn);
+    form.appendChild(nameLabel);
+    form.appendChild(avatarField);
+    form.appendChild(errorEl);
+    form.appendChild(btn);
   }
 
   function startPolling(token) {
@@ -277,34 +308,39 @@ export function mountReverseRoomPage(container, code) {
     tick();
   }
 
-  function renderFull(state, token) {
-    teardownView();
-    stopAllAudio();
-    container.innerHTML = "";
-
-    const page = document.createElement("div");
-    page.className = "room-page";
-
-    const meBadge = document.createElement("div");
-    meBadge.className = "me-badge";
-    meBadge.innerHTML = `${avatarHtml(state.me)}<span>${escapeHtml(state.me.name)}</span>`;
-    page.appendChild(meBadge);
-
-    const leaveBtn = document.createElement("button");
-    leaveBtn.className = "link-btn danger-text";
-    leaveBtn.textContent = "🚪 Выйти из комнаты";
-    leaveBtn.addEventListener("click", async () => {
-      leaveBtn.disabled = true;
-      const left = await leaveRoom(state, token, code);
-      if (!left) leaveBtn.disabled = false;
+  // Who I am, plus a menu with the rarely needed actions.
+  function drawTopBar(host, state, token) {
+    host.innerHTML = "";
+    const bar = document.createElement("div");
+    bar.className = "pl-top";
+    const me = document.createElement("div");
+    me.className = "pl-me";
+    me.innerHTML = `<span class="pl-me-avatar">${avatarHtml(state.me)}</span><span class="pl-me-name">${escapeHtml(state.me.name)}</span>`;
+    bar.appendChild(me);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "pl-menu-btn";
+    toggle.setAttribute("aria-label", "Меню комнаты");
+    toggle.setAttribute("aria-expanded", String(menuOpen));
+    toggle.textContent = "⋯";
+    toggle.addEventListener("click", () => {
+      menuOpen = !menuOpen;
+      drawTopBar(host, state, token);
     });
-    page.appendChild(leaveBtn);
+    bar.appendChild(toggle);
+    host.appendChild(bar);
+    if (!menuOpen) return;
 
-    if (state.me.isHost) {
+    const menu = document.createElement("div");
+    menu.className = "pl-menu";
+    // In the lobby the player list on the screen already does this.
+    if (state.me.isHost && state.room.status !== "lobby") {
       const playersBtn = document.createElement("button");
-      playersBtn.className = "link-btn";
+      playersBtn.type = "button";
       playersBtn.textContent = "👥 Игроки";
-      playersBtn.addEventListener("click", () =>
+      playersBtn.addEventListener("click", () => {
+        menuOpen = false;
+        drawTopBar(host, state, token);
         openPlayersPanel({
           code,
           token,
@@ -314,10 +350,35 @@ export function mountReverseRoomPage(container, code) {
             lastKey = null;
             renderFull(lastState, token);
           },
-        })
-      );
-      page.insertBefore(playersBtn, leaveBtn);
+        });
+      });
+      menu.appendChild(playersBtn);
     }
+    const leaveBtn = document.createElement("button");
+    leaveBtn.type = "button";
+    leaveBtn.className = "danger";
+    leaveBtn.textContent = "🚪 Выйти из комнаты";
+    leaveBtn.addEventListener("click", async () => {
+      leaveBtn.disabled = true;
+      const left = await leaveRoom(state, token, code);
+      if (!left) leaveBtn.disabled = false;
+    });
+    menu.appendChild(leaveBtn);
+    host.appendChild(menu);
+  }
+
+  function renderFull(state, token) {
+    teardownView();
+    stopAllAudio();
+    container.innerHTML = "";
+
+    const page = document.createElement("div");
+    page.className = "room-page pl-room";
+
+    const barHost = document.createElement("div");
+    barHost.className = "pl-top-host";
+    page.appendChild(barHost);
+    drawTopBar(barHost, state, token);
 
     const wrap = document.createElement("div");
     wrap.className = "screen room-screen";
@@ -333,109 +394,32 @@ export function mountReverseRoomPage(container, code) {
   // --- lobby ---
 
   function renderLobby(wrap, state, token) {
-    const shareUrl = `${window.location.origin}/reverse/r/${code}`;
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}`;
     const players = state.players.filter((pl) => !pl.isDisplay);
-
-    wrap.innerHTML = `
-      <h1 class="logo">⏪ Комната ${escapeHtml(code)}</h1>
-      <img class="qr-code" src="${qrUrl}" alt="QR код" />
-      <p class="tagline">Позовите друзей: <b>${escapeHtml(shareUrl)}</b></p>
-      <p class="players-count">Игроков: ${players.length} (минимум ${state.minPlayers})</p>
-    `;
-
-    const list = document.createElement("div");
-    list.className = "player-list";
-    players.forEach((pl) => {
-      const item = document.createElement("div");
-      item.className = "player-chip" + (pl.online ? "" : " player-offline");
-      item.innerHTML = `${avatarHtml(pl)}<span>${escapeHtml(pl.name)}</span>${
-        pl.isHost ? '<span class="host-badge">хост</span>' : ""
-      }${pl.online ? "" : '<span class="offline-label">не в сети</span>'}`;
-      if (state.me.isHost && !pl.isHost && pl.id !== state.me.id) {
-        const kickBtn = document.createElement("button");
-        kickBtn.type = "button";
-        kickBtn.className = "chip-kick";
-        kickBtn.textContent = "✕";
-        kickBtn.title = "Убрать из комнаты";
-        let armed = false;
-        kickBtn.addEventListener("click", async () => {
-          if (!armed) {
-            armed = true;
-            kickBtn.textContent = "Убрать?";
-            kickBtn.classList.add("armed");
-            setTimeout(() => {
-              if (!kickBtn.disabled) {
-                armed = false;
-                kickBtn.textContent = "✕";
-                kickBtn.classList.remove("armed");
-              }
-            }, 4000);
-            return;
-          }
-          kickBtn.disabled = true;
-          try {
-            await api.kickPlayer(code, token, pl.id);
-            item.remove();
-          } catch (e) {
-            alert(e.message);
-            kickBtn.disabled = false;
-          }
-        });
-        item.appendChild(kickBtn);
-      }
-      list.appendChild(item);
-    });
-    wrap.appendChild(list);
-
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "btn";
-    copyBtn.textContent = "Скопировать ссылку";
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
-      copyBtn.textContent = "Скопировано!";
-      setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
-    });
-    wrap.appendChild(copyBtn);
-
-    const testLinks = renderTestLinks(`/reverse/r/${code}`);
-    if (testLinks) wrap.appendChild(testLinks);
-
-    wrap.appendChild(p("tagline", "🎙 Каждому понадобится микрофон на своём телефоне."));
+    const notes = ["🎙 Каждому понадобится микрофон на своём телефоне."];
     if (players.length >= state.minPlayers) {
       const rounds = players.length * (players.length - 1);
-      wrap.appendChild(
-        p(
-          "tagline",
-          `Каждый загадает каждому — раундов будет ${rounds}. Хост может завершить игру раньше.`
-        )
-      );
+      notes.push(`Каждый загадает каждому: раундов будет ${rounds}. Хост может завершить игру раньше.`);
     }
-
-    if (state.me.isHost) {
-      const startBtn = document.createElement("button");
-      startBtn.className = "btn btn-primary";
-      startBtn.textContent = state.canStart ? "Начать игру" : `Нужно ещё игроков (мин. ${state.minPlayers})`;
-      startBtn.disabled = !state.canStart;
-      startBtn.addEventListener("click", async () => {
-        startBtn.disabled = true;
-        try {
-          await reverseApi.start(code, token);
-        } catch (e) {
-          alert(e.message);
-          startBtn.disabled = false;
-        }
-      });
-      wrap.appendChild(startBtn);
-    } else {
-      wrap.appendChild(p("tagline", "Ждём, пока хост начнёт игру..."));
-    }
+    renderLobbyView(wrap, state, token, code, {
+      roomPath: `/reverse/r/${code}`,
+      gameTitle: "Наоборот",
+      showSteps: false,
+      startGame: () => reverseApi.start(code, token),
+      notes,
+    });
   }
 
   // --- round ---
 
   function roundLabel(rv) {
-    return p("round-label", `Раунд ${rv.roundNumber} из ${rv.totalRounds}`);
+    const el = document.createElement("div");
+    el.className = "pl-round";
+    const pct = Math.round((rv.roundNumber / rv.totalRounds) * 100);
+    el.innerHTML = `
+      <div class="pl-round-row"><b>Раунд ${rv.roundNumber} из ${rv.totalRounds}</b></div>
+      <div class="wz-bar"><i style="width:${pct}%"></i></div>
+    `;
+    return el;
   }
 
   function renderRound(wrap, state, token) {
