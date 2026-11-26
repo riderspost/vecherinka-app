@@ -15,6 +15,9 @@ export function parseRoute(pathname) {
   if (parts[0] === "account") {
     return { name: "account" };
   }
+  if (parts[0] === "ideas") {
+    return { name: "ideas" };
+  }
   if (parts[0] === "rooms") {
     return { name: "rooms" };
   }

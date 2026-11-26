@@ -4,10 +4,10 @@ import { renderHome } from "./pages/home.js";
 import { mountRoomPage } from "./pages/room.js";
 import { renderFantyHome } from "./pages/fanty/home.js";
 import { mountFantyRoomPage } from "./pages/fanty/room.js";
-import { renderFantySubmit } from "./pages/fanty/submit.js";
 import { renderAccountPage } from "./pages/account.js";
 import { renderContactPage } from "./pages/contact.js";
 import { renderProfilePage } from "./pages/profile.js";
+import { renderProfileSettings } from "./pages/profileSettings.js";
 import { renderReverseHome } from "./pages/reverse/home.js";
 import { mountReverseRoomPage } from "./pages/reverse/room.js";
 import "./pwaInstall.js";
@@ -26,8 +26,10 @@ function renderCurrentRoute() {
     renderHub(app, "games");
   } else if (route.name === "rooms") {
     renderHub(app, "rooms");
+  } else if (route.name === "ideas") {
+    renderHub(app, "ideas");
   } else if (route.name === "profile") {
-    renderHub(app, "profile");
+    renderProfileSettings(app);
   } else if (route.name === "sentenceHome") {
     renderHome(app);
   } else if (route.name === "room") {
@@ -41,7 +43,7 @@ function renderCurrentRoute() {
   } else if (route.name === "fantyDisplay") {
     mountFantyRoomPage(app, route.code, { asDisplay: true });
   } else if (route.name === "fantySubmit") {
-    renderFantySubmit(app);
+    renderHub(app, "ideas");
   } else if (route.name === "reverseHome") {
     renderReverseHome(app);
   } else if (route.name === "reverseRoom") {

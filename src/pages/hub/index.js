@@ -1,15 +1,15 @@
 import { mountHubShell } from "./shell.js";
 import { renderGamesTab } from "./gamesTab.js";
 import { renderRoomsTab } from "./roomsTab.js";
-import { renderProfileTab } from "./profileTab.js";
+import { renderIdeasTab } from "./ideasTab.js";
 
 const RENDERERS = {
   games: renderGamesTab,
   rooms: renderRoomsTab,
-  profile: renderProfileTab,
+  ideas: renderIdeasTab,
 };
 
-// The three tabs of the home screen: games, open rooms, profile.
+// The three tabs of the home screen: games, open rooms, own ideas.
 export function renderHub(container, tab) {
   const shell = mountHubShell(container, tab);
   RENDERERS[tab](shell);

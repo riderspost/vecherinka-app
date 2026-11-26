@@ -4245,3 +4245,65 @@ h2, h3 {
   border-color: #ff8aa8;
   color: #ff8aa8;
 }
+
+/* ---------- Gear in the home header; "Идеи" tab header ---------- */
+
+.hub-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hub-gear {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--hub-line);
+  background: var(--hub-surface);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.idea-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.idea-head .hub-h {
+  flex: 1;
+  margin: 0;
+}
+
+.idea-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--hub-pink), var(--hub-orange));
+  color: #2b0a1c;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.idea-back {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--hub-line);
+  background: var(--hub-surface);
+  color: var(--hub-text);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.settings-body {
+  gap: 14px;
+}

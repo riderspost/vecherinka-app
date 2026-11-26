@@ -5,7 +5,7 @@ import { createAvatarElement } from "../../avatarPicker.js";
 const TABS = [
   { id: "games", path: "/", icon: "🎮", label: "Игры" },
   { id: "rooms", path: "/rooms", icon: "🚪", label: "Комнаты" },
-  { id: "profile", path: "/profile", icon: "👤", label: "Профиль" },
+  { id: "ideas", path: "/ideas", icon: "💡", label: "Идеи" },
 ];
 
 function link(path, className, child) {
@@ -53,8 +53,15 @@ export function mountHubShell(container, activeTab) {
   const top = document.createElement("header");
   top.className = "hub-top";
   top.appendChild(link("/", "hub-logo", "PLYNGER"));
+  const actions = document.createElement("div");
+  actions.className = "hub-top-actions";
   const accountSlot = document.createElement("div");
-  top.appendChild(accountSlot);
+  actions.appendChild(accountSlot);
+  // account settings: name and avatar, install on the phone, contact, sign out
+  const gear = link("/profile", "hub-gear", "⚙️");
+  gear.setAttribute("aria-label", "Настройки");
+  actions.appendChild(gear);
+  top.appendChild(actions);
 
   const scroll = document.createElement("div");
   scroll.className = "hub-scroll";

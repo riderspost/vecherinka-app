@@ -1,8 +1,9 @@
-import { authApi } from "../../api.js";
-import { navigate } from "../../router.js";
-import { forgetAccountLinkedSessions } from "../../storage.js";
-import { createAvatarElement } from "../../avatarPicker.js";
-import { installRow } from "./install.js";
+import { navigate } from "../router.js";
+import { forgetAccountLinkedSessions } from "../storage.js";
+import { createAvatarElement } from "../avatarPicker.js";
+import { installRow } from "./hub/install.js";
+import { mountWizardFrame } from "../wizard.js";
+import { authApi } from "../api.js";
 
 function row(icon, text, onClick, className = "") {
   const btn = document.createElement("button");
@@ -14,10 +15,17 @@ function row(icon, text, onClick, className = "") {
   return btn;
 }
 
-export function renderProfileTab(shell) {
-  const { body } = shell;
+// Account settings: opened from the gear at the top of the home screen.
+export function renderProfileSettings(container) {
+  const body = mountWizardFrame(container, {
+    current: 1,
+    total: 0,
+    title: "Настройки",
+    onBack: () => navigate("/"),
+  });
+  body.classList.add("settings-body");
 
-  shell.sessionPromise.then((session) => {
+  authApi.session().catch(() => ({ authenticated: false })).then((session) => {
     if (!session.authenticated) {
       const gate = document.createElement("div");
       gate.className = "hub-gate";
@@ -35,7 +43,6 @@ export function renderProfileTab(shell) {
       body.appendChild(gate);
       const list = document.createElement("div");
       list.className = "hub-list";
-      list.appendChild(row("💡", "Свои фанты и вопросы", () => navigate("/fanty/submit")));
       list.appendChild(installRow());
       list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
       body.appendChild(list);
@@ -59,7 +66,6 @@ export function renderProfileTab(shell) {
     const list = document.createElement("div");
     list.className = "hub-list";
     list.appendChild(row("🖼️", "Имя и аватар", () => navigate("/profile/edit")));
-    list.appendChild(row("💡", "Свои фанты и вопросы", () => navigate("/fanty/submit")));
     list.appendChild(installRow());
     list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
     const logout = row("🚪", "Выйти", async () => {
