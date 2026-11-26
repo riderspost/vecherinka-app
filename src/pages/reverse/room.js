@@ -377,6 +377,8 @@ export function mountReverseRoomPage(container, code) {
       const left = await leaveRoom(state, token, code);
       if (!left) leaveBtn.disabled = false;
     });
+    menu.appendChild(leaveBtn);
+    // the most drastic action goes last
     if (state.me.isHost) {
       const closeBtn = document.createElement("button");
       closeBtn.type = "button";
@@ -401,7 +403,6 @@ export function mountReverseRoomPage(container, code) {
       });
       menu.appendChild(closeBtn);
     }
-    menu.appendChild(leaveBtn);
     host.appendChild(menu);
   }
 

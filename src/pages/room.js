@@ -336,8 +336,9 @@ export function mountRoomPage(container, code, opts) {
       menu.appendChild(playersBtn);
     }
     menu.appendChild(tvBtn);
-    if (state.me.isHost) menu.appendChild(closeRoomButton(host, state, token));
     menu.appendChild(leaveBtn);
+    // the most drastic action goes last
+    if (state.me.isHost) menu.appendChild(closeRoomButton(host, state, token));
     host.appendChild(menu);
   }
 
