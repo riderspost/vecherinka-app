@@ -188,7 +188,18 @@ async function recordedBlobToWav(blob, keepWhole) {
 // keepWhole: keep everything as it was said (no trimming of the silence at
 // the ends), at a slightly higher quality — for recordings people will play
 // back and send on, not for the game's own speech clips.
-export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel, onTick, keepWhole = false } = {}) {
+//
+// backing: { audio, ctx } — music playing on this phone that belongs in the
+// recording (a rap over its beat). The phone's echo cancellation removes
+// whatever comes out of its own speaker from the microphone, so the music is
+// mixed in directly instead; `ctx` is an AudioContext made in the tap.
+export async function startRecording({
+  maxSeconds = MAX_RECORD_SECONDS,
+  onLevel,
+  onTick,
+  keepWhole = false,
+  backing = null,
+} = {}) {
   if (!isRecordingSupported()) throw new RecordingError("unsupported");
 
   let stream;
@@ -199,10 +210,33 @@ export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel,
     throw new RecordingError(denied ? "denied" : "unavailable");
   }
 
+  // Voice and music into one stream. If the browser will not let the music
+  // go through the mixer, it simply plays on as before and only the voice
+  // is recorded.
+  let recordStream = stream;
+  if (backing && backing.audio && backing.ctx) {
+    try {
+      const mixCtx = backing.ctx;
+      if (mixCtx.state !== "running") await mixCtx.resume();
+      if (mixCtx.state === "running") {
+        const mixDest = mixCtx.createMediaStreamDestination();
+        mixCtx.createMediaStreamSource(stream).connect(mixDest);
+        const music = mixCtx.createMediaElementSource(backing.audio);
+        const musicGain = mixCtx.createGain();
+        musicGain.gain.value = 0.6;
+        music.connect(musicGain).connect(mixDest);
+        music.connect(mixCtx.destination); // and still out of the speaker
+        recordStream = mixDest.stream;
+      }
+    } catch (e) {
+      recordStream = stream;
+    }
+  }
+
   const mimeType = pickMimeType();
   let recorder;
   try {
-    recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    recorder = mimeType ? new MediaRecorder(recordStream, { mimeType }) : new MediaRecorder(recordStream);
   } catch (e) {
     stream.getTracks().forEach((t) => t.stop());
     throw new RecordingError("unsupported");
@@ -257,6 +291,8 @@ export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel,
     if (meterTimer) clearInterval(meterTimer);
     stream.getTracks().forEach((t) => t.stop());
     if (meterCtx && meterCtx.close) meterCtx.close().catch(() => {});
+    // the music's own context may still be playing its last second
+    if (backing && backing.ctx && backing.ctx.close) setTimeout(() => backing.ctx.close().catch(() => {}), 3000);
   }
 
   recorder.onstop = async () => {

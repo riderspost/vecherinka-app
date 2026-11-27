@@ -542,11 +542,15 @@ export function mountFantyRoomPage(container, code, opts) {
         getRecording: (round) => (recording && recording.round === round ? recording : null),
         // Turns the microphone on (called from the "Поехали!" tap). Resolves
         // to the recording object; its status says whether it worked.
-        beginRecording: async (round, seconds) => {
+        beginRecording: async (round, seconds, backing) => {
           const mine = { round, rec: null, status: "starting", error: "" };
           recording = mine;
           try {
-            mine.rec = await startRecording({ maxSeconds: Math.min(seconds, 180) + 0.5, keepWhole: true });
+            mine.rec = await startRecording({
+              maxSeconds: Math.min(seconds, 180) + 0.5,
+              keepWhole: true,
+              backing,
+            });
             mine.status = "recording";
           } catch (e) {
             mine.status = "failed";
@@ -1394,16 +1398,43 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       goBtn.textContent = "Поехали!";
       goBtn.addEventListener("click", async () => {
         goBtn.disabled = true;
+        const musicStart = fanty.musicStartSeconds || 0;
+        let audio = null;
+        let mixCtx = null;
         if (fanty.musicUrl) {
-          const audio = new Audio(fanty.musicUrl);
-          audio.currentTime = fanty.musicStartSeconds || 0;
-          audio.play().catch(() => {});
+          audio = new Audio(fanty.musicUrl);
+          audio.currentTime = musicStart;
           if (ctrl) ctrl.setAudio(audio);
+          if (fanty.hasRecording) {
+            // The music has to go through the recording's mixer and start
+            // together with the microphone (the first time the phone asks
+            // for permission first). This silent play, and the audio context,
+            // are made right in the tap so the phone lets them work later.
+            audio.muted = true;
+            audio.play().catch(() => {});
+            try {
+              const Ctx = window.AudioContext || window.webkitAudioContext;
+              mixCtx = new Ctx();
+              if (mixCtx.resume) mixCtx.resume().catch(() => {});
+            } catch (e) {
+              mixCtx = null;
+            }
+          } else {
+            audio.play().catch(() => {});
+          }
         }
         // The microphone goes on first, so the recording and the timer start
         // together (the first time the phone also asks for permission).
         const myRecording =
-          fanty.hasRecording && ctrl ? await ctrl.beginRecording(fanty.roundNumber, fanty.timerSeconds) : null;
+          fanty.hasRecording && ctrl
+            ? await ctrl.beginRecording(fanty.roundNumber, fanty.timerSeconds, audio && mixCtx ? { audio, ctx: mixCtx } : null)
+            : null;
+        if (audio && fanty.hasRecording) {
+          audio.pause();
+          audio.currentTime = musicStart;
+          audio.muted = false;
+          audio.play().catch(() => {});
+        }
         try {
           await fantyApi.startPerformance(code, token);
           if (myRecording) ctrl.watchRecording(myRecording);
