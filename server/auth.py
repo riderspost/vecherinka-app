@@ -39,6 +39,12 @@ def get_current_user(db):
     return db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
+def current_user_is_tester(db):
+    """Whether the signed-in user is the testing account (see db._ensure_tester_user)."""
+    user = get_current_user(db)
+    return bool(user and user["is_tester"])
+
+
 def _login(user_id):
     session.permanent = True
     session["user_id"] = user_id
@@ -181,6 +187,7 @@ def get_session():
             "avatarType": user["avatar_type"] or "emoji",
             "avatarValue": user["avatar_value"],
             "profileComplete": _profile_complete(user),
+            "isTester": bool(user["is_tester"]),
         }
     )
 

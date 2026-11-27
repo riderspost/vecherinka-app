@@ -14,6 +14,7 @@ os.environ.pop("OPENROUTER_API_KEY", None)
 import pytest
 
 from server.app import app as flask_app
+from server.db import _ensure_tester_user
 
 flask_app.config.update(TESTING=True)
 
@@ -44,9 +45,13 @@ def raw_db():
 @pytest.fixture(autouse=True)
 def _clean_db():
     conn = sqlite3.connect(os.environ["DATABASE_PATH"])
+    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     for table in TRANSACTIONAL_TABLES:
         conn.execute(f"DELETE FROM {table}")
+    # the testing account is created once at app start in real life; the wipe
+    # above removed it, so put it back
+    _ensure_tester_user(conn)
     conn.commit()
     conn.close()
     yield

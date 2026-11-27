@@ -62,11 +62,30 @@ export const api = {
   kickPlayer: (code, token, playerId) => request("POST", `/api/rooms/${code}/kick`, { token, playerId }),
 };
 
+// Whether the signed-in account is the testing one (the only one that gets the
+// testing aids). Learned from the session; refreshed on sign-in and sign-out.
+let testerAccount = false;
+export function isTester() {
+  return testerAccount;
+}
+
 export const authApi = {
   register: (email, password) => request("POST", "/api/auth/register", { email, password }),
-  login: (email, password) => request("POST", "/api/auth/login", { email, password }),
-  logout: () => request("POST", "/api/auth/logout"),
-  session: () => request("GET", "/api/auth/session"),
+  login: async (email, password) => {
+    const res = await request("POST", "/api/auth/login", { email, password });
+    await authApi.session().catch(() => {});
+    return res;
+  },
+  logout: async () => {
+    const res = await request("POST", "/api/auth/logout");
+    testerAccount = false;
+    return res;
+  },
+  session: async () => {
+    const res = await request("GET", "/api/auth/session");
+    testerAccount = Boolean(res && res.isTester);
+    return res;
+  },
   forgotPassword: (email) => request("POST", "/api/auth/forgot-password", { email }),
   resetPassword: (token, password) => request("POST", "/api/auth/reset-password", { token, password }),
   verifyEmail: (email, code) => request("POST", "/api/auth/verify-email", { email, code }),

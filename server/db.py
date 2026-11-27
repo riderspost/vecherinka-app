@@ -1,6 +1,9 @@
 import json
 import os
 import sqlite3
+import uuid
+
+from werkzeug.security import generate_password_hash
 
 from flask import g
 
@@ -110,8 +113,34 @@ def init_db():
     )
     db.execute("CREATE INDEX IF NOT EXISTS idx_reverse_phrases_block ON reverse_phrases(block_id)")
     _migrate_reverse_phrases_to_blocks(db)
+    _ensure_column(db, "users", "is_tester", "is_tester INTEGER NOT NULL DEFAULT 0")
+    _ensure_tester_user(db)
     db.commit()
     db.close()
+
+
+TESTER_LOGIN = "admin"
+_tester_hashes = {}
+
+
+def _ensure_tester_user(db):
+    """The one account allowed to use the testing aids (extra test players in a
+    room, picking which dare comes up). Created on first start in every
+    environment; if it already exists only the flag is made sure of — its
+    password is never touched again. Its login is not an email, so nobody can
+    register it. The first password comes from TESTER_PASSWORD."""
+    row = db.execute("SELECT id FROM users WHERE email = ?", (TESTER_LOGIN,)).fetchone()
+    if row:
+        db.execute("UPDATE users SET is_tester = 1 WHERE id = ?", (row["id"],))
+        return
+    password = os.environ.get("TESTER_PASSWORD") or "admin"
+    if password not in _tester_hashes:  # hashing is slow on purpose; do it once
+        _tester_hashes[password] = generate_password_hash(password, method="pbkdf2:sha256")
+    db.execute(
+        """INSERT INTO users (id, email, password_hash, email_verified, name, avatar_type, avatar_value, is_tester)
+           VALUES (?, ?, ?, 1, 'Админ', 'emoji', '🛠️', 1)""",
+        (str(uuid.uuid4()), TESTER_LOGIN, _tester_hashes[password]),
+    )
 
 
 def register_app(app):

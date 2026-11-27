@@ -1371,6 +1371,16 @@ async function refreshUsers() {
         <td>${escapeHtml(u.name || "—")}</td>
         <td>${u.gamesCreated}</td>
         <td>${escapeHtml(u.createdAt)}</td>
+        <td>
+          <label><input type="checkbox" data-tester="${escapeHtml(u.id)}" ${u.isTester ? "checked" : ""} ${
+        u.isSystem ? "disabled" : ""
+      } /> ${u.isSystem ? "всегда" : "тестировщик"}</label>
+          ${
+            u.isSystem
+              ? `<button type="button" class="btn secondary" data-password="${escapeHtml(u.id)}" style="margin-left:8px">Сменить пароль</button>`
+              : ""
+          }
+        </td>
       </tr>
     `
     )
@@ -1378,11 +1388,34 @@ async function refreshUsers() {
   host.innerHTML = `
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Email</th><th>Имя</th><th>Игр создано</th><th>Регистрация</th></tr></thead>
+        <thead><tr><th>Email</th><th>Имя</th><th>Игр создано</th><th>Регистрация</th><th>Тестовые возможности</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <p class="hint">Тестировщик видит в играх тестовые функции: добавить тестового игрока в комнату и выбрать, какой фант выпадет. Встроенный аккаунт <b>admin</b> всегда тестировщик.</p>
   `;
+  host.querySelectorAll("input[data-tester]").forEach((box) => {
+    box.addEventListener("change", async () => {
+      try {
+        await api(`/users/${box.dataset.tester}/tester`, { method: "PUT", body: JSON.stringify({ isTester: box.checked }) });
+      } catch (e) {
+        alert(e.message);
+        box.checked = !box.checked;
+      }
+    });
+  });
+  host.querySelectorAll("button[data-password]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const password = prompt("Новый пароль для admin (не короче 8 символов):");
+      if (!password) return;
+      try {
+        await api(`/users/${btn.dataset.password}/password`, { method: "PUT", body: JSON.stringify({ password }) });
+        alert("Пароль изменён");
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
 }
 
 const ROOM_GAME_TYPE_LABEL = { fanty: "Фанты", sentence: "Продолжи предложение", reverse: "Наоборот" };

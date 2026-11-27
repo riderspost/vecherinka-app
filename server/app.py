@@ -232,6 +232,13 @@ def resume_room(code):
     return jsonify({"token": player["token"], "playerId": player["id"]})
 
 
+def _room_created_by_tester(db, room):
+    if not room["created_by_user_id"]:
+        return False
+    owner = db.execute("SELECT is_tester FROM users WHERE id = ?", (room["created_by_user_id"],)).fetchone()
+    return bool(owner and owner["is_tester"])
+
+
 @app.route("/api/rooms/<code>/taken-emojis", methods=["GET"])
 def taken_emojis(code):
     db = get_db()
@@ -269,6 +276,15 @@ def join_room(code):
         return error("Эта комната только для локальных игроков — попросите организатора добавить вас")
 
     device_id = data.get("deviceId")
+    # A "test tab" (extra player on the same device, see src/devTools.js) is
+    # only for the testing account's own rooms.
+    if (
+        not is_display
+        and isinstance(device_id, str)
+        and device_id.startswith("test-")
+        and not _room_created_by_tester(db, room)
+    ):
+        return error("Тестовые игроки недоступны", 403)
     # Fanty's local mode deliberately puts several players on one device —
     # that's the whole point of it. The sentence and reverse games have no
     # such mode, so for them one browser only ever gets one seat per room.

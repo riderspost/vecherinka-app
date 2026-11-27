@@ -11,6 +11,7 @@ import { renderProfileSettings } from "./pages/profileSettings.js";
 import { renderReverseHome } from "./pages/reverse/home.js";
 import { mountReverseRoomPage } from "./pages/reverse/room.js";
 import "./pwaInstall.js";
+import { authApi } from "./api.js";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -60,4 +61,9 @@ function renderCurrentRoute() {
 window.addEventListener("popstate", renderCurrentRoute);
 window.addEventListener("vecherinka:navigate", renderCurrentRoute);
 
-renderCurrentRoute();
+// The first screen waits a moment for the session, so that the testing aids
+// are known to be on or off right from the start.
+authApi
+  .session()
+  .catch(() => {})
+  .then(renderCurrentRoute);

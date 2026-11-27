@@ -7,10 +7,11 @@
 // test tab by opening a room link with ?test=form (the usual join form) or
 // ?test=auto (joins at once under a made-up name).
 //
-// The links are offered in the lobby only on localhost and the test site, or
-// anywhere after opening any page once with ?dev=1 (?dev=0 turns it off).
+// The links are offered in the lobby only to the testing account (see
+// isTester in api.js), and the server only lets such tabs into its rooms.
 
-const DEV_KEY = "plynger-dev";
+import { isTester } from "./api.js";
+
 const TAB_KEY = "plynger-test-tab";
 const TAB_DEVICE_KEY = "plynger-test-device";
 
@@ -23,8 +24,6 @@ function safe(fn, fallback) {
 }
 
 const params = new URLSearchParams(window.location.search);
-if (params.get("dev") === "1") safe(() => localStorage.setItem(DEV_KEY, "1"));
-if (params.get("dev") === "0") safe(() => localStorage.removeItem(DEV_KEY));
 
 const testParam = params.get("test");
 if (testParam === "form" || testParam === "auto") safe(() => sessionStorage.setItem(TAB_KEY, "1"));
@@ -36,12 +35,6 @@ export function testJoinMode() {
 
 export function isTestTab() {
   return safe(() => sessionStorage.getItem(TAB_KEY) === "1", false);
-}
-
-export function isDevMode() {
-  const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1" || host.startsWith("vecherinka-test.")) return true;
-  return isTestTab() || safe(() => localStorage.getItem(DEV_KEY) === "1", false);
 }
 
 // The storage that holds this tab's room sessions and device id.
@@ -73,7 +66,7 @@ let devOpen = false; // survives the lobby redrawing every poll
 // A collapsible block with the two kinds of test links for a room, or null
 // when dev tools are off. `roomPath` is the room's own path, e.g. /r/ABCDE.
 export function renderTestLinks(roomPath) {
-  if (!isDevMode()) return null;
+  if (!isTester()) return null;
   const base = `${window.location.origin}${roomPath}`;
   const kinds = [
     {

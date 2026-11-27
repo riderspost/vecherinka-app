@@ -148,7 +148,10 @@ export function renderAccountPage(container) {
   }
 
   function drawLogin(body) {
-    const email = textInput("you@example.com", "email", "email");
+    // Not type="email": the testing account signs in with a plain login.
+    const email = textInput("you@example.com", "text", "username");
+    email.setAttribute("autocapitalize", "none");
+    email.setAttribute("inputmode", "email");
     const pf = passwordField("Пароль", "current-password");
     const msg = messageLine();
     const btn = submitButton("Войти");
@@ -177,7 +180,7 @@ export function renderAccountPage(container) {
     btn.addEventListener("click", submit);
     pf.input.addEventListener("keydown", (e) => e.key === "Enter" && submit());
 
-    body.appendChild(field("Почта", email));
+    body.appendChild(field("Почта или логин", email));
     body.appendChild(pf.element);
     body.appendChild(msg.element);
     body.appendChild(btn);

@@ -150,7 +150,13 @@ def _solo_dare_id(raw_db):
     return raw_db.execute("SELECT id FROM fanty_dares WHERE kind = 'solo' AND status = 'active' LIMIT 1").fetchone()[0]
 
 
+def _login_tester(client):
+    resp = client.post("/api/auth/login", json={"email": "admin", "password": "admin"})
+    assert resp.status_code == 200
+
+
 def test_host_can_force_the_next_dare(client, raw_db):
+    _login_tester(client)
     body = create_fanty_room(client, game_mode="solo").get_json()
     code, host_token = body["code"], body["token"]
     bob = join_fanty(client, code, "Bob", "🐶").get_json()
@@ -161,8 +167,8 @@ def test_host_can_force_the_next_dare(client, raw_db):
     raw_db.commit()
 
     assert client.get(f"/api/fanty/rooms/{code}/all-dares?token={host_token}").status_code == 200
-    assert client.get(f"/api/fanty/rooms/{code}/all-dares?token={bob['token']}").status_code == 400
-    assert client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": bob["token"], "dareId": dare_id}).status_code == 400
+    assert client.get(f"/api/fanty/rooms/{code}/all-dares?token={bob['token']}").status_code == 403
+    assert client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": bob["token"], "dareId": dare_id}).status_code == 403
 
     resp = client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": host_token, "dareId": dare_id})
     assert resp.status_code == 200
@@ -178,6 +184,7 @@ def test_host_can_force_the_next_dare(client, raw_db):
 
 
 def test_forcing_a_dare_replaces_the_one_on_screen_until_it_is_started(client, raw_db):
+    _login_tester(client)
     code, host_token, performer_token, _ = _start_timed_round(client, raw_db)
     other = _solo_dare_id(raw_db)
     resp = client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": host_token, "dareId": other})
@@ -191,8 +198,17 @@ def test_forcing_a_dare_replaces_the_one_on_screen_until_it_is_started(client, r
 
 
 def test_forcing_a_dare_is_not_for_team_games(client, raw_db):
+    _login_tester(client)
     body = create_fanty_room(client, game_mode="team").get_json()
     code, host_token = body["code"], body["token"]
     dare_id = _solo_dare_id(raw_db)
     resp = client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": host_token, "dareId": dare_id})
     assert resp.status_code == 400
+
+
+def test_forcing_a_dare_is_only_for_the_testing_account(client, raw_db):
+    code, host_token, _performer, _ = _start_timed_round(client, raw_db)  # anonymous host
+    dare_id = _solo_dare_id(raw_db)
+    assert client.get(f"/api/fanty/rooms/{code}/all-dares?token={host_token}").status_code == 403
+    resp = client.post(f"/api/fanty/rooms/{code}/force-dare", json={"token": host_token, "dareId": dare_id})
+    assert resp.status_code == 403

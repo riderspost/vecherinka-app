@@ -1,4 +1,4 @@
-import { api, fantyApi, authApi } from "../../api.js";
+import { api, fantyApi, authApi, isTester } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
@@ -9,7 +9,6 @@ import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./const
 import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { openBottomSheet } from "../../swipeSheet.js";
-import { isDevMode } from "../../devTools.js";
 import { enableSound, isSoundOn, playSpin, playChime, playBuzzer } from "./tvSound.js";
 import { startRecording, recordingErrorMessage } from "../../audioTools.js";
 import { createRecordingPlayer } from "../../recordingPlayer.js";
@@ -1239,7 +1238,7 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   const canReplaceShownDare =
     fanty.phase === "awaiting_action" && fanty.contentType === "dare" && !fanty.performanceStartedAt;
   if (
-    isDevMode() &&
+    isTester() &&
     state.me.isHost &&
     state.settings.gameMode !== "team" &&
     (fanty.phase === "ready_to_spin" || fanty.phase === "awaiting_choice" || canReplaceShownDare)
@@ -1671,15 +1670,14 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
     if (fanty.hasRecording && fanty.performanceStartedAt && !fanty.recordingUrl && !fanty.recordingFailed) {
       const waitMs = clockAdjustedStartedAt(fanty) + fanty.timerSeconds * 1000 + RECORDING_GRACE_MS - Date.now();
       if (waitMs > 0) {
+        // "Не засчитано" is always there: giving up needs no recording.
         countedBtn.disabled = true;
-        notCountedBtn.disabled = true;
         const waitNote = document.createElement("p");
         waitNote.className = "tagline";
-        waitNote.textContent = "Ждём запись выступления…";
+        waitNote.textContent = "Ждём запись выступления… («Засчитано» откроется после неё)";
         panel.appendChild(waitNote);
         setTimeout(() => {
           countedBtn.disabled = false;
-          notCountedBtn.disabled = false;
           waitNote.remove();
         }, waitMs);
       }

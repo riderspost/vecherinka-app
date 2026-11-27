@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, session
 from werkzeug.utils import secure_filename
 
 from . import fanty_game as fg
+from .auth import current_user_is_tester
 from .db import get_db
 from .rooms_common import (
     RoomError,
@@ -373,8 +374,8 @@ def all_dares(code):
     if not room:
         return error("Комната не найдена", 404)
     player = get_player_or_404(db, room["id"], request.args.get("token"))
-    if not player or not player["is_host"]:
-        return error("Только хост")
+    if not player or not player["is_host"] or not current_user_is_tester(db):
+        return error("Только тестовый пользователь", 403)
     rows = db.execute(
         "SELECT id, text, has_timer, timer_seconds, has_recording, music_filename "
         "FROM fanty_dares WHERE status = 'active' AND kind = 'solo' ORDER BY id DESC"
@@ -403,8 +404,8 @@ def force_dare(code):
         return error("Комната не найдена", 404)
     data = request.get_json(silent=True) or {}
     player = get_player_or_404(db, room["id"], data.get("token"))
-    if not player or not player["is_host"]:
-        return error("Только хост")
+    if not player or not player["is_host"] or not current_user_is_tester(db):
+        return error("Только тестовый пользователь", 403)
     if fg.get_settings(db, room["id"])["game_mode"] == "team":
         return error("В командной игре так нельзя")
     state = fg.get_state(db, room["id"])

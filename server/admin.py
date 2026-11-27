@@ -5,9 +5,10 @@ import uuid
 from functools import wraps
 
 from flask import Blueprint, request, jsonify, session, send_from_directory
+from werkzeug.security import generate_password_hash
 from werkzeug.utils import secure_filename
 
-from .db import get_db
+from .db import get_db, TESTER_LOGIN
 from . import ai_prompts
 from . import fanty_game
 from . import reverse_game
@@ -72,7 +73,7 @@ def admin_session():
 def admin_list_users():
     db = get_db()
     rows = db.execute(
-        """SELECT id, email, name, email_verified, games_created_count, created_at
+        """SELECT id, email, name, email_verified, games_created_count, created_at, is_tester
            FROM users
            ORDER BY games_created_count DESC, created_at DESC"""
     ).fetchall()
@@ -85,10 +86,49 @@ def admin_list_users():
                 "emailVerified": bool(r["email_verified"]),
                 "gamesCreated": r["games_created_count"],
                 "createdAt": r["created_at"],
+                "isTester": bool(r["is_tester"]),
+                "isSystem": r["email"] == TESTER_LOGIN,
             }
             for r in rows
         ]
     )
+
+
+@admin_bp.route("/api/users/<user_id>/tester", methods=["PUT"])
+@admin_required
+def admin_set_tester(user_id):
+    # The testing aids (extra test players, choosing the dare) are for tester
+    # accounts only. The built-in "admin" account is always one.
+    db = get_db()
+    user = db.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        return jsonify({"error": "Пользователь не найден"}), 404
+    if user["email"] == TESTER_LOGIN:
+        return jsonify({"error": "Встроенный тестовый аккаунт всегда тестировщик"}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    db.execute("UPDATE users SET is_tester = ? WHERE id = ?", (int(bool(data.get("isTester"))), user_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/api/users/<user_id>/password", methods=["PUT"])
+@admin_required
+def admin_set_user_password(user_id):
+    # For the built-in testing account, whose login is not an email and so
+    # cannot use "forgot password": lets the admin replace its first password.
+    db = get_db()
+    user = db.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        return jsonify({"error": "Пользователь не найден"}), 404
+    if user["email"] != TESTER_LOGIN:
+        return jsonify({"error": "Пароль можно задать только встроенному тестовому аккаунту"}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    password = data.get("password") or ""
+    if len(password) < 8:
+        return jsonify({"error": "Пароль должен быть не короче 8 символов"}), 400
+    db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(password, method="pbkdf2:sha256"), user_id))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @admin_bp.route("/api/rooms")
