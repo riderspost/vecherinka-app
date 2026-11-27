@@ -2,7 +2,8 @@ import { api } from "./api.js";
 import { avatarHtml } from "./avatarPicker.js";
 import { escapeHtml } from "./utils.js";
 import { renderTestLinks } from "./devTools.js";
-import { shareLinks, stepsBarHtml } from "./wizard.js";
+import { stepsBarHtml } from "./wizard.js";
+import { createShareBlock } from "./shareBlock.js";
 
 // The lobby of a game where everyone plays on their own phone: invite (QR,
 // code, share buttons), how many players are in and whether that is enough,
@@ -48,21 +49,7 @@ export function renderLobbyView(wrap, state, token, code, opts) {
 
   if (!isDisplay) {
     const text = `Играем в «${gameTitle}», код комнаты ${code}.`;
-    const links = shareLinks(shareUrl, text);
-    const share = document.createElement("div");
-    share.className = "wz-share";
-    share.innerHTML = `
-      <a class="wz-share-btn" href="${links.telegram}" target="_blank" rel="noopener"><span aria-hidden="true">✈️</span>Telegram</a>
-      <a class="wz-share-btn" href="${links.whatsapp}" target="_blank" rel="noopener"><span aria-hidden="true">💬</span>WhatsApp</a>
-      <button type="button" class="wz-share-btn"><span aria-hidden="true">🔗</span><b>Ссылка</b></button>
-    `;
-    const copyBtn = share.querySelector("button");
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
-      copyBtn.querySelector("b").textContent = "Скопировано";
-      setTimeout(() => (copyBtn.querySelector("b").textContent = "Ссылка"), 1500);
-    });
-    root.appendChild(share);
+    root.appendChild(createShareBlock({ url: shareUrl, text }));
   }
 
   // who is here, and how many more are needed

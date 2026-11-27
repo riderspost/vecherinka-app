@@ -2,6 +2,7 @@ import { navigate } from "../router.js";
 import { forgetAccountLinkedSessions } from "../storage.js";
 import { createAvatarElement } from "../avatarPicker.js";
 import { installRow } from "./hub/install.js";
+import { shareRow } from "../shareBlock.js";
 import { mountWizardFrame } from "../wizard.js";
 import { authApi } from "../api.js";
 
@@ -44,6 +45,7 @@ export function renderProfileSettings(container) {
       const list = document.createElement("div");
       list.className = "hub-list";
       list.appendChild(installRow());
+      list.appendChild(shareRow());
       list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
       body.appendChild(list);
       return;
@@ -67,6 +69,7 @@ export function renderProfileSettings(container) {
     list.className = "hub-list";
     list.appendChild(row("🖼️", "Имя и аватар", () => navigate("/profile/edit")));
     list.appendChild(installRow());
+    list.appendChild(shareRow());
     list.appendChild(row("✉️", "Связаться с разработчиком", () => navigate("/contact")));
     const logout = row("🚪", "Выйти", async () => {
       logout.disabled = true;

@@ -9,6 +9,7 @@ import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./const
 import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { openBottomSheet } from "../../swipeSheet.js";
+import { createShareBlock } from "../../shareBlock.js";
 import { enableSound, isSoundOn, playSpin, playChime, playBuzzer } from "./tvSound.js";
 import { startRecording, recordingErrorMessage } from "../../audioTools.js";
 import { createRecordingPlayer } from "../../recordingPlayer.js";
@@ -861,16 +862,11 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   }
 
   if (state.room.deviceMode === "remote") {
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "wz-link";
-    copyBtn.textContent = "Скопировать ссылку";
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
-      copyBtn.textContent = "Ссылка скопирована";
-      setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
-    });
-    wrap.appendChild(copyBtn);
+    const invite = document.createElement("p");
+    invite.className = "wz-note";
+    invite.textContent = "Позовите друзей в эту комнату";
+    wrap.appendChild(invite);
+    wrap.appendChild(createShareBlock({ url: shareUrl, text: `Играем в «Фанты», код комнаты ${code}.` }));
   }
 
   if (state.room.deviceMode === "remote") {
