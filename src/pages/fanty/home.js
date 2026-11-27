@@ -14,15 +14,34 @@ import {
   MIN_PLAYERS_BY_MODE,
 } from "./constants.js";
 
-const TOTAL_STEPS = 4;
-const STEP_TITLES = ["Как играем", "Где играем", "Настройки", "Кто вы"];
+const TOTAL_STEPS = 5;
+const STEP_TITLES = ["Как играем", "Где играем", "Типы фантов", "Как выбирает бутылка", "Кто вы"];
 
 // Step zero: which game to play. The rest of the setup follows from this.
 const MODE_CARDS = [
   { value: "truth_or_dare", tone: "g1", art: "🍾🎭", title: "Правда или действие", text: "Выпавший сам выбирает: ответить на вопрос или выполнить задание." },
   { value: "solo", tone: "g2", art: "🍾🎯", title: "Просто фанты", text: "Бутылка сразу даёт задание тому, на кого указала." },
-  { value: "team", tone: "g3", art: "🍾👯", title: "Командные фанты", text: "Бутылка крутится дважды и выбирает пару для общего задания." },
+  { value: "team", pairMode: "any", tone: "g3", art: "🍾👯", title: "Командные фанты", text: "Пара из любых игроков выполняет общее задание." },
+  { value: "team", pairMode: "mixed", tone: "g4", art: "🍾💞", title: "Фанты для пар", text: "Пара всегда мужчина и женщина." },
 ];
+
+// Short lines under the options of the next steps (the long explanations
+// that used to hide behind an ⓘ are now the rules cards).
+const LOCATION_ART = {
+  apartment: { emoji: "🏠", note: "Тихо и уютно", tone: "l1" },
+  bar: { emoji: "🍸", note: "Шумно и людно", tone: "l2" },
+  street: { emoji: "🌃", note: "На людях", tone: "l3" },
+  country_house: { emoji: "🏡", note: "Есть где разгуляться", tone: "l4" },
+};
+const MOOD_ART = {
+  basic: { emoji: "🙂", note: "Безобидно для любой компании", heat: 1, tint: "rgba(93, 255, 167, 0.2)" },
+  flirt: { emoji: "😏", note: "Лёгкие намёки и игривые задания", heat: 2, tint: "rgba(255, 210, 63, 0.2)" },
+  flirt_plus: { emoji: "🔥", note: "Смелее и откровеннее", heat: 3, tint: "rgba(255, 93, 162, 0.22)" },
+};
+const ATTRIBUTE_ART = {
+  alcohol: { emoji: "🍺", note: "Только если он правда есть" },
+  food: { emoji: "🍕", note: "Фанты с едой" },
+};
 
 // The rules cards of step one: each mode explains itself in three cards.
 const RULES = {
@@ -34,6 +53,11 @@ const RULES = {
   solo: [
     { emoji: "🍾", title: "Крутим бутылку", text: "Бутылка выбирает игрока. Все видят, на кого она указала." },
     { emoji: "🎯", title: "Сразу задание", text: "Никакого выбора: выпавший получает фант и выполняет его.", demo: { q: "Антон", a: "Зачитай рэп про то, как вы кайфово сидите" } },
+    { emoji: "🎉", title: "Выполнили, крутим снова", text: "Задание нужно сделать по-настоящему." },
+  ],
+  team_mixed: [
+    { emoji: "🍾", title: "Первый спин", text: "Бутылка выбирает первого игрока." },
+    { emoji: "💞", title: "Второй спин: пара", text: "Бутылка крутится ещё раз и выбирает напарника другого пола. Задание выполняют мужчина и женщина вместе.", demo: { q: "Антон и Маша", a: "Станцуйте медленный танец без музыки" } },
     { emoji: "🎉", title: "Выполнили, крутим снова", text: "Задание нужно сделать по-настоящему." },
   ],
   team: [
@@ -144,19 +168,19 @@ export function renderFantyHome(container) {
         <b>${mode.title}</b>
         <p>${mode.text}</p>
       `;
-      card.addEventListener("click", () => showCreateForm(mode.value));
+      card.addEventListener("click", () => showCreateForm(mode.value, mode.pairMode));
       body.appendChild(card);
     });
   }
 
-  function showCreateForm(chosenMode) {
+  function showCreateForm(chosenMode, chosenPairMode) {
     const formState = {
       gameMode: chosenMode || "truth_or_dare",
       location: LOCATIONS[0].value,
       categories: ["basic"],
       attributes: [],
       pickMode: "fair",
-      pairMode: "any",
+      pairMode: chosenPairMode || "any",
       deviceMode: "local",
       name: "",
       gender: null,
@@ -182,7 +206,8 @@ export function renderFantyHome(container) {
     }
 
     function renderRulesStep() {
-      const slides = RULES[formState.gameMode] || RULES.truth_or_dare;
+      const slides =
+        RULES[formState.gameMode === "team" && formState.pairMode === "mixed" ? "team_mixed" : formState.gameMode] || RULES.truth_or_dare;
       const track = document.createElement("div");
       track.className = "wz-slides";
       slides.forEach((slide) => {
@@ -238,7 +263,7 @@ export function renderFantyHome(container) {
       skip.textContent = "Пропустить правила";
       skip.addEventListener("click", goOn);
 
-      formHost.classList.remove("wz-form");
+      formHost.classList.remove("wz-form", "wz-step");
       formHost.appendChild(track);
       formHost.appendChild(dots);
       formHost.appendChild(next);
@@ -246,71 +271,156 @@ export function renderFantyHome(container) {
       setIndex(0);
     }
 
-    function renderLocationStep() {
-      stepHeading(
-        "Где играем",
-        "Место определяет, какие фанты (действия) будут предлагаться. На вопросы «правды» место не влияет."
-      );
-      const locationGroup = radioGroup("location", LOCATIONS, formState.location);
-      formHost.appendChild(locationGroup.element);
+    function nextButton(label) {
+      const btn = navButtons(label);
+      return btn;
+    }
 
-      const nextBtn = navButtons();
+    // Step 2: where. One of four scene tiles.
+    function renderLocationStep() {
+      stepHeading("Где играем", "От места зависит, какие задания выпадут. На вопросы «правды» место не влияет.");
+      const grid = document.createElement("div");
+      grid.className = "pick-grid";
+      LOCATIONS.forEach((loc) => {
+        const art = LOCATION_ART[loc.value] || { emoji: "📍", note: "", tone: "l1" };
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = `loc-tile ${art.tone}`;
+        tile.setAttribute("aria-pressed", String(loc.value === formState.location));
+        tile.innerHTML = `
+          <span class="loc-check" aria-hidden="true">✓</span>
+          <span class="loc-art" aria-hidden="true">${art.emoji}</span>
+          <b></b>
+          <small></small>
+        `;
+        tile.querySelector("b").textContent = loc.label;
+        tile.querySelector("small").textContent = art.note;
+        tile.addEventListener("click", () => {
+          formState.location = loc.value;
+          grid.querySelectorAll(".loc-tile").forEach((t) => t.setAttribute("aria-pressed", String(t === tile)));
+        });
+        grid.appendChild(tile);
+      });
+      formHost.appendChild(grid);
+
+      const nextBtn = nextButton();
       nextBtn.addEventListener("click", () => {
-        formState.location = locationGroup.getValue();
         stepIndex += 1;
         renderStep();
       });
     }
 
-    function renderSettingsStep() {
-      stepHeading(
-        "Как играем",
-        "Выберите типы фантов, атрибуты, которые реально есть под рукой (если их нет, не отмечайте), и то, как бутылка выбирает игрока."
-      );
+    // Step 3: how bold (several can be on) and what is at hand.
+    function renderTypesStep() {
+      stepHeading("Типы фантов", "Выберите накал. Можно несколько сразу.");
+      const moods = new Set(formState.categories);
+      const extras = new Set(formState.attributes);
+      let errorEl = null; // cleared as soon as something is chosen
 
-      const categoriesLabel = document.createElement("label");
-      categoriesLabel.textContent = "Типы фантов";
-      const categoriesGroup = checkboxGroup(MOOD_CATEGORIES, formState.categories);
+      MOOD_CATEGORIES.forEach((cat) => {
+        const art = MOOD_ART[cat.value] || { emoji: "🎲", note: "", heat: 1, tint: "rgba(138, 92, 255, 0.2)" };
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "mood-card";
+        card.setAttribute("aria-pressed", String(moods.has(cat.value)));
+        const heat = [1, 2, 3].map((n) => `<i class="${n <= art.heat ? "on" : ""}"></i>`).join("");
+        card.innerHTML = `
+          <span class="mood-emoji" style="background:${art.tint}" aria-hidden="true">${art.emoji}</span>
+          <span class="mood-text"><b></b><small></small></span>
+          <span class="mood-heat" aria-hidden="true">${heat}</span>
+        `;
+        card.querySelector("b").textContent = cat.label;
+        card.querySelector("small").textContent = art.note;
+        card.addEventListener("click", () => {
+          if (moods.has(cat.value)) moods.delete(cat.value);
+          else moods.add(cat.value);
+          card.setAttribute("aria-pressed", String(moods.has(cat.value)));
+          if (errorEl) errorEl.textContent = "";
+        });
+        formHost.appendChild(card);
+      });
 
-      const attributesLabel = document.createElement("label");
-      attributesLabel.textContent = "Доступные атрибуты";
-      const attributesGroup = checkboxGroup(ATTRIBUTES, formState.attributes);
+      const sec = document.createElement("div");
+      sec.className = "step-section";
+      sec.textContent = "Что есть под рукой";
+      formHost.appendChild(sec);
 
-      const pickModeLabelEl = document.createElement("label");
-      pickModeLabelEl.textContent = "Кого выбирает бутылка";
-      const pickModeGroup = radioGroup("pickMode", PICK_MODES, formState.pickMode);
+      ATTRIBUTES.forEach((attr) => {
+        const art = ATTRIBUTE_ART[attr.value] || { emoji: "✨", note: "" };
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "attr-row";
+        row.setAttribute("aria-pressed", String(extras.has(attr.value)));
+        row.innerHTML = `
+          <span class="attr-emoji" aria-hidden="true">${art.emoji}</span>
+          <span class="mood-text"><b></b><small></small></span>
+          <span class="switch" aria-hidden="true"></span>
+        `;
+        row.querySelector("b").textContent = attr.label;
+        row.querySelector("small").textContent = art.note;
+        row.addEventListener("click", () => {
+          if (extras.has(attr.value)) extras.delete(attr.value);
+          else extras.add(attr.value);
+          row.setAttribute("aria-pressed", String(extras.has(attr.value)));
+          if (errorEl) errorEl.textContent = "";
+        });
+        formHost.appendChild(row);
+      });
 
-      const errorEl = document.createElement("div");
+      errorEl = document.createElement("div");
       errorEl.className = "error-msg";
-
-      const pairModeLabelEl = document.createElement("label");
-      pairModeLabelEl.textContent = "Кто может быть в паре";
-      const pairModeGroup = radioGroup("pairMode", PAIR_MODES, formState.pairMode);
-      if (formState.gameMode === "team") {
-        formHost.appendChild(pairModeLabelEl);
-        formHost.appendChild(pairModeGroup.element);
-      }
-
-      formHost.appendChild(categoriesLabel);
-      formHost.appendChild(categoriesGroup.element);
-      formHost.appendChild(attributesLabel);
-      formHost.appendChild(attributesGroup.element);
-      formHost.appendChild(pickModeLabelEl);
-      formHost.appendChild(pickModeGroup.element);
       formHost.appendChild(errorEl);
 
-      const nextBtn = navButtons();
+      const nextBtn = nextButton();
       nextBtn.addEventListener("click", () => {
-        const categories = categoriesGroup.getValue();
-        const attributes = attributesGroup.getValue();
-        if (categories.length + attributes.length === 0) {
+        if (moods.size + extras.size === 0) {
           errorEl.textContent = "Выберите хотя бы один тип фантов";
           return;
         }
-        formState.categories = categories;
-        formState.attributes = attributes;
-        formState.pickMode = pickModeGroup.getValue();
-        formState.pairMode = formState.gameMode === "team" ? pairModeGroup.getValue() : "any";
+        formState.categories = [...moods];
+        formState.attributes = [...extras];
+        stepIndex += 1;
+        renderStep();
+      });
+    }
+
+    // Step 4: who the bottle picks. Two cards, each with a small picture of the circle.
+    function renderPickStep() {
+      stepHeading("Как выбирает бутылка", "Выберите правило розыгрыша.");
+      const SEATS = [
+        [47, 0, "🦊"],
+        [94, 47, "🐸"],
+        [47, 94, "🐼"],
+        [0, 47, "🐵"],
+      ];
+      const PICK_INFO = {
+        random: { note: "Каждый раз случайный игрок: кто-то может выпадать чаще.", done: false },
+        fair: { note: "Пока все не выпадут по разу, никто не повторяется.", done: true },
+      };
+      const wrap = document.createElement("div");
+      wrap.className = "pick-list";
+      PICK_MODES.forEach((mode) => {
+        const info = PICK_INFO[mode.value] || { note: "", done: false };
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "pick-card";
+        card.setAttribute("aria-pressed", String(mode.value === formState.pickMode));
+        const seats = SEATS.map(
+          ([x, y, em], i) => `<span class="pick-seat${info.done && i < 3 ? " done" : ""}" style="left:${x}px;top:${y}px">${em}</span>`
+        ).join("");
+        card.innerHTML = `<b></b><span class="pick-ring">${seats}<span class="pick-bottle">🍾</span></span><small></small>`;
+        card.querySelector("b").textContent = mode.label;
+        card.querySelector("small").textContent = info.note;
+        card.addEventListener("click", () => {
+          formState.pickMode = mode.value;
+          wrap.querySelectorAll(".pick-card").forEach((c) => c.setAttribute("aria-pressed", String(c === card)));
+        });
+        wrap.appendChild(card);
+      });
+      formHost.appendChild(wrap);
+
+      const nextBtn = nextButton();
+      nextBtn.addEventListener("click", () => {
         stepIndex += 1;
         renderStep();
       });
@@ -463,11 +573,12 @@ export function renderFantyHome(container) {
           }
         },
       });
-      formHost.classList.add("wz-form");
+      formHost.classList.add("wz-form", "wz-step");
 
       if (stepIndex === 0) renderRulesStep();
       else if (stepIndex === 1) renderLocationStep();
-      else if (stepIndex === 2) renderSettingsStep();
+      else if (stepIndex === 2) renderTypesStep();
+      else if (stepIndex === 3) renderPickStep();
       else renderPlayerStep();
     }
 

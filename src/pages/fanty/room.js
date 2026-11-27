@@ -551,7 +551,9 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
 async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
   const shareUrl = `${window.location.origin}/fanty/r/${code}`;
   const players = state.players.filter((p) => !p.isDisplay);
-  const modeLabel = GAME_MODES.find((m) => m.value === state.settings.gameMode)?.label || state.settings.gameMode;
+  const baseModeLabel = GAME_MODES.find((m) => m.value === state.settings.gameMode)?.label || state.settings.gameMode;
+  const modeLabel =
+    state.settings.gameMode === "team" && state.settings.pairMode === "mixed" ? "Фанты для пар (М + Ж)" : baseModeLabel;
 
   const enough = players.length >= state.minPlayers && !state.needsBothGenders;
   const pct = Math.min(100, Math.round((players.length / state.minPlayers) * 100));
