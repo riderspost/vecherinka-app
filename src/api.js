@@ -75,6 +75,12 @@ export function isPaid() {
   return paidAccount;
 }
 
+// Whether anybody is signed in (as opposed to a guest).
+let signedIn = false;
+export function isSignedIn() {
+  return signedIn;
+}
+
 export const authApi = {
   register: (email, password) => request("POST", "/api/auth/register", { email, password }),
   login: async (email, password) => {
@@ -86,12 +92,14 @@ export const authApi = {
     const res = await request("POST", "/api/auth/logout");
     testerAccount = false;
     paidAccount = false;
+    signedIn = false;
     return res;
   },
   session: async () => {
     const res = await request("GET", "/api/auth/session");
     testerAccount = Boolean(res && res.isTester);
     paidAccount = Boolean(res && res.isPaid);
+    signedIn = Boolean(res && res.authenticated);
     return res;
   },
   forgotPassword: (email) => request("POST", "/api/auth/forgot-password", { email }),

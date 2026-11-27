@@ -1,4 +1,5 @@
-import { fantyApi, authApi, isPaid } from "../../api.js";
+import { fantyApi, authApi, isPaid, isSignedIn } from "../../api.js";
+import { openBottomSheet } from "../../swipeSheet.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
@@ -140,6 +141,63 @@ function checkboxGroup(options, defaultChecked) {
     element: wrap,
     getValue: () => Array.from(wrap.querySelectorAll("input:checked")).map((i) => i.value),
   };
+}
+
+// What a tap on the locked "Флирт+" says: why it is closed and what to do.
+// A guest is offered to sign in; a signed-in account without payment is
+// offered a subscription (payment is not connected yet, so that only says
+// whom to ask).
+function openFlirtPlusSheet() {
+  openBottomSheet({
+    title: "Флирт+",
+    build: (content, close) => {
+      content.classList.add("lock-sheet");
+      const guest = !isSignedIn();
+      content.innerHTML = `
+        <div class="lock-sheet-mark" aria-hidden="true">🔒</div>
+        <h3>«Флирт+» в платном аккаунте</h3>
+        <p class="lock-sheet-text">Такие игры могут создавать только пользователи с оплаченным аккаунтом. Играть в чужой комнате можно всем.</p>
+        <ul class="lock-sheet-perks">
+          <li><span aria-hidden="true">🔥</span>Смелые задания и вопросы</li>
+          <li><span aria-hidden="true">👥</span>Для раскрепощённой компании</li>
+        </ul>
+        <p class="lock-sheet-msg" hidden></p>
+        <div class="lock-sheet-actions"></div>
+      `;
+      const msg = content.querySelector(".lock-sheet-msg");
+      const actions = content.querySelector(".lock-sheet-actions");
+
+      const primary = document.createElement("button");
+      primary.type = "button";
+      primary.className = "wz-cta";
+      if (guest) {
+        primary.textContent = "Войти в аккаунт";
+        primary.addEventListener("click", () => {
+          close();
+          navigate("/account");
+        });
+      } else {
+        primary.textContent = "Купить подписку";
+        primary.addEventListener("click", () => {
+          msg.hidden = false;
+          msg.textContent = "Оплата пока не подключена. За доступом обращайтесь к администратору.";
+          primary.textContent = "Написать администратору";
+          primary.onclick = () => {
+            close();
+            navigate("/contact");
+          };
+        });
+      }
+      actions.appendChild(primary);
+
+      const ok = document.createElement("button");
+      ok.type = "button";
+      ok.className = "wz-link";
+      ok.textContent = "Понятно";
+      ok.addEventListener("click", close);
+      actions.appendChild(ok);
+    },
+  });
 }
 
 export function renderFantyHome(container) {
@@ -335,7 +393,6 @@ export function renderFantyHome(container) {
       // "Флирт+" is only for paid accounts: others see it locked, and the
       // server refuses it anyway.
       const locked = (value) => value === "flirt_plus" && !isPaid();
-      let lockNote = null;
 
       MOOD_CATEGORIES.forEach((cat) => {
         const art = MOOD_ART[cat.value] || { emoji: "🎲", note: "", heat: 1, tint: "rgba(138, 92, 255, 0.2)" };
@@ -354,10 +411,7 @@ export function renderFantyHome(container) {
         if (locked(cat.value)) card.querySelector(".mood-heat").innerHTML = "🔒";
         card.addEventListener("click", () => {
           if (locked(cat.value)) {
-            if (lockNote) {
-              lockNote.hidden = false;
-              lockNote.scrollIntoView({ block: "nearest", behavior: "smooth" });
-            }
+            openFlirtPlusSheet();
             return;
           }
           if (moods.has(cat.value)) moods.delete(cat.value);
@@ -367,14 +421,6 @@ export function renderFantyHome(container) {
         });
         formHost.appendChild(card);
       });
-
-      lockNote = document.createElement("div");
-      lockNote.className = "lock-note";
-      lockNote.hidden = true;
-      lockNote.innerHTML = `<b>🔒 «Флирт+» только для платного аккаунта.</b> ${
-        isPaid() ? "" : "Игры такого типа могут создавать только пользователи с оплаченным аккаунтом."
-      }`;
-      formHost.appendChild(lockNote);
 
       const sec = document.createElement("div");
       sec.className = "step-section";

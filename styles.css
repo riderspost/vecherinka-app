@@ -5260,8 +5260,23 @@ h2, h3 {
 /* "Флирт+" locked for accounts that are not paid */
 .mood-card.locked { opacity: .62; }
 .mood-card.locked .mood-heat { font-size: 18px; }
-.lock-note {
-  padding: 12px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.4;
+.lock-sheet { text-align: center; }
+.lock-sheet-mark {
+  width: 64px; height: 64px; margin: 4px auto 10px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 30px; background: rgba(255, 93, 162, .16); border: 1.5px solid rgba(255, 93, 162, .5);
+}
+.lock-sheet h3 { margin: 0 0 6px; font-size: 18px; color: var(--hub-text); }
+.lock-sheet-text { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--hub-dim); }
+.lock-sheet-perks { list-style: none; margin: 0 0 14px; padding: 0; text-align: left; }
+.lock-sheet-perks li {
+  display: flex; gap: 10px; align-items: center; padding: 8px 0; font-size: 13.5px; color: var(--hub-text);
+  border-bottom: 1px solid var(--hub-line);
+}
+.lock-sheet-perks li:last-child { border-bottom: 0; }
+.lock-sheet-perks span { width: 26px; text-align: center; }
+.lock-sheet-msg {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.4;
   color: var(--hub-text); background: rgba(255, 154, 60, .12); border: 1px solid rgba(255, 154, 60, .45);
 }
-.lock-note[hidden] { display: none; }
+.lock-sheet-msg[hidden] { display: none; }
+.lock-sheet-actions { display: flex; flex-direction: column; gap: 4px; }
