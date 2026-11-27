@@ -130,6 +130,12 @@ def _pick_preferring_unused(pool_ids, used_ids):
 
 
 def pick_dare(db, room_id, settings, kind):
+    if kind == "solo":
+        # Temporary testing aid: a dare the host picked by hand comes first.
+        row = db.execute("SELECT forced_dare_id FROM fanty_state WHERE room_id = ?", (room_id,)).fetchone()
+        if row and row["forced_dare_id"]:
+            db.execute("UPDATE fanty_state SET forced_dare_id = NULL WHERE room_id = ?", (room_id,))
+            return row["forced_dare_id"]
     pool = _content_pool_dares(db, settings, kind)
     used = {
         row["dare_id"]
@@ -384,7 +390,8 @@ def resolve_round(db, room, counted, photo_filenames):
             """UPDATE fanty_state SET phase='ready_to_spin', next_spinner_id=?,
                current_picked_id=NULL, current_partner_id=NULL, current_choice=NULL,
                current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL,
-               performance_started_at=NULL, recording_filename=NULL, recording_failed=0
+               performance_started_at=NULL, recording_filename=NULL, recording_failed=0,
+               forced_dare_id=NULL
                WHERE room_id=?""",
             (next_spinner, room["id"]),
         )

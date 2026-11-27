@@ -9,6 +9,7 @@ import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./const
 import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { openBottomSheet } from "../../swipeSheet.js";
+import { isDevMode } from "../../devTools.js";
 import { enableSound, isSoundOn, playSpin, playChime, playBuzzer } from "./tvSound.js";
 import { startRecording, recordingErrorMessage } from "../../audioTools.js";
 import { createRecordingPlayer } from "../../recordingPlayer.js";
@@ -1089,6 +1090,8 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   if (oldManageBtn) oldManageBtn.remove();
   const oldManageCard = wrap.querySelector(".manage-players-card");
   if (oldManageCard) oldManageCard.remove();
+  const oldPickDare = wrap.querySelector(".pick-dare-btn");
+  if (oldPickDare) oldPickDare.remove();
 
   if (tvSpin) {
     const targetId =
@@ -1227,6 +1230,28 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
 
   wrap.appendChild(panel);
 
+  // TEMPORARY testing aid (dev mode only, games not played in teams): the host
+  // picks which dare comes up. Remove together with /force-dare on the server.
+  const canReplaceShownDare =
+    fanty.phase === "awaiting_action" && fanty.contentType === "dare" && !fanty.performanceStartedAt;
+  if (
+    isDevMode() &&
+    state.me.isHost &&
+    state.settings.gameMode !== "team" &&
+    (fanty.phase === "ready_to_spin" || fanty.phase === "awaiting_choice" || canReplaceShownDare)
+  ) {
+    const pickBtn = document.createElement("button");
+    pickBtn.type = "button";
+    pickBtn.className = "btn pick-dare-btn";
+    pickBtn.textContent = fanty.forcedDareText
+      ? `🧪 Выпадет: ${fanty.forcedDareText.slice(0, 40)}${fanty.forcedDareText.length > 40 ? "…" : ""}`
+      : canReplaceShownDare
+      ? "🧪 Заменить фант (временно)"
+      : "🧪 Выбрать фант (временно)";
+    pickBtn.addEventListener("click", () => openDarePicker(code, token, ctrl));
+    wrap.appendChild(pickBtn);
+  }
+
   if (state.me.isHost && fanty.phase === "ready_to_spin") {
     const endBtn = document.createElement("button");
     endBtn.className = "btn danger end-game-btn";
@@ -1244,6 +1269,62 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
     });
     wrap.appendChild(endBtn);
   }
+}
+
+// TEMPORARY testing aid: a list of every dare to pick the next one from.
+function openDarePicker(code, token, ctrl) {
+  openBottomSheet({
+    title: "🧪 Какой фант выпадет",
+    build: async (content, close) => {
+      const search = document.createElement("input");
+      search.className = "text-input";
+      search.placeholder = "Поиск по тексту";
+      content.appendChild(search);
+      const list = document.createElement("div");
+      list.className = "dare-picker-list";
+      content.appendChild(list);
+      list.textContent = "Загрузка…";
+
+      let dares = [];
+      try {
+        dares = await fantyApi.allDares(code, token);
+      } catch (e) {
+        list.textContent = e.message;
+        return;
+      }
+
+      function draw() {
+        const q = search.value.trim().toLowerCase();
+        list.innerHTML = "";
+        dares
+          .filter((d) => !q || d.text.toLowerCase().includes(q))
+          .forEach((d) => {
+            const item = document.createElement("button");
+            item.type = "button";
+            item.className = "dare-picker-item";
+            const tags = [d.timerSeconds ? `⏱ ${d.timerSeconds}с` : "", d.hasRecording ? "🎙" : "", d.hasMusic ? "🎵" : ""]
+              .filter(Boolean)
+              .join(" ");
+            item.innerHTML = `<span>${escapeHtml(d.text)}</span>${tags ? `<small>${tags}</small>` : ""}`;
+            item.addEventListener("click", async () => {
+              item.disabled = true;
+              try {
+                await fantyApi.forceDare(code, token, d.id);
+                close();
+                ctrl.rerender(await fantyApi.getState(code, token));
+              } catch (e) {
+                alert(e.message);
+                item.disabled = false;
+              }
+            });
+            list.appendChild(item);
+          });
+        if (!list.children.length) list.textContent = "Ничего не найдено";
+      }
+      search.addEventListener("input", draw);
+      draw();
+    },
+  });
 }
 
 // What the recording of a timed dare looks like on screen. update(running) is

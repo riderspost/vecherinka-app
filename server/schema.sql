@@ -168,7 +168,8 @@ CREATE TABLE IF NOT EXISTS fanty_state (
   picked_cycle TEXT NOT NULL DEFAULT '[]',
   performance_started_at TEXT,
   recording_filename TEXT,
-  recording_failed INTEGER NOT NULL DEFAULT 0
+  recording_failed INTEGER NOT NULL DEFAULT 0,
+  forced_dare_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS fanty_rounds (

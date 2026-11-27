@@ -107,6 +107,8 @@ export const fantyApi = {
     form.append("failed", "1");
     return request("POST", `/api/fanty/rooms/${code}/upload-recording`, form);
   },
+  allDares: (code, token) => request("GET", `/api/fanty/rooms/${code}/all-dares?token=${encodeURIComponent(token)}`),
+  forceDare: (code, token, dareId) => request("POST", `/api/fanty/rooms/${code}/force-dare`, { token, dareId }),
   end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
   discard: (code, token) => request("POST", `/api/fanty/rooms/${code}/discard`, { token }),
   likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),

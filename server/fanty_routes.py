@@ -363,6 +363,68 @@ def upload_recording(code):
     return jsonify({"filename": filename})
 
 
+# --- Temporary testing aid: the host picks which dare comes up -------------
+
+
+@fanty_bp.route("/rooms/<code>/all-dares", methods=["GET"])
+def all_dares(code):
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    player = get_player_or_404(db, room["id"], request.args.get("token"))
+    if not player or not player["is_host"]:
+        return error("Только хост")
+    rows = db.execute(
+        "SELECT id, text, has_timer, timer_seconds, has_recording, music_filename "
+        "FROM fanty_dares WHERE status = 'active' AND kind = 'solo' ORDER BY id DESC"
+    ).fetchall()
+    return jsonify(
+        [
+            {
+                "id": r["id"],
+                "text": r["text"],
+                "timerSeconds": r["timer_seconds"] if r["has_timer"] else None,
+                "hasRecording": bool(r["has_timer"] and r["has_recording"]),
+                "hasMusic": bool(r["music_filename"]),
+            }
+            for r in rows
+        ]
+    )
+
+
+@fanty_bp.route("/rooms/<code>/force-dare", methods=["POST"])
+def force_dare(code):
+    # In a game that is not played in teams: the chosen dare comes up at the
+    # next draw — or replaces the one on screen, if it has not been started.
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    data = request.get_json(silent=True) or {}
+    player = get_player_or_404(db, room["id"], data.get("token"))
+    if not player or not player["is_host"]:
+        return error("Только хост")
+    if fg.get_settings(db, room["id"])["game_mode"] == "team":
+        return error("В командной игре так нельзя")
+    state = fg.get_state(db, room["id"])
+    if room["status"] != "playing":
+        return error("Игра не идёт")
+    dare = db.execute(
+        "SELECT id FROM fanty_dares WHERE id = ? AND status = 'active' AND kind = 'solo'", (data.get("dareId"),)
+    ).fetchone()
+    if not dare:
+        return error("Такого фанта нет")
+    if state["phase"] == "awaiting_action":
+        if state["current_content_type"] != "dare" or state["performance_started_at"]:
+            return error("Сейчас фант уже не заменить")
+        db.execute("UPDATE fanty_state SET current_dare_id = ? WHERE room_id = ?", (dare["id"], room["id"]))
+    else:
+        db.execute("UPDATE fanty_state SET forced_dare_id = ? WHERE room_id = ?", (dare["id"], room["id"]))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @fanty_bp.route("/rooms/<code>/end", methods=["POST"])
 def end_room(code):
     db = get_db()
@@ -511,6 +573,10 @@ def _build_state(db, room, player):
         "nextSpinnerId": fstate["next_spinner_id"],
         "canSpin": fstate["phase"] == "ready_to_spin" and fg.can_spin(room, fstate, player),
     }
+
+    if player["is_host"] and fstate["forced_dare_id"]:
+        forced = db.execute("SELECT text FROM fanty_dares WHERE id = ?", (fstate["forced_dare_id"],)).fetchone()
+        fanty["forcedDareText"] = forced["text"] if forced else None
 
     if fstate["phase"] in ("awaiting_choice", "awaiting_partner_spin", "awaiting_action"):
         fanty["pickedPlayerId"] = fstate["current_picked_id"]

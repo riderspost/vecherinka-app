@@ -76,6 +76,8 @@ def init_db():
     _ensure_column(db, "fanty_state", "recording_filename", "recording_filename TEXT")
     _ensure_column(db, "fanty_state", "recording_failed", "recording_failed INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "fanty_rounds", "recording_filename", "recording_filename TEXT")
+    # Temporary testing aid: the host picks which dare comes up next.
+    _ensure_column(db, "fanty_state", "forced_dare_id", "forced_dare_id INTEGER")
     _ensure_column(
         db, "fanty_dares", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL"
     )
