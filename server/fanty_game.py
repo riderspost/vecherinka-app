@@ -305,10 +305,14 @@ def remove_player(db, room, player_id):
 
         settings = get_settings(db, room["id"])
         remaining = [p for p in get_active_players(db, room["id"]) if p["id"] != player_id]
-        if len(remaining) < min_players_for(settings["game_mode"]):
-            return False, f"Останется слишком мало игроков (минимум {min_players_for(settings['game_mode'])})"
-        if gender_required(settings) and not has_both_genders(remaining):
-            return False, "Нужны игроки обоих полов для этого режима"
+        # Before the start nothing depends on who is in yet (the start button
+        # itself waits for enough players), so a player can always be taken
+        # out; once the game runs it must keep its minimum.
+        if room["status"] != "lobby":
+            if len(remaining) < min_players_for(settings["game_mode"]):
+                return False, f"Останется слишком мало игроков (минимум {min_players_for(settings['game_mode'])})"
+            if gender_required(settings) and not has_both_genders(remaining):
+                return False, "Нужны игроки обоих полов для этого режима"
 
         db.execute(
             "UPDATE players SET left_at = ? WHERE id = ?",

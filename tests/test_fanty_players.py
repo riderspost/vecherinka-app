@@ -182,3 +182,25 @@ def test_remote_join_allowed_mid_game_for_fanty(client):
 
     state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
     assert any(p["name"] == "Carol" for p in state["players"])
+
+
+def test_in_the_lobby_a_player_can_be_removed_even_down_to_the_host_alone(client):
+    resp = create_fanty_room(client, game_mode="solo")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶").get_json()
+
+    resp = client.delete(f"/api/fanty/rooms/{code}/players/{bob['playerId']}?token={host_token}")
+    assert resp.status_code == 200
+    state = client.get(f"/api/fanty/rooms/{code}/state?token={host_token}").get_json()
+    assert [p["name"] for p in state["players"] if not p["isDisplay"]] == [state["me"]["name"]]
+
+
+def test_in_the_lobby_removing_the_only_woman_is_fine_before_the_start(client):
+    resp = create_fanty_room(client, game_mode="team", pair_mode="mixed", gender="m")
+    body = resp.get_json()
+    code, host_token = body["code"], body["token"]
+    bob = join_fanty(client, code, "Bob", "🐶", gender="f").get_json()
+    join_fanty(client, code, "Carol", "🦊", gender="m")
+    resp = client.delete(f"/api/fanty/rooms/{code}/players/{bob['playerId']}?token={host_token}")
+    assert resp.status_code == 200

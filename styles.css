@@ -5040,3 +5040,95 @@ h2, h3 {
   border: 1.5px dashed var(--hub-cyan);
   color: var(--hub-cyan);
 }
+
+/* ---------- Gender mark next to a player ---------- */
+
+.gender-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.gender-badge.male {
+  background: rgba(79, 139, 255, 0.2);
+  color: #7fa8ff;
+}
+
+.gender-badge.female {
+  background: rgba(255, 93, 162, 0.2);
+  color: #ff8abd;
+}
+
+.wz-seat .gender-badge {
+  margin-left: auto;
+}
+
+.wz-seat .gender-badge + .wz-seat-tag,
+.wz-seat .gender-badge + .wz-seat-kick {
+  margin-left: 8px;
+}
+
+.seat-avatar {
+  position: relative;
+}
+
+.gender-badge.on-avatar {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: calc(18px * var(--seat-scale, 1));
+  height: calc(18px * var(--seat-scale, 1));
+  font-size: calc(12px * var(--seat-scale, 1));
+  border: 2px solid var(--hub-bg, #15112e);
+}
+
+.gender-badge.on-avatar.male {
+  background: #4f8bff;
+  color: #fff;
+}
+
+.gender-badge.on-avatar.female {
+  background: #ff5da2;
+  color: #fff;
+}
+
+/* the submit button of a sheet stays in view */
+.sheet-footer {
+  position: sticky;
+  bottom: -1px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -18px -20px;
+  padding: 12px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(21, 17, 46, 0) 0, #15112e 24%);
+}
+
+.sheet-footer .wz-cta {
+  box-shadow: 0 10px 24px -10px rgba(255, 93, 162, 0.7);
+}
+
+.sheet-footer .error-msg:empty {
+  display: none;
+}
+
+/* the palette for sheets, which live outside the pages that define it */
+.sheet-overlay,
+.players-panel-bg,
+.inst-bg {
+  --hub-bg: #15112e;
+  --hub-surface: #221b45;
+  --hub-line: #352d63;
+  --hub-text: #f6f2ff;
+  --hub-dim: #b3a9de;
+  --hub-pink: #ff5da2;
+  --hub-orange: #ff9a3c;
+  --hub-cyan: #36d1dc;
+  --hub-live: #5dffa7;
+}

@@ -386,6 +386,7 @@ export function mountFantyRoomPage(container, code, opts) {
       const wrap = persistentWrap;
 
       const ctrl = {
+        showGender: state.settings.gameMode === "team" && state.settings.pairMode === "mixed",
         setAnimating: (v) => (animating = v),
         rerender: (s) => render(s, token),
         getLastAngle: () => lastBottleAngle,
@@ -441,7 +442,13 @@ export function mountFantyRoomPage(container, code, opts) {
   }
 }
 
-function playersList(players, onRemove, removeBlockedReason) {
+// ♂ / ♀ next to a player in the games where the pair is a man and a woman.
+function genderBadgeHtml(gender) {
+  if (gender !== "m" && gender !== "f") return "";
+  return `<span class="gender-badge ${gender === "m" ? "male" : "female"}" title="${gender === "m" ? "Мужчина" : "Женщина"}">${gender === "m" ? "♂" : "♀"}</span>`;
+}
+
+function playersList(players, onRemove, removeBlockedReason, showGender) {
   const list = document.createElement("div");
   list.className = "wz-seats";
   players.forEach((p) => {
@@ -449,7 +456,7 @@ function playersList(players, onRemove, removeBlockedReason) {
     item.className = "wz-seat";
     item.innerHTML = `<span class="wz-seat-avatar">${avatarHtml(p)}</span><span class="wz-seat-who"><span class="wz-seat-name">${escapeHtml(
       p.name
-    )}</span></span>${p.isHost ? '<span class="wz-seat-tag">хост</span>' : ""}`;
+    )}</span></span>${genderBadgeHtml(showGender ? p.gender : null)}${p.isHost ? '<span class="wz-seat-tag">хост</span>' : ""}`;
     if (onRemove && !p.isHost) {
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -506,7 +513,7 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
   const addBtn = document.createElement("button");
   addBtn.type = "button";
   addBtn.className = "wz-cta";
-  addBtn.textContent = "Добавить игрока";
+  addBtn.innerHTML = `<span aria-hidden="true">＋</span> Добавить игрока`;
 
   async function submit() {
     const name = nameInput.value.trim();
@@ -539,11 +546,16 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
   nameInput.addEventListener("keydown", (e) => e.key === "Enter" && submit());
   genderField.addEventListener("click", () => (addErr.textContent = ""));
 
+  // the button stays in view however long the avatar picker makes the sheet
+  const footer = document.createElement("div");
+  footer.className = "sheet-footer";
+  footer.appendChild(addErr);
+  footer.appendChild(addBtn);
+
   form.appendChild(nameField);
   form.appendChild(avatarField);
   if (needsGender) form.appendChild(genderField);
-  form.appendChild(addErr);
-  form.appendChild(addBtn);
+  form.appendChild(footer);
   return form;
 }
 
@@ -603,9 +615,8 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
         }
       }
     : null;
-  // the game's minimum holds in the lobby too: nobody can be removed below it
-  const blocked = players.length <= state.minPlayers ? `Нужно минимум ${state.minPlayers} игрока` : "";
-  const seatsEl = playersList(players, removeFromLobby, blocked);
+  const showGender = needsGender;
+  const seatsEl = playersList(players, removeFromLobby, "", showGender);
   if (isLocalHost) {
     const addSeat = document.createElement("button");
     addSeat.type = "button";
@@ -769,6 +780,12 @@ function renderBottleCircle(players, fanty, ctrl) {
     const avatarWrap = document.createElement("div");
     avatarWrap.className = "seat-avatar";
     avatarWrap.appendChild(createAvatarElement(p));
+    if (ctrl.showGender && (p.gender === "m" || p.gender === "f")) {
+      const badge = document.createElement("span");
+      badge.className = `gender-badge on-avatar ${p.gender === "m" ? "male" : "female"}`;
+      badge.textContent = p.gender === "m" ? "♂" : "♀";
+      avatarWrap.appendChild(badge);
+    }
 
     const nameEl = document.createElement("span");
     nameEl.innerHTML = truncatedNameHtml(p.name);
@@ -1034,21 +1051,30 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
             alert(e.message);
             removeBtn.disabled = false;
           }
-        })
+        }, "", state.settings.gameMode === "team" && state.settings.pairMode === "mixed")
       );
 
       if (state.room.deviceMode === "local") {
-        const label = document.createElement("p");
-        label.className = "tagline";
-        label.textContent = "Добавить игрока за этим устройством:";
-        manageCard.appendChild(label);
-
         const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
-        const addCard = await buildAddPlayerForm(code, token, needsGender, async () => {
-          const fresh = await fantyApi.getState(code, token);
-          ctrl.rerender(fresh);
-        });
-        manageCard.appendChild(addCard);
+        const addSeat = document.createElement("button");
+        addSeat.type = "button";
+        addSeat.className = "wz-seat add";
+        addSeat.innerHTML = `<span class="wz-seat-avatar" aria-hidden="true">＋</span><span class="wz-seat-name">Добавить игрока</span>`;
+        addSeat.addEventListener("click", () =>
+          openBottomSheet({
+            title: "Новый игрок",
+            build: async (content, close) => {
+              const form = await buildAddPlayerForm(code, token, needsGender, async () => {
+                close();
+                const fresh = await fantyApi.getState(code, token);
+                ctrl.rerender(fresh);
+              });
+              content.appendChild(form);
+              form.querySelector("input.text-input")?.focus();
+            },
+          })
+        );
+        manageCard.appendChild(addSeat);
       } else {
         const shareUrl = `${window.location.origin}/fanty/r/${code}`;
         const copyBtn = document.createElement("button");
