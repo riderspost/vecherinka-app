@@ -95,6 +95,18 @@ export const fantyApi = {
     form.append("file", file);
     return request("POST", `/api/fanty/rooms/${code}/upload-photo`, form);
   },
+  uploadRecording: (code, token, blob) => {
+    const form = new FormData();
+    form.append("token", token);
+    form.append("file", blob, "recording.wav");
+    return request("POST", `/api/fanty/rooms/${code}/upload-recording`, form);
+  },
+  recordingFailed: (code, token) => {
+    const form = new FormData();
+    form.append("token", token);
+    form.append("failed", "1");
+    return request("POST", `/api/fanty/rooms/${code}/upload-recording`, form);
+  },
   end: (code, token) => request("POST", `/api/fanty/rooms/${code}/end`, { token }),
   discard: (code, token) => request("POST", `/api/fanty/rooms/${code}/discard`, { token }),
   likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),

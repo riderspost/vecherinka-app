@@ -247,6 +247,10 @@ async function renderDashboard() {
             <div class="row">
               <label><input type="checkbox" id="dare-has-timer" /> Таймер</label>
             </div>
+            <div class="row" id="dare-recording-row" style="display:none">
+              <label><input type="checkbox" id="dare-has-recording" /> 🎙 Записывать голос на время таймера</label>
+              <span class="hint">(например, зачитать реп: запись включается сама, потом её можно переслушать и отправить)</span>
+            </div>
             <div class="row" id="dare-timer-seconds-row" style="display:none">
               <label>Секунд: <input type="number" id="dare-timer-seconds" value="60" min="5" max="600" style="width:70px" /></label>
               <span class="hint" id="dare-timer-music-hint"></span>
@@ -520,7 +524,13 @@ async function renderDashboard() {
   const musicRangeLabel = document.getElementById("dare-music-range-label");
   const musicPlayBtn = document.getElementById("dare-music-play-btn");
 
+  const hasRecordingCheckbox = document.getElementById("dare-has-recording");
+  const recordingRow = document.getElementById("dare-recording-row");
+
   function updateTimerSecondsVisibility() {
+    // Recording runs on the timer, so it is offered only with one.
+    recordingRow.style.display = hasTimerCheckbox.checked ? "" : "none";
+    if (!hasTimerCheckbox.checked) hasRecordingCheckbox.checked = false;
     const show = hasTimerCheckbox.checked || Boolean(uploadedAudioFilename);
     timerSecondsRow.style.display = show ? "" : "none";
     timerMusicHint.textContent =
@@ -738,6 +748,7 @@ async function renderDashboard() {
     });
 
     hasTimerCheckbox.checked = dare.hasTimer;
+    hasRecordingCheckbox.checked = Boolean(dare.hasRecording);
     document.getElementById("dare-timer-seconds").value = dare.timerSeconds || 60;
 
     uploadedAudioFilename = dare.musicUrl ? dare.musicUrl.split("/").pop() : null;
@@ -788,6 +799,7 @@ async function renderDashboard() {
       musicStartSeconds: uploadedAudioFilename ? musicStartSeconds : 0,
       hasTimer,
       timerSeconds,
+      hasRecording: hasTimer && hasRecordingCheckbox.checked,
     };
     try {
       if (editingDareId) {
@@ -962,6 +974,7 @@ function pendingTagsHtml(item) {
   if (item.kind === "team" && item.mixedPair) parts.push('<span class="tag-pill tag-mixed">М+Ж</span>');
   if (item.musicUrl) parts.push('<span class="tag-pill tag-music">🎵 музыка</span>');
   if (item.hasTimer) parts.push(`<span class="tag-pill tag-timer">⏱ ${item.timerSeconds}с</span>`);
+  if (item.hasRecording) parts.push('<span class="tag-pill tag-timer">🎙 запись</span>');
   (item.locations || []).forEach((l) => {
     parts.push(`<span class="tag-pill tag-location">${escapeHtml(labelFor(LOCATIONS, l))}</span>`);
   });
@@ -1256,7 +1269,11 @@ function refreshDaresTable() {
       label: "Атрибуты",
       render: (d) => pillsHtml(d.categories.filter((c) => ATTRIBUTES.some((a) => a.value === c)), ATTRIBUTES, "tag-attribute"),
     },
-    { label: "Таймер", render: (d) => (d.hasTimer ? `⏱ ${d.timerSeconds}с` : `<span class="hint">—</span>`) },
+    {
+      label: "Таймер",
+      render: (d) =>
+        d.hasTimer ? `⏱ ${d.timerSeconds}с${d.hasRecording ? " 🎙" : ""}` : `<span class="hint">—</span>`,
+    },
     {
       label: "Музыка",
       render: (d) => (d.musicUrl ? `🎵` : `<span class="hint">—</span>`),

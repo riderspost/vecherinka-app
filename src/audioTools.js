@@ -14,6 +14,9 @@ export const MAX_RECORD_SECONDS = 12;
 export const MAX_CHUNK_SECONDS = 6;
 const MIN_RECORD_SECONDS = 0.4;
 const TARGET_RATE = 16000;
+// A recording that is kept as it was said (a rap, say) is not trimmed and
+// gets a little more room than the speech-only clips of "Наоборот".
+const KEEP_RATE = 22050;
 const TRIM_PADDING_SECONDS = 0.12;
 const MIN_PEAK = 0.01;
 
@@ -141,11 +144,32 @@ function encodeWav(samples, rate) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-async function recordedBlobToWav(blob) {
+// Quiet voices are brought up a little; loud ones are left alone.
+function liftQuietVoice(samples) {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.abs(samples[i]);
+    if (v > peak) peak = v;
+  }
+  if (peak < MIN_PEAK) throw new RecordingError("silent");
+  const gain = Math.min(3, Math.max(1, 0.7 / peak));
+  if (gain === 1) return samples;
+  const out = new Float32Array(samples.length);
+  for (let i = 0; i < out.length; i++) out[i] = Math.max(-1, Math.min(1, samples[i] * gain));
+  return out;
+}
+
+async function recordedBlobToWav(blob, keepWhole) {
   const Ctx = audioContextClass();
   const ctx = new Ctx();
   try {
     const decoded = await decodeAudio(ctx, await blob.arrayBuffer());
+    if (keepWhole) {
+      const whole = liftQuietVoice(resample(toMono(decoded), decoded.sampleRate, KEEP_RATE));
+      const seconds = whole.length / KEEP_RATE;
+      if (seconds < MIN_RECORD_SECONDS) throw new RecordingError("short");
+      return { blob: encodeWav(whole, KEEP_RATE), durationSec: seconds };
+    }
     const mono = resample(toMono(decoded), decoded.sampleRate, TARGET_RATE);
     const trimmed = trimAndNormalize(mono, TARGET_RATE);
     const durationSec = trimmed.length / TARGET_RATE;
@@ -161,7 +185,10 @@ async function recordedBlobToWav(blob) {
 // { result, stop, cancel }: `result` resolves with { blob, durationSec } (a
 // ready-to-upload WAV) once recording ends — via stop(), or on its own after
 // maxSeconds. onLevel(0..1) and onTick(elapsedSeconds) drive the UI.
-export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel, onTick } = {}) {
+// keepWhole: keep everything as it was said (no trimming of the silence at
+// the ends), at a slightly higher quality — for recordings people will play
+// back and send on, not for the game's own speech clips.
+export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel, onTick, keepWhole = false } = {}) {
   if (!isRecordingSupported()) throw new RecordingError("unsupported");
 
   let stream;
@@ -237,7 +264,7 @@ export async function startRecording({ maxSeconds = MAX_RECORD_SECONDS, onLevel,
     if (cancelled) return;
     try {
       const type = recorder.mimeType || mimeType || "audio/webm";
-      resolveResult(await recordedBlobToWav(new Blob(chunks, { type })));
+      resolveResult(await recordedBlobToWav(new Blob(chunks, { type }), keepWhole));
     } catch (e) {
       rejectResult(e instanceof RecordingError ? e : new RecordingError("failed"));
     }

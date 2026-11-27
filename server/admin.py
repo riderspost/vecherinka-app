@@ -439,7 +439,7 @@ def admin_list_dares():
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair, d.likes,
                   d.music_filename, d.music_original_name, d.music_start_seconds,
-                  d.has_timer, d.timer_seconds,
+                  d.has_timer, d.timer_seconds, d.has_recording,
                   COALESCE(u.email, 'admin') AS created_by,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS uses
            FROM fanty_dares d LEFT JOIN users u ON u.id = d.created_by_user_id
@@ -472,6 +472,7 @@ def admin_list_dares():
                 "musicStartSeconds": r["music_start_seconds"],
                 "hasTimer": bool(r["has_timer"]),
                 "timerSeconds": r["timer_seconds"],
+                "hasRecording": bool(r["has_recording"]) and bool(r["has_timer"]),
                 "createdBy": r["created_by"],
             }
         )
@@ -516,6 +517,8 @@ def _parse_dare_payload(data):
         music_original_name = None
 
     has_timer = bool(data.get("hasTimer"))
+    # Recording starts and stops on the timer, so it only makes sense with one.
+    has_recording = has_timer and bool(data.get("hasRecording"))
 
     # Also doubles as the music-clip length (see music_start_seconds), so
     # it's parsed whenever it's given, not just when the on-screen timer
@@ -544,6 +547,7 @@ def _parse_dare_payload(data):
         "music_start_seconds": music_start_seconds,
         "has_timer": int(has_timer),
         "timer_seconds": timer_seconds,
+        "has_recording": int(has_recording),
     }
     return fields, categories, locations, None
 
@@ -563,6 +567,7 @@ def _dare_json(dare_id, fields, status, uses, categories, locations):
         "musicStartSeconds": fields["music_start_seconds"],
         "hasTimer": bool(fields["has_timer"]),
         "timerSeconds": fields["timer_seconds"],
+        "hasRecording": bool(fields["has_recording"]),
     }
 
 
@@ -579,8 +584,8 @@ def admin_add_dare():
         return jsonify({"error": "Такой фант уже есть"}), 400
     cur = db.execute(
         """INSERT INTO fanty_dares (text, kind, status, mixed_pair, music_filename,
-           music_original_name, music_start_seconds, has_timer, timer_seconds)
-           VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)""",
+           music_original_name, music_start_seconds, has_timer, timer_seconds, has_recording)
+           VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)""",
         (
             fields["text"],
             fields["kind"],
@@ -590,6 +595,7 @@ def admin_add_dare():
             fields["music_start_seconds"],
             fields["has_timer"],
             fields["timer_seconds"],
+            fields["has_recording"],
         ),
     )
     dare_id = cur.lastrowid
@@ -628,7 +634,8 @@ def admin_edit_dare(dare_id):
 
     db.execute(
         """UPDATE fanty_dares SET text=?, kind=?, mixed_pair=?, music_filename=?,
-           music_original_name=?, music_start_seconds=?, has_timer=?, timer_seconds=?
+           music_original_name=?, music_start_seconds=?, has_timer=?, timer_seconds=?,
+           has_recording=?
            WHERE id=?""",
         (
             fields["text"],
@@ -639,6 +646,7 @@ def admin_edit_dare(dare_id):
             fields["music_start_seconds"],
             fields["has_timer"],
             fields["timer_seconds"],
+            fields["has_recording"],
             dare_id,
         ),
     )

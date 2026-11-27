@@ -12,6 +12,7 @@ from .rooms_common import (
     RoomError,
     UPLOAD_DIR,
     ALLOWED_IMAGE_EXT,
+    ALLOWED_AUDIO_EXT,
     clean_str,
     get_room_or_404,
     get_player_or_404,
@@ -297,6 +298,71 @@ def upload_photo(code):
     return jsonify({"filename": filename})
 
 
+MAX_RECORDING_BYTES = 12 * 1024 * 1024
+
+
+def _remove_upload(filename):
+    if not filename:
+        return
+    try:
+        os.remove(os.path.join(UPLOAD_DIR, secure_filename(filename)))
+    except OSError:
+        pass
+
+
+@fanty_bp.route("/rooms/<code>/upload-recording", methods=["POST"])
+def upload_recording(code):
+    # The voice recording of a timed dare. Made on the device of whoever acts
+    # out the dare (the performer, or the host on a shared phone) and kept on
+    # the room's state until the host resolves the round, which moves it to
+    # the round. A form field `failed=1` instead of a file tells everyone the
+    # microphone did not work, so the host is not left waiting for it.
+    db = get_db()
+    room = _room_or_404(db, code)
+    if not room:
+        return error("Комната не найдена", 404)
+    player = get_player_or_404(db, room["id"], request.form.get("token"))
+    if not player:
+        return error("Игрок не найден", 404)
+    state = fg.get_state(db, room["id"])
+    if room["status"] != "playing" or state["phase"] != "awaiting_action" or not state["performance_started_at"]:
+        return error("Сейчас нечего записывать")
+    if not fg.can_act_as_picked(room, state, player):
+        return error("Записывать может только тот, кто выполняет фант")
+    dare = None
+    if state["current_content_type"] == "dare":
+        dare = db.execute(
+            "SELECT has_timer, has_recording FROM fanty_dares WHERE id = ?", (state["current_dare_id"],)
+        ).fetchone()
+    if not dare or not dare["has_timer"] or not dare["has_recording"]:
+        return error("У этого фанта нет записи")
+
+    if request.form.get("failed"):
+        db.execute("UPDATE fanty_state SET recording_failed = 1 WHERE room_id = ?", (room["id"],))
+        db.commit()
+        return jsonify({"ok": True})
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return error("Файл не передан")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_AUDIO_EXT:
+        return error("Недопустимый формат файла")
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    dest = os.path.join(UPLOAD_DIR, secure_filename(filename))
+    file.save(dest)
+    if os.path.getsize(dest) > MAX_RECORDING_BYTES:
+        _remove_upload(filename)
+        return error("Запись слишком большая")
+    _remove_upload(state["recording_filename"])
+    db.execute(
+        "UPDATE fanty_state SET recording_filename = ?, recording_failed = 0 WHERE room_id = ?",
+        (filename, room["id"]),
+    )
+    db.commit()
+    return jsonify({"filename": filename})
+
+
 @fanty_bp.route("/rooms/<code>/end", methods=["POST"])
 def end_room(code):
     db = get_db()
@@ -396,6 +462,7 @@ def _build_summary(db, room):
                 "text": text,
                 "counted": bool(r["counted"]),
                 "photos": [f"/uploads/{p['filename']}" for p in photos],
+                "recording": f"/uploads/{r['recording_filename']}" if r["recording_filename"] else None,
             }
         )
     return result
@@ -458,7 +525,7 @@ def _build_state(db, room, player):
         text = None
         if fstate["current_content_type"] == "dare":
             row = db.execute(
-                "SELECT text, music_filename, music_start_seconds, has_timer, timer_seconds "
+                "SELECT text, music_filename, music_start_seconds, has_timer, timer_seconds, has_recording "
                 "FROM fanty_dares WHERE id = ?",
                 (fstate["current_dare_id"],),
             ).fetchone()
@@ -474,6 +541,11 @@ def _build_state(db, room, player):
             fanty["hasTimer"] = bool(row["has_timer"]) if row else False
             fanty["timerSeconds"] = row["timer_seconds"] if row else None
             fanty["performanceStartedAt"] = fstate["performance_started_at"]
+            fanty["hasRecording"] = bool(row and row["has_timer"] and row["has_recording"])
+            fanty["recordingUrl"] = (
+                f"/uploads/{fstate['recording_filename']}" if fstate["recording_filename"] else None
+            )
+            fanty["recordingFailed"] = bool(fstate["recording_failed"])
             # Lets the client correct for its own clock being off from the
             # server's — the countdown compares performanceStartedAt against
             # the client's Date.now(), so any skew there directly throws off

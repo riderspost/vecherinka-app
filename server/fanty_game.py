@@ -333,7 +333,7 @@ def remove_player(db, room, player_id):
                 """UPDATE fanty_state SET phase='ready_to_spin', next_spinner_id=?,
                    current_picked_id=NULL, current_partner_id=NULL, current_choice=NULL,
                    current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL,
-                   performance_started_at=NULL
+                   performance_started_at=NULL, recording_filename=NULL, recording_failed=0
                    WHERE room_id=?""",
                 (fallback_spinner, room["id"]),
             )
@@ -357,8 +357,8 @@ def resolve_round(db, room, counted, photo_filenames):
         db.execute(
             """INSERT INTO fanty_rounds
                (id, room_id, round_number, picked_player_id, partner_player_id, choice,
-                content_type, dare_id, truth_id, counted)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                content_type, dare_id, truth_id, counted, recording_filename)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 round_id,
                 room["id"],
@@ -370,6 +370,7 @@ def resolve_round(db, room, counted, photo_filenames):
                 state["current_dare_id"],
                 state["current_truth_id"],
                 int(counted),
+                state["recording_filename"],
             ),
         )
         for idx, filename in enumerate(photo_filenames[:MAX_PHOTOS]):
@@ -383,7 +384,7 @@ def resolve_round(db, room, counted, photo_filenames):
             """UPDATE fanty_state SET phase='ready_to_spin', next_spinner_id=?,
                current_picked_id=NULL, current_partner_id=NULL, current_choice=NULL,
                current_content_type=NULL, current_dare_id=NULL, current_truth_id=NULL,
-               performance_started_at=NULL
+               performance_started_at=NULL, recording_filename=NULL, recording_failed=0
                WHERE room_id=?""",
             (next_spinner, room["id"]),
         )

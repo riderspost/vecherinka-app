@@ -129,6 +129,18 @@ def delete_room_and_files(db, room):
             base, ext = os.path.splitext(filename)
             filenames.append(filename)
             filenames.append(f"{base}_thumb{ext}")
+        # voice recordings of timed dares: finished rounds, plus the clip
+        # still waiting for the host's verdict on the round in progress
+        for row in db.execute(
+            "SELECT recording_filename FROM fanty_rounds WHERE room_id = ? AND recording_filename IS NOT NULL",
+            (room["id"],),
+        ).fetchall():
+            filenames.append(row["recording_filename"])
+        pending = db.execute(
+            "SELECT recording_filename FROM fanty_state WHERE room_id = ?", (room["id"],)
+        ).fetchone()
+        if pending and pending["recording_filename"]:
+            filenames.append(pending["recording_filename"])
     elif room["game_type"] == "reverse":
         audio_rows = db.execute(
             "SELECT original_file, reversed_file, imitation_file, imitation_back_file "

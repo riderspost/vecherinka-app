@@ -115,7 +115,8 @@ CREATE TABLE IF NOT EXISTS fanty_dares (
   mixed_pair INTEGER NOT NULL DEFAULT 0,
   music_filename TEXT,
   has_timer INTEGER NOT NULL DEFAULT 0,
-  timer_seconds INTEGER NOT NULL DEFAULT 60
+  timer_seconds INTEGER NOT NULL DEFAULT 60,
+  has_recording INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS fanty_dare_locations (
@@ -165,7 +166,9 @@ CREATE TABLE IF NOT EXISTS fanty_state (
   current_truth_id INTEGER REFERENCES fanty_truths(id),
   round_number INTEGER NOT NULL DEFAULT 0,
   picked_cycle TEXT NOT NULL DEFAULT '[]',
-  performance_started_at TEXT
+  performance_started_at TEXT,
+  recording_filename TEXT,
+  recording_failed INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS fanty_rounds (
@@ -179,7 +182,8 @@ CREATE TABLE IF NOT EXISTS fanty_rounds (
   dare_id INTEGER REFERENCES fanty_dares(id),
   truth_id INTEGER REFERENCES fanty_truths(id),
   counted INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  recording_filename TEXT
 );
 
 CREATE TABLE IF NOT EXISTS fanty_round_photos (

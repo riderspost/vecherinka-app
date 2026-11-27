@@ -5207,3 +5207,29 @@ h2, h3 {
 }
 .tv-sound-btn.on { opacity: .55; }
 .tv-sound-btn:hover { opacity: 1; }
+
+/* Voice recording of a timed dare */
+.rec-block { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 6px 0; }
+.rec-banner {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 10px 18px; border-radius: 999px;
+  background: rgba(255, 59, 82, .16); border: 1px solid rgba(255, 59, 82, .55);
+  color: #ffd9de; font-weight: 700; letter-spacing: .02em;
+}
+.rec-dot {
+  width: 12px; height: 12px; border-radius: 50%; background: #ff3b52;
+  box-shadow: 0 0 0 0 rgba(255, 59, 82, .7); animation: rec-pulse 1.2s ease-out infinite;
+}
+@keyframes rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 59, 82, .7); }
+  100% { box-shadow: 0 0 0 14px rgba(255, 59, 82, 0); }
+}
+.rec-player {
+  display: flex; flex-direction: column; gap: 10px; width: 100%; box-sizing: border-box;
+  padding: 12px 14px; border-radius: 16px;
+  background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12);
+}
+.rec-player-title { font-size: 14px; font-weight: 700; opacity: .85; }
+.rec-player-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.rec-player-row .btn { flex: 1 1 auto; min-width: 0; padding: 10px 12px; font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }

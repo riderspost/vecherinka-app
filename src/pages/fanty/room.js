@@ -10,10 +10,14 @@ import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { openBottomSheet } from "../../swipeSheet.js";
 import { enableSound, isSoundOn, playSpin, playChime, playBuzzer } from "./tvSound.js";
+import { startRecording, recordingErrorMessage } from "../../audioTools.js";
+import { createRecordingPlayer } from "../../recordingPlayer.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
 const MUSIC_FADE_MS = 2000;
+// After the timer ends the host waits this long at most for the recording.
+const RECORDING_GRACE_MS = 20000;
 
 const BOTTLE_IMG = `<img src="/src/assets/bottle.png" alt="" class="bottle-img" draggable="false" />`;
 
@@ -97,6 +101,8 @@ export function mountFantyRoomPage(container, code, opts) {
   let closeArmedUntil = 0;
   let lastState = null;
   let prevFantyPick = null;
+  let photosByRound = null; // photos being added to the round in progress
+  let recording = null; // the voice recording of the dare being performed here
   let redrawTopBar = null; // set once the bar exists (it is defined while polling)
   let persistentCircleWrap = null;
   let persistentPage = null;
@@ -246,7 +252,10 @@ export function mountFantyRoomPage(container, code, opts) {
       if (!animating) {
         try {
           const state = await fantyApi.getState(code, token);
-          const signature = JSON.stringify(state);
+          // serverNow changes on every request; it only corrects the clock, so
+          // it must not make every poll look like a new state (that rebuilt the
+          // whole panel each time and wiped the photos being added).
+          const signature = JSON.stringify(state, (key, value) => (key === "serverNow" ? undefined : value));
           if (signature !== lastSignature) {
             lastSignature = signature;
             render(state, token);
@@ -447,6 +456,13 @@ export function mountFantyRoomPage(container, code, opts) {
         currentAudio.pause();
         currentAudio = null;
       }
+      if (
+        recording &&
+        (!state.fanty || state.fanty.phase !== "awaiting_action" || state.fanty.roundNumber !== recording.round)
+      ) {
+        if (recording.rec) recording.rec.cancel();
+        recording = null;
+      }
       // Rebuilding `page`/`wrap` from scratch on every poll-detected change
       // meant the bottle circle (seats, avatars, bottle) got detached and
       // reattached every single time too, even once its own contents were
@@ -518,6 +534,52 @@ export function mountFantyRoomPage(container, code, opts) {
           return Boolean(wasWaiting && changed);
         },
         getAudio: () => currentAudio,
+        getPhotosState: (round) => {
+          if (!photosByRound || photosByRound.round !== round) photosByRound = { round, files: [], pendingCount: 0 };
+          return photosByRound;
+        },
+        getRecording: (round) => (recording && recording.round === round ? recording : null),
+        // Turns the microphone on (called from the "Поехали!" tap). Resolves
+        // to the recording object; its status says whether it worked.
+        beginRecording: async (round, seconds) => {
+          const mine = { round, rec: null, status: "starting", error: "" };
+          recording = mine;
+          try {
+            mine.rec = await startRecording({ maxSeconds: Math.min(seconds, 180) + 0.5, keepWhole: true });
+            mine.status = "recording";
+          } catch (e) {
+            mine.status = "failed";
+            mine.error = recordingErrorMessage(e);
+          }
+          return mine;
+        },
+        // Once the performance has started: send the clip to the server when
+        // the recording ends on its own, or tell the others it will not come.
+        watchRecording: (mine) => {
+          const refresh = async () => {
+            try {
+              render(await fantyApi.getState(code, token), token);
+            } catch (e) {}
+          };
+          if (mine.status === "failed") {
+            fantyApi.recordingFailed(code, token).catch(() => {});
+            return;
+          }
+          mine.rec.result
+            .then(async ({ blob }) => {
+              mine.status = "saving";
+              if (recording === mine) render(lastState, token);
+              await fantyApi.uploadRecording(code, token, blob);
+              mine.status = "done";
+              if (recording === mine) await refresh();
+            })
+            .catch(async (e) => {
+              mine.status = "failed";
+              mine.error = e instanceof Error && e.code ? recordingErrorMessage(e) : "Не удалось сохранить запись.";
+              fantyApi.recordingFailed(code, token).catch(() => {});
+              if (recording === mine) render(lastState, token);
+            });
+        },
         showGender: state.settings.gameMode === "team" && state.settings.pairMode === "mixed",
         setAnimating: (v) => (animating = v),
         rerender: (s) => render(s, token),
@@ -1184,6 +1246,39 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   }
 }
 
+// What the recording of a timed dare looks like on screen. update(running) is
+// called on every tick of the timer and only redraws when something changed.
+function createRecordingBlock(fanty, ctrl) {
+  const el = document.createElement("div");
+  el.className = "rec-block";
+  const mine = ctrl ? ctrl.getRecording(fanty.roundNumber) : null;
+  let shown = null;
+
+  function update(running) {
+    const failed = fanty.recordingFailed || (mine && mine.status === "failed");
+    const key = fanty.recordingUrl ? "player" : failed ? "failed" : running ? "rec" : "saving";
+    if (key === shown) return;
+    shown = key;
+    el.innerHTML = "";
+    if (key === "player") {
+      el.appendChild(createRecordingPlayer(fanty.recordingUrl, `plynger-fant-${fanty.roundNumber}.wav`));
+    } else if (key === "rec") {
+      el.innerHTML = `<div class="rec-banner"><span class="rec-dot"></span>Идёт запись</div>`;
+    } else if (key === "failed") {
+      const note = document.createElement("p");
+      note.className = "tagline";
+      note.textContent = (mine && mine.error) || "Запись не получилась.";
+      el.appendChild(note);
+    } else {
+      const note = document.createElement("p");
+      note.className = "tagline";
+      note.textContent = "Сохраняем запись…";
+      el.appendChild(note);
+    }
+  }
+  return { el, update };
+}
+
 function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   const fanty = state.fanty;
   const pickedName = players.find((p) => p.id === fanty.pickedPlayerId)?.name || "?";
@@ -1224,8 +1319,13 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
           audio.play().catch(() => {});
           if (ctrl) ctrl.setAudio(audio);
         }
+        // The microphone goes on first, so the recording and the timer start
+        // together (the first time the phone also asks for permission).
+        const myRecording =
+          fanty.hasRecording && ctrl ? await ctrl.beginRecording(fanty.roundNumber, fanty.timerSeconds) : null;
         try {
           await fantyApi.startPerformance(code, token);
+          if (myRecording) ctrl.watchRecording(myRecording);
           const fresh = await fantyApi.getState(code, token);
           if (ctrl) ctrl.rerender(fresh);
         } catch (e) {
@@ -1249,11 +1349,20 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       timerEl.className = "big-timer";
       panel.appendChild(timerEl);
 
+      // A dare with a recording: while the timer runs everyone sees that
+      // the recording is on; afterwards, the clip to listen to and send on.
+      let recUi = null;
+      if (fanty.hasRecording) {
+        recUi = createRecordingBlock(fanty, ctrl);
+        panel.appendChild(recUi.el);
+      }
+
       const startedAt = clockAdjustedStartedAt(fanty);
       const totalMs = fanty.timerSeconds * 1000;
 
       function tick() {
         const remaining = startedAt + totalMs - Date.now();
+        if (recUi) recUi.update(remaining > 0);
         if (remaining <= 0) {
           if (!timerEl.classList.contains("big-timer-stop") && state.me.isDisplay) playBuzzer();
           timerEl.textContent = "Стооооп!";
@@ -1287,7 +1396,9 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
   }
 
   if (fanty.canResolve) {
-    const photosState = { files: [], pendingCount: 0 };
+    // Kept outside the panel: the panel is rebuilt whenever the room's state
+    // changes, and the photos already added must survive that.
+    const photosState = ctrl ? ctrl.getPhotosState(fanty.roundNumber) : { files: [], pendingCount: 0 };
 
     if (fanty.contentType === "dare") {
       const MAX_PHOTOS = 5;
@@ -1442,6 +1553,25 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
     notCountedBtn.addEventListener("click", () => resolve(false));
     row.appendChild(countedBtn);
     row.appendChild(notCountedBtn);
+
+    // The recording is still being made or sent: the verdict waits for it
+    // (but not forever — the performer's phone may have lost it).
+    if (fanty.hasRecording && fanty.performanceStartedAt && !fanty.recordingUrl && !fanty.recordingFailed) {
+      const waitMs = clockAdjustedStartedAt(fanty) + fanty.timerSeconds * 1000 + RECORDING_GRACE_MS - Date.now();
+      if (waitMs > 0) {
+        countedBtn.disabled = true;
+        notCountedBtn.disabled = true;
+        const waitNote = document.createElement("p");
+        waitNote.className = "tagline";
+        waitNote.textContent = "Ждём запись выступления…";
+        panel.appendChild(waitNote);
+        setTimeout(() => {
+          countedBtn.disabled = false;
+          notCountedBtn.disabled = false;
+          waitNote.remove();
+        }, waitMs);
+      }
+    }
     panel.appendChild(row);
   } else {
     const msg = document.createElement("p");
@@ -1482,6 +1612,9 @@ function renderFinished(wrap, state, token, code) {
       <p class="round-label">Раунд ${r.roundNumber} · ${who}${choiceLabel} ${r.counted ? "✅" : "❌"}</p>
       <p class="prompt-text" style="font-size:16px">${escapeHtml(r.text || "")}</p>
     `;
+    if (r.recording) {
+      card.appendChild(createRecordingPlayer(r.recording, `plynger-fant-${r.roundNumber}.wav`));
+    }
     if (r.photos && r.photos.length) {
       const photoRow = document.createElement("div");
       photoRow.className = "photo-row";

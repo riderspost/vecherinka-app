@@ -69,6 +69,13 @@ def init_db():
     _ensure_column(db, "fanty_dares", "has_timer", "has_timer INTEGER NOT NULL DEFAULT 0")
     _ensure_column(db, "fanty_dares", "timer_seconds", "timer_seconds INTEGER NOT NULL DEFAULT 60")
     _ensure_column(db, "fanty_state", "performance_started_at", "performance_started_at TEXT")
+    # A dare with a timer can ask for a voice recording of the performance
+    # (reading a rap, say). The clip waits in fanty_state until the host
+    # resolves the round, then moves to the round.
+    _ensure_column(db, "fanty_dares", "has_recording", "has_recording INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_state", "recording_filename", "recording_filename TEXT")
+    _ensure_column(db, "fanty_state", "recording_failed", "recording_failed INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(db, "fanty_rounds", "recording_filename", "recording_filename TEXT")
     _ensure_column(
         db, "fanty_dares", "created_by_user_id", "created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL"
     )
