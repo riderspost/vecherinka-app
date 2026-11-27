@@ -4883,3 +4883,51 @@ h2, h3 {
   transform: translate(-50%, -50%) rotate(40deg);
   font-size: 36px;
 }
+
+/* ---------- Gender: two big buttons ---------- */
+
+.gender-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.gender-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  border: 2px solid var(--hub-line, #352d63);
+  border-radius: 20px;
+  background: var(--hub-surface, #221b45);
+  color: var(--hub-dim, #b3a9de);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.gender-btn em {
+  font-style: normal;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.gender-btn[aria-checked="true"] {
+  transform: translateY(-2px);
+  color: var(--hub-text, #f6f2ff);
+}
+
+.gender-btn.male[aria-checked="true"] {
+  border-color: #4f8bff;
+  background: rgba(79, 139, 255, 0.16);
+  box-shadow: 0 0 0 3px rgba(79, 139, 255, 0.2);
+}
+
+.gender-btn.female[aria-checked="true"] {
+  border-color: var(--hub-pink, #ff5da2);
+  background: rgba(255, 93, 162, 0.14);
+  box-shadow: 0 0 0 3px rgba(255, 93, 162, 0.2);
+}

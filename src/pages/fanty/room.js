@@ -5,7 +5,8 @@ import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avata
 import { escapeHtml, thumbUrl, createFireButton, truncatedNameHtml } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
-import { GAME_MODES, GENDERS, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
+import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
+import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 
 const POLL_MS = 1500;
@@ -53,27 +54,6 @@ function clockAdjustedStartedAt(fanty) {
   if (!fanty.serverNow) return startedAt;
   const skew = new Date(fanty.serverNow).getTime() - Date.now();
   return startedAt - skew;
-}
-
-function genderRadioGroup(defaultValue) {
-  const wrap = document.createElement("div");
-  wrap.className = "radio-group";
-  GENDERS.forEach((opt) => {
-    const label = document.createElement("label");
-    label.className = "radio-option";
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = "gender";
-    input.value = opt.value;
-    if (opt.value === defaultValue) input.checked = true;
-    label.appendChild(input);
-    label.appendChild(document.createTextNode(" " + opt.label));
-    wrap.appendChild(label);
-  });
-  return {
-    element: wrap,
-    getValue: () => wrap.querySelector("input:checked")?.value,
-  };
 }
 
 export function mountFantyRoomPage(container, code, opts) {
@@ -185,7 +165,7 @@ export function mountFantyRoomPage(container, code, opts) {
     const genderField = document.createElement("div");
     genderField.className = "wz-field";
     genderField.innerHTML = `<span>Пол</span>`;
-    const genderGroup = genderRadioGroup(null);
+    const genderGroup = createGenderPicker(null);
     genderField.appendChild(genderGroup.element);
 
     const errorEl = document.createElement("div");
@@ -502,7 +482,7 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
 
   const genderLabel = document.createElement("label");
   genderLabel.textContent = "Пол";
-  const genderGroup = genderRadioGroup(null);
+  const genderGroup = createGenderPicker(null);
 
   const addBtn = document.createElement("button");
   addBtn.className = "btn";

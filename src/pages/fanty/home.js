@@ -3,6 +3,7 @@ import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
+import { createGenderPicker } from "./genderPicker.js";
 import {
   LOCATIONS,
   MOOD_CATEGORIES,
@@ -10,7 +11,6 @@ import {
   GAME_MODES,
   PICK_MODES,
   PAIR_MODES,
-  GENDERS,
   MIN_PLAYERS_BY_MODE,
 } from "./constants.js";
 
@@ -501,7 +501,7 @@ export function renderFantyHome(container) {
       const needsGender = formState.gameMode === "team" && formState.pairMode === "mixed";
       const genderLabel = document.createElement("label");
       genderLabel.textContent = "Ваш пол";
-      const genderGroup = needsGender ? radioGroup("gender", GENDERS, formState.gender) : null;
+      const genderGroup = needsGender ? createGenderPicker(formState.gender) : null;
 
       const errorEl = document.createElement("div");
       errorEl.className = "error-msg";
@@ -511,6 +511,7 @@ export function renderFantyHome(container) {
       if (needsGender) {
         formHost.appendChild(genderLabel);
         formHost.appendChild(genderGroup.element);
+        genderGroup.element.addEventListener("click", () => (errorEl.textContent = ""));
       }
       formHost.appendChild(errorEl);
 
