@@ -82,7 +82,8 @@ function leaderboardEl(players) {
   const list = document.createElement("div");
   list.className = "score-list";
   withRanks(sorted).forEach(({ player: p, rank }) => {
-    const medal = RANK_MEDALS[rank];
+    // nobody has a medal before anybody has a point
+    const medal = p.totalScore > 0 ? RANK_MEDALS[rank] : null;
     const row = document.createElement("div");
     row.className = "score-row" + (medal ? ` score-row-top rank-${rank}` : "");
     row.innerHTML = `<span class="rank">${medal || rank}</span>${avatarHtml(p)}<span>${escapeHtml(
@@ -460,7 +461,7 @@ export function mountReverseRoomPage(container, code) {
     renderLobbyView(wrap, state, token, code, {
       roomPath: `/reverse/r/${code}`,
       gameTitle: "Наоборот",
-      showSteps: false,
+      showSteps: true,
       startGame: () => reverseApi.start(code, token),
       notes,
     });
@@ -490,8 +491,8 @@ export function mountReverseRoomPage(container, code) {
 
     if (state.me.isHost && rv.phase !== "reveal") {
       const skipBtn = document.createElement("button");
-      skipBtn.className = "link-btn danger-text";
-      skipBtn.textContent = "⏭ Пропустить раунд";
+      skipBtn.className = "btn host-ctl";
+      skipBtn.textContent = "Пропустить раунд";
       skipBtn.addEventListener("click", async () => {
         if (!confirm("Пропустить этот раунд без очков?")) return;
         skipBtn.disabled = true;
@@ -507,8 +508,8 @@ export function mountReverseRoomPage(container, code) {
 
     if (state.me.isHost) {
       const endBtn = document.createElement("button");
-      endBtn.className = "link-btn danger-text";
-      endBtn.textContent = "🏁 Завершить игру";
+      endBtn.className = "btn danger host-ctl";
+      endBtn.textContent = "Завершить игру";
       endBtn.addEventListener("click", async () => {
         if (!confirm("Завершить игру и показать итоги?")) return;
         endBtn.disabled = true;
@@ -521,6 +522,31 @@ export function mountReverseRoomPage(container, code) {
       });
       wrap.appendChild(endBtn);
     }
+  }
+
+  // Who does what in this round: the same seats as in the lobby, each with
+  // a tag for the part (and "ты" on one's own seat).
+  function rolesCard(state, rv) {
+    const list = document.createElement("div");
+    list.className = "wz-seats rv-roles";
+    const players = state.players.filter((pl) => !pl.isDisplay);
+    const order = [rv.speakerId, rv.imitatorId].concat(
+      players.map((pl) => pl.id).filter((id) => id !== rv.speakerId && id !== rv.imitatorId)
+    );
+    order.forEach((id) => {
+      const pl = players.find((x) => x.id === id);
+      if (!pl) return;
+      const role = id === rv.speakerId ? "загадывает" : id === rv.imitatorId ? "повторяет" : "угадывает";
+      const item = document.createElement("div");
+      item.className = "wz-seat";
+      item.innerHTML = `<span class="wz-seat-avatar">${avatarHtml(pl)}</span><span class="wz-seat-who"><span class="wz-seat-name">${escapeHtml(
+        pl.name
+      )}</span></span><span class="wz-seat-tag${pl.id === state.me.id ? " me" : ""}">${role}${
+        pl.id === state.me.id ? " · ты" : ""
+      }</span>`;
+      list.appendChild(item);
+    });
+    return list;
   }
 
   // Stands out on purpose: if the group is sitting together and the speaker
@@ -588,6 +614,7 @@ export function mountReverseRoomPage(container, code) {
     }
     wrap.appendChild(heading("🎙 Запись фразы"));
     wrap.appendChild(p("tagline", `${nameOf(state, rv.speakerId)} записывает загаданную фразу…`));
+    wrap.appendChild(rolesCard(state, rv));
     wrap.appendChild(
       secretWarning("<b>🤫 Не подслушивайте!</b><br/>Пока идёт запись, фразу не должен слышать никто, кроме загадывающего.")
     );
@@ -649,6 +676,7 @@ export function mountReverseRoomPage(container, code) {
       p("tagline", `${nameOf(state, rv.imitatorId)} слушает запись задом наперёд и повторяет её по частям…`)
     );
     wrap.appendChild(progressDots(rv.imitationDone, rv.chunkCount));
+    wrap.appendChild(rolesCard(state, rv));
     if (rv.isSpeaker && rv.phrase) {
       wrap.appendChild(p("hint", `Твоя фраза: «${rv.phrase}»`));
     }
@@ -798,7 +826,17 @@ export function mountReverseRoomPage(container, code) {
   // --- finished ---
 
   function renderFinished(wrap, state, token) {
-    wrap.innerHTML = `<h1 class="logo">🏁 Игра окончена!</h1>`;
+    wrap.innerHTML = `<h1 class="logo">🏆 Игра окончена!</h1>`;
+    const ranked = state.players
+      .filter((pl) => !pl.isDisplay)
+      .slice()
+      .sort((a, b) => b.totalScore - a.totalScore);
+    if (ranked.length && ranked[0].totalScore > 0) {
+      const win = document.createElement("div");
+      win.className = "winner-banner";
+      win.innerHTML = `${avatarHtml(ranked[0])}<div>Победитель: <b>${escapeHtml(ranked[0].name)}</b></div>`;
+      wrap.appendChild(win);
+    }
     wrap.appendChild(leaderboardEl(state.players));
 
     (state.summary || []).forEach((r) => {
@@ -814,7 +852,7 @@ export function mountReverseRoomPage(container, code) {
     });
 
     const homeBtn = document.createElement("button");
-    homeBtn.className = "btn btn-primary";
+    homeBtn.className = "wz-cta";
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;

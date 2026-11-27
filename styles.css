@@ -3594,6 +3594,15 @@ h2, h3 {
   background: var(--hub-surface);
 }
 
+.pl-room .guess-result.correct {
+  border-color: #5dffa7;
+  background: rgba(93, 255, 167, 0.12);
+}
+
+.pl-room .guess-result.wrong {
+  border-color: rgba(255, 138, 138, 0.65);
+}
+
 .pl-room .chunk-dot.current {
   background: var(--hub-cyan);
   box-shadow: 0 0 0 3px rgba(54, 209, 220, 0.3);
@@ -5243,3 +5252,7 @@ h2, h3 {
   color: var(--hub-text, #fff); background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12);
 }
 .dare-picker-item small { white-space: nowrap; opacity: .8; }
+
+/* Наоборот: host controls under the round, and who-does-what card */
+.host-ctl { margin-top: 10px; }
+.rv-roles { margin: 6px 0 4px; }
