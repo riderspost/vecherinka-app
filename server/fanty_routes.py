@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 
@@ -665,6 +666,32 @@ def _already_message(what, status):
     return f"{what} уже есть в игре"
 
 
+MAX_IDEA_AUDIO_BYTES = 8 * 1024 * 1024
+# Music files that players attach to their suggestions are named like this, so
+# that a suggestion can only point at a file made by this upload (not at some
+# other upload such as a photo or somebody's recording).
+IDEA_AUDIO_RE = re.compile(r"^idea_[0-9a-f]{32}\.(mp3|ogg|wav|m4a)$")
+
+
+@fanty_bp.route("/upload-idea-audio", methods=["POST"])
+def upload_idea_audio():
+    if not session.get("user_id"):
+        return error("Нужно войти в аккаунт", 401)
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return error("Файл не передан")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_AUDIO_EXT:
+        return error("Нужен аудиофайл: mp3, m4a, ogg или wav")
+    filename = f"idea_{uuid.uuid4().hex}.{ext}"
+    dest = os.path.join(UPLOAD_DIR, secure_filename(filename))
+    file.save(dest)
+    if os.path.getsize(dest) > MAX_IDEA_AUDIO_BYTES:
+        _remove_upload(filename)
+        return error("Файл слишком большой (до 8 МБ)")
+    return jsonify({"filename": filename, "originalName": (file.filename or "")[:200]})
+
+
 @fanty_bp.route("/submit", methods=["POST"])
 def submit_content():
     if not session.get("user_id"):
@@ -689,9 +716,41 @@ def submit_content():
         same = db.execute("SELECT status FROM fanty_dares WHERE text = ?", (text,)).fetchone()
         if same:
             return error(_already_message("Такой фант", same["status"]))
+
+        # Timer, voice recording and music are all optional extras of a dare.
+        # Recording and music ride on the timer, so they need one.
+        has_timer = bool(data.get("hasTimer"))
+        try:
+            timer_seconds = int(data.get("timerSeconds") or 60)
+        except (TypeError, ValueError):
+            timer_seconds = 60
+        timer_seconds = max(10, min(300, timer_seconds))
+        has_recording = has_timer and bool(data.get("hasRecording"))
+        music_filename = None
+        music_original_name = None
+        if has_timer and data.get("musicFilename"):
+            candidate = str(data.get("musicFilename"))
+            if not IDEA_AUDIO_RE.match(candidate) or not os.path.isfile(
+                os.path.join(UPLOAD_DIR, secure_filename(candidate))
+            ):
+                return error("Музыка не загрузилась, добавьте файл ещё раз")
+            music_filename = candidate
+            music_original_name = clean_str(data.get("musicOriginalName"), 200) or None
+
         cur = db.execute(
-            "INSERT INTO fanty_dares (text, kind, status, created_by_user_id) VALUES (?, ?, 'pending', ?)",
-            (text, kind, user_id),
+            """INSERT INTO fanty_dares (text, kind, status, created_by_user_id, has_timer, timer_seconds,
+               has_recording, music_filename, music_original_name)
+               VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?)""",
+            (
+                text,
+                kind,
+                user_id,
+                int(has_timer),
+                timer_seconds,
+                int(has_recording),
+                music_filename,
+                music_original_name,
+            ),
         )
         dare_id = cur.lastrowid
         db.executemany(
@@ -732,6 +791,7 @@ def my_submissions():
     db = get_db()
     dares = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.created_at, d.reviewed_at, d.reject_reason, d.likes,
+                  d.has_timer, d.timer_seconds, d.has_recording, d.music_filename,
                   (SELECT COUNT(*) FROM fanty_rounds fr WHERE fr.dare_id = d.id) AS plays
            FROM fanty_dares d WHERE d.created_by_user_id = ?""",
         (user_id,),
@@ -756,6 +816,10 @@ def my_submissions():
         }
         if kind == "dare":
             out["kind"] = r["kind"]
+            out["hasTimer"] = bool(r["has_timer"])
+            out["timerSeconds"] = r["timer_seconds"] if r["has_timer"] else None
+            out["hasRecording"] = bool(r["has_timer"] and r["has_recording"])
+            out["hasMusic"] = bool(r["music_filename"])
         if status == "approved":
             out["likes"] = r["likes"]
             out["plays"] = r["plays"]
@@ -777,11 +841,13 @@ def withdraw_submission(kind, item_id):
     if not table:
         return error("Некорректный тип")
     db = get_db()
-    row = db.execute(f"SELECT status FROM {table} WHERE id = ? AND created_by_user_id = ?", (item_id, user_id)).fetchone()
+    row = db.execute(f"SELECT * FROM {table} WHERE id = ? AND created_by_user_id = ?", (item_id, user_id)).fetchone()
     if not row:
         return error("Предложение не найдено", 404)
     if row["status"] != "pending":
         return error("Это предложение уже проверено, отозвать его нельзя")
     db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
     db.commit()
+    if kind == "dare" and row["music_filename"] and IDEA_AUDIO_RE.match(row["music_filename"]):
+        _remove_upload(row["music_filename"])
     return jsonify({"ok": True})

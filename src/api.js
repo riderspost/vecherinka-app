@@ -149,6 +149,11 @@ export const fantyApi = {
   likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),
   unlikeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/unlike`),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
+  uploadIdeaAudio: (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request("POST", "/api/fanty/upload-idea-audio", form);
+  },
   mySubmissions: () => request("GET", "/api/fanty/my-submissions"),
   withdrawSubmission: (type, id) => request("DELETE", `/api/fanty/my-submissions/${type}/${id}`),
 };

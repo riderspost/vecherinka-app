@@ -1,9 +1,7 @@
 import { fantyApi } from "../../api.js";
 import { navigate } from "../../router.js";
 import { escapeHtml } from "../../utils.js";
-import { LOCATIONS, CATEGORIES } from "../fanty/constants.js";
-
-const MAX_TEXT = 300;
+import { openIdeaWizard } from "./ideaWizard.js";
 
 const STATUS = {
   pending: { label: "🕓 На проверке", cls: "pending" },
@@ -35,50 +33,8 @@ function plural(n, one, few, many) {
   return many;
 }
 
-// A row of toggle chips (several can be on).
-function chipGroup(options) {
-  const wrap = document.createElement("div");
-  wrap.className = "idea-chips";
-  options.forEach((opt) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "idea-chip";
-    chip.textContent = opt.label;
-    chip.dataset.value = opt.value;
-    chip.setAttribute("aria-pressed", "false");
-    chip.addEventListener("click", () => chip.setAttribute("aria-pressed", String(chip.getAttribute("aria-pressed") !== "true")));
-    wrap.appendChild(chip);
-  });
-  return {
-    element: wrap,
-    getValue: () => [...wrap.querySelectorAll('[aria-pressed="true"]')].map((c) => c.dataset.value),
-  };
-}
-
-// Two or three options, exactly one on.
-function segmented(options, initial) {
-  const wrap = document.createElement("div");
-  wrap.className = "idea-seg";
-  let value = initial;
-  const listeners = [];
-  function draw() {
-    wrap.innerHTML = "";
-    options.forEach((opt) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = opt.label;
-      btn.setAttribute("aria-pressed", String(opt.value === value));
-      btn.addEventListener("click", () => {
-        value = opt.value;
-        draw();
-        listeners.forEach((fn) => fn(value));
-      });
-      wrap.appendChild(btn);
-    });
-  }
-  draw();
-  return { element: wrap, getValue: () => value, onChange: (fn) => listeners.push(fn) };
-}
+// A thank-you line to show on the list once, after an idea was sent.
+let flashNotice = null;
 
 // The "Идеи" tab: what the player has suggested, and a button to suggest more.
 export function renderIdeasTab(shell) {
@@ -126,7 +82,11 @@ export function renderIdeasTab(shell) {
   function start() {
     view.innerHTML = `<p class="wz-note wz-note-left">Загружаем…</p>`;
     load()
-      .then(() => drawList())
+      .then(() => {
+        const notice = flashNotice;
+        flashNotice = null;
+        drawList(notice);
+      })
       .catch((e) => {
         view.innerHTML = `<p class="error-msg">${escapeHtml(e.message)}</p>`;
       });
@@ -216,9 +176,14 @@ export function renderIdeasTab(shell) {
     if (item.status === "approved") events.push(`<li class="ok"><i></i><span>${dateLabel(item.reviewedAt)}</span> Одобрено и добавлено в игру</li>`);
     if (item.status === "rejected") events.push(`<li class="no"><i></i><span>${dateLabel(item.reviewedAt)}</span> Отклонено</li>`);
 
+    const extras = [];
+    if (item.hasTimer) extras.push(`⏱ ${item.timerSeconds} с`);
+    if (item.hasRecording) extras.push("🎙 запись");
+    if (item.hasMusic) extras.push("🎵 музыка");
     card.innerHTML = `
       <div class="idea-card-head"><span class="idea-kind">${kindLabel}</span><span class="idea-status ${st.cls}">${st.label}</span></div>
       <p class="idea-text">${escapeHtml(item.text)}</p>
+      ${extras.length ? `<div class="idea-preview-tags">${extras.map((t) => `<span>${t}</span>`).join("")}</div>` : ""}
       <ul class="idea-timeline">${events.join("")}</ul>
     `;
     if (item.status === "approved") {
@@ -269,143 +234,16 @@ export function renderIdeasTab(shell) {
     return card;
   }
 
-  // ---- the form: a second view with a way back to the list ----
+  // ---- the form: a wizard that takes over the whole screen ----
 
   function drawForm() {
-    title.innerHTML = "";
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "idea-back";
-    back.setAttribute("aria-label", "К списку");
-    back.textContent = "←";
-    back.addEventListener("click", () => drawList());
-    const h = document.createElement("h2");
-    h.className = "hub-h";
-    h.textContent = "Новая идея";
-    title.appendChild(back);
-    title.appendChild(h);
-
-    view.innerHTML = "";
-    const intro = document.createElement("p");
-    intro.className = "wz-note wz-note-left";
-    intro.textContent = "Администратор проверяет каждое предложение. Одобренное появится в игре.";
-    view.appendChild(intro);
-
-    const form = document.createElement("div");
-    form.className = "wz-form";
-    view.appendChild(form);
-
-    const type = segmented(
-      [
-        { value: "dare", label: "Фант (действие)" },
-        { value: "truth", label: "Вопрос (правда)" },
-      ],
-      "dare"
-    );
-
-    const textField = document.createElement("label");
-    textField.className = "wz-field";
-    textField.innerHTML = `<span>Текст</span>`;
-    const textArea = document.createElement("textarea");
-    textArea.className = "answer-input wz-textarea";
-    textArea.maxLength = MAX_TEXT;
-    textField.appendChild(textArea);
-    const counter = document.createElement("small");
-    counter.className = "idea-counter";
-    textField.appendChild(counter);
-    const example = document.createElement("small");
-    example.className = "idea-example";
-    textField.appendChild(example);
-
-    const kind = segmented(
-      [
-        { value: "solo", label: "Для одного" },
-        { value: "team", label: "Командный" },
-      ],
-      "solo"
-    );
-    const kindField = document.createElement("div");
-    kindField.className = "wz-field";
-    kindField.innerHTML = `<span>Кто выполняет</span>`;
-    kindField.appendChild(kind.element);
-    const kindHint = document.createElement("small");
-    kindHint.className = "idea-example";
-    kindHint.textContent = "В командном фанте пишите {p1} и {p2} вместо имён игроков.";
-    kindField.appendChild(kindHint);
-
-    const locations = chipGroup(LOCATIONS);
-    const locationsField = document.createElement("div");
-    locationsField.className = "wz-field";
-    locationsField.innerHTML = `<span>Где это можно делать</span>`;
-    locationsField.appendChild(locations.element);
-
-    const categories = chipGroup(CATEGORIES);
-    const categoriesField = document.createElement("div");
-    categoriesField.className = "wz-field";
-    categoriesField.innerHTML = `<span>Категории</span>`;
-    categoriesField.appendChild(categories.element);
-
-    const errorEl = document.createElement("div");
-    errorEl.className = "error-msg";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "wz-cta";
-    btn.textContent = "Отправить на проверку";
-
-    function sync() {
-      const isDare = type.getValue() === "dare";
-      textArea.placeholder = isDare ? "Например: спой куплет любимой песни" : "Например: какой твой самый неловкий момент на свидании?";
-      example.textContent = isDare ? "Опишите действие, которое выполняет игрок." : "Задайте вопрос, на который игрок отвечает вслух.";
-      kindField.hidden = !isDare;
-      locationsField.hidden = !isDare;
-      counter.textContent = `${textArea.value.length} / ${MAX_TEXT}`;
-    }
-    type.onChange(sync);
-    textArea.addEventListener("input", sync);
-
-    btn.addEventListener("click", async () => {
-      errorEl.textContent = "";
-      const isDare = type.getValue() === "dare";
-      const text = textArea.value.trim();
-      if (!text) {
-        errorEl.textContent = "Введите текст";
-        textArea.focus();
-        return;
-      }
-      const cats = categories.getValue();
-      if (!cats.length) {
-        errorEl.textContent = "Выберите хотя бы одну категорию";
-        return;
-      }
-      const payload = { type: type.getValue(), text, categories: cats };
-      if (isDare) {
-        const locs = locations.getValue();
-        if (!locs.length) {
-          errorEl.textContent = "Выберите хотя бы одно место";
-          return;
-        }
-        payload.kind = kind.getValue();
-        payload.locations = locs;
-      }
-      btn.disabled = true;
-      try {
-        await fantyApi.submit(payload);
-        await load();
-        filter = "all";
-        drawList("Спасибо! Предложение отправлено на проверку.");
-      } catch (e) {
-        errorEl.textContent = e.message;
-        btn.disabled = false;
-      }
+    const container = body.closest(".hub").parentElement;
+    openIdeaWizard(container, {
+      onExit: async (notice) => {
+        flashNotice = notice || null;
+        const { renderHub } = await import("./index.js");
+        renderHub(container, "ideas");
+      },
     });
-
-    form.appendChild(type.element);
-    form.appendChild(textField);
-    form.appendChild(kindField);
-    form.appendChild(locationsField);
-    form.appendChild(categoriesField);
-    form.appendChild(errorEl);
-    form.appendChild(btn);
-    sync();
   }
 }
