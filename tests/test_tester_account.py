@@ -68,3 +68,76 @@ def test_admin_panel_can_make_a_user_a_tester_and_change_the_system_password(cli
     fresh = client.application.test_client()
     assert fresh.post("/api/auth/login", json={"email": "admin", "password": "admin"}).status_code == 400
     assert fresh.post("/api/auth/login", json={"email": "admin", "password": "newpassword1"}).status_code == 200
+
+
+# --- paid accounts and "Флирт+" -------------------------------------------
+
+
+def _create_fanty(client, categories):
+    return client.post(
+        "/api/fanty/rooms",
+        json={
+            "name": "Хост",
+            "avatarType": "emoji",
+            "avatarValue": "🙂",
+            "gameMode": "truth_or_dare",
+            "location": "apartment",
+            "categories": categories,
+            "deviceMode": "local",
+        },
+    )
+
+
+def test_guests_cannot_create_flirt_plus_games(client):
+    resp = _create_fanty(client, ["flirt_plus"])
+    assert resp.status_code == 403
+    assert resp.get_json()["needsPaid"] is True
+    # the free types are still open to everybody
+    assert _create_fanty(client, ["basic"]).status_code == 200
+
+
+def test_unpaid_account_cannot_create_flirt_plus_games(client, raw_db):
+    from tests.test_my_rooms import login
+
+    login(client, raw_db, email="free@example.com")
+    assert client.get("/api/auth/session").get_json()["isPaid"] is False
+    assert _create_fanty(client, ["basic", "flirt_plus"]).status_code == 403
+
+
+def test_paid_account_can_create_flirt_plus_games(client, raw_db):
+    from tests.test_my_rooms import login
+
+    login(client, raw_db, email="paid@example.com")
+    raw_db.execute("UPDATE users SET is_paid = 1 WHERE email = 'paid@example.com'")
+    raw_db.commit()
+    assert client.get("/api/auth/session").get_json()["isPaid"] is True
+    assert _create_fanty(client, ["flirt_plus"]).status_code == 200
+
+
+def test_admin_account_is_always_paid(client, raw_db):
+    client.post("/api/auth/login", json={"email": "admin", "password": "admin"})
+    assert client.get("/api/auth/session").get_json()["isPaid"] is True
+    assert _create_fanty(client, ["flirt_plus"]).status_code == 200
+    # even if its flag were cleared by hand
+    raw_db.execute("UPDATE users SET is_paid = 0 WHERE email = 'admin'")
+    raw_db.commit()
+    assert client.get("/api/auth/session").get_json()["isPaid"] is True
+
+
+def test_admin_panel_sets_the_paid_flag(client, raw_db):
+    from tests.test_admin import admin_login
+    from tests.test_my_rooms import login
+
+    login(client, raw_db, email="buyer@example.com")
+    admin = client.application.test_client()
+    admin_login(admin)
+    users = admin.get("/admin/api/users").get_json()
+    buyer = next(u for u in users if u["email"] == "buyer@example.com")
+    system = next(u for u in users if u["email"] == "admin")
+    assert buyer["isPaid"] is False and system["isPaid"] is True
+
+    assert admin.put(f"/admin/api/users/{buyer['id']}/paid", json={"isPaid": True}).status_code == 200
+    assert _create_fanty(client, ["flirt_plus"]).status_code == 200
+    assert admin.put(f"/admin/api/users/{buyer['id']}/paid", json={"isPaid": False}).status_code == 200
+    assert _create_fanty(client, ["flirt_plus"]).status_code == 403
+    assert admin.put(f"/admin/api/users/{system['id']}/paid", json={"isPaid": False}).status_code == 400

@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, session
 from werkzeug.utils import secure_filename
 
 from . import fanty_game as fg
-from .auth import current_user_is_tester
+from .auth import current_user_is_tester, current_user_is_paid
 from .db import get_db
 from .rooms_common import (
     RoomError,
@@ -29,8 +29,10 @@ fanty_bp = Blueprint("fanty", __name__, url_prefix="/api/fanty")
 MAX_TEXT_LEN = 300
 
 
-def error(message, status=400):
-    return jsonify({"error": message}), status
+def error(message, status=400, **extra):
+    body = {"error": message}
+    body.update(extra)
+    return jsonify(body), status
 
 
 def _room_or_404(db, code):
@@ -61,6 +63,8 @@ def create_room():
         return error("Выберите пол")
 
     db = get_db()
+    if "flirt_plus" in categories and not current_user_is_paid(db):
+        return error("Тип «Флирт+» доступен только в платном аккаунте", 403, needsPaid=True)
     dare_count, truth_count = fg.content_pool_sizes(db, game_mode, location, categories, pair_mode)
     if game_mode == "truth_or_dare" and dare_count == 0 and truth_count == 0:
         return error("Для этих настроек нет ни одного фанта или вопроса — измените место или категории")

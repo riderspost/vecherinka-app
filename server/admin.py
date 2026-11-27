@@ -73,7 +73,7 @@ def admin_session():
 def admin_list_users():
     db = get_db()
     rows = db.execute(
-        """SELECT id, email, name, email_verified, games_created_count, created_at, is_tester
+        """SELECT id, email, name, email_verified, games_created_count, created_at, is_tester, is_paid
            FROM users
            ORDER BY games_created_count DESC, created_at DESC"""
     ).fetchall()
@@ -87,6 +87,7 @@ def admin_list_users():
                 "gamesCreated": r["games_created_count"],
                 "createdAt": r["created_at"],
                 "isTester": bool(r["is_tester"]),
+                "isPaid": bool(r["is_paid"]) or r["email"] == TESTER_LOGIN,
                 "isSystem": r["email"] == TESTER_LOGIN,
             }
             for r in rows
@@ -107,6 +108,22 @@ def admin_set_tester(user_id):
         return jsonify({"error": "Встроенный тестовый аккаунт всегда тестировщик"}), 400
     data = request.get_json(force=True, silent=True) or {}
     db.execute("UPDATE users SET is_tester = ? WHERE id = ?", (int(bool(data.get("isTester"))), user_id))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/api/users/<user_id>/paid", methods=["PUT"])
+@admin_required
+def admin_set_paid(user_id):
+    # A paid account may create the games that are not free ("Флирт+").
+    db = get_db()
+    user = db.execute("SELECT email FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not user:
+        return jsonify({"error": "Пользователь не найден"}), 404
+    if user["email"] == TESTER_LOGIN:
+        return jsonify({"error": "У встроенного аккаунта оплата всегда включена"}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    db.execute("UPDATE users SET is_paid = ? WHERE id = ?", (int(bool(data.get("isPaid"))), user_id))
     db.commit()
     return jsonify({"ok": True})
 

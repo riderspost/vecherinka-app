@@ -5256,3 +5256,12 @@ h2, h3 {
 /* Наоборот: host controls under the round, and who-does-what card */
 .host-ctl { margin-top: 10px; }
 .rv-roles { margin: 6px 0 4px; }
+
+/* "Флирт+" locked for accounts that are not paid */
+.mood-card.locked { opacity: .62; }
+.mood-card.locked .mood-heat { font-size: 18px; }
+.lock-note {
+  padding: 12px 14px; border-radius: 16px; font-size: 13.5px; line-height: 1.4;
+  color: var(--hub-text); background: rgba(255, 154, 60, .12); border: 1px solid rgba(255, 154, 60, .45);
+}
+.lock-note[hidden] { display: none; }

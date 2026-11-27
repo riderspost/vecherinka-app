@@ -1375,6 +1375,9 @@ async function refreshUsers() {
           <label><input type="checkbox" data-tester="${escapeHtml(u.id)}" ${u.isTester ? "checked" : ""} ${
         u.isSystem ? "disabled" : ""
       } /> ${u.isSystem ? "всегда" : "тестировщик"}</label>
+          <label style="margin-left:10px"><input type="checkbox" data-paid="${escapeHtml(u.id)}" ${u.isPaid ? "checked" : ""} ${
+        u.isSystem ? "disabled" : ""
+      } /> ${u.isSystem ? "оплачен всегда" : "оплачен"}</label>
           ${
             u.isSystem
               ? `<button type="button" class="btn secondary" data-password="${escapeHtml(u.id)}" style="margin-left:8px">Сменить пароль</button>`
@@ -1388,16 +1391,26 @@ async function refreshUsers() {
   host.innerHTML = `
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Email</th><th>Имя</th><th>Игр создано</th><th>Регистрация</th><th>Тестовые возможности</th></tr></thead>
+        <thead><tr><th>Email</th><th>Имя</th><th>Игр создано</th><th>Регистрация</th><th>Тестовые возможности и оплата</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
-    <p class="hint">Тестировщик видит в играх тестовые функции: добавить тестового игрока в комнату и выбрать, какой фант выпадет. Встроенный аккаунт <b>admin</b> всегда тестировщик.</p>
+    <p class="hint">Тестировщик видит в играх тестовые функции: добавить тестового игрока в комнату и выбрать, какой фант выпадет. Встроенный аккаунт <b>admin</b> всегда тестировщик. «Оплачен» открывает платные игры: пока это тип фантов «Флирт+». Аноним и неоплаченный аккаунт их создавать не могут (играть в чужой комнате с такими фантами можно). У <b>admin</b> оплата всегда включена.</p>
   `;
   host.querySelectorAll("input[data-tester]").forEach((box) => {
     box.addEventListener("change", async () => {
       try {
         await api(`/users/${box.dataset.tester}/tester`, { method: "PUT", body: JSON.stringify({ isTester: box.checked }) });
+      } catch (e) {
+        alert(e.message);
+        box.checked = !box.checked;
+      }
+    });
+  });
+  host.querySelectorAll("input[data-paid]").forEach((box) => {
+    box.addEventListener("change", async () => {
+      try {
+        await api(`/users/${box.dataset.paid}/paid`, { method: "PUT", body: JSON.stringify({ isPaid: box.checked }) });
       } catch (e) {
         alert(e.message);
         box.checked = !box.checked;

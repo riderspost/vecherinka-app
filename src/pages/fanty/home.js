@@ -1,4 +1,4 @@
-import { fantyApi, authApi } from "../../api.js";
+import { fantyApi, authApi, isPaid } from "../../api.js";
 import { saveSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker } from "../../avatarPicker.js";
@@ -317,11 +317,16 @@ export function renderFantyHome(container) {
       const extras = new Set(formState.attributes);
       let errorEl = null; // cleared as soon as something is chosen
 
+      // "Флирт+" is only for paid accounts: others see it locked, and the
+      // server refuses it anyway.
+      const locked = (value) => value === "flirt_plus" && !isPaid();
+      let lockNote = null;
+
       MOOD_CATEGORIES.forEach((cat) => {
         const art = MOOD_ART[cat.value] || { emoji: "🎲", note: "", heat: 1, tint: "rgba(138, 92, 255, 0.2)" };
         const card = document.createElement("button");
         card.type = "button";
-        card.className = "mood-card";
+        card.className = "mood-card" + (locked(cat.value) ? " locked" : "");
         card.setAttribute("aria-pressed", String(moods.has(cat.value)));
         const heat = [1, 2, 3].map((n) => `<i class="${n <= art.heat ? "on" : ""}"></i>`).join("");
         card.innerHTML = `
@@ -331,7 +336,15 @@ export function renderFantyHome(container) {
         `;
         card.querySelector("b").textContent = cat.label;
         card.querySelector("small").textContent = art.note;
+        if (locked(cat.value)) card.querySelector(".mood-heat").innerHTML = "🔒";
         card.addEventListener("click", () => {
+          if (locked(cat.value)) {
+            if (lockNote) {
+              lockNote.hidden = false;
+              lockNote.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            }
+            return;
+          }
           if (moods.has(cat.value)) moods.delete(cat.value);
           else moods.add(cat.value);
           card.setAttribute("aria-pressed", String(moods.has(cat.value)));
@@ -339,6 +352,14 @@ export function renderFantyHome(container) {
         });
         formHost.appendChild(card);
       });
+
+      lockNote = document.createElement("div");
+      lockNote.className = "lock-note";
+      lockNote.hidden = true;
+      lockNote.innerHTML = `<b>🔒 «Флирт+» только для платного аккаунта.</b> ${
+        isPaid() ? "" : "Игры такого типа могут создавать только пользователи с оплаченным аккаунтом."
+      }`;
+      formHost.appendChild(lockNote);
 
       const sec = document.createElement("div");
       sec.className = "step-section";

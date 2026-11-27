@@ -45,6 +45,16 @@ def current_user_is_tester(db):
     return bool(user and user["is_tester"])
 
 
+def user_is_paid(user):
+    # The built-in admin account is always paid, whatever its flag says.
+    return bool(user and (user["is_paid"] or user["email"] == "admin"))
+
+
+def current_user_is_paid(db):
+    """Whether the signed-in user has a paid account. Anonymous users do not."""
+    return user_is_paid(get_current_user(db))
+
+
 def _login(user_id):
     session.permanent = True
     session["user_id"] = user_id
@@ -188,6 +198,7 @@ def get_session():
             "avatarValue": user["avatar_value"],
             "profileComplete": _profile_complete(user),
             "isTester": bool(user["is_tester"]),
+            "isPaid": user_is_paid(user),
         }
     )
 

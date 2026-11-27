@@ -114,6 +114,8 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_reverse_phrases_block ON reverse_phrases(block_id)")
     _migrate_reverse_phrases_to_blocks(db)
     _ensure_column(db, "users", "is_tester", "is_tester INTEGER NOT NULL DEFAULT 0")
+    # A paid account may create the games that are not free ("Флирт+" fanty).
+    _ensure_column(db, "users", "is_paid", "is_paid INTEGER NOT NULL DEFAULT 0")
     _ensure_tester_user(db)
     db.commit()
     db.close()
@@ -131,14 +133,14 @@ def _ensure_tester_user(db):
     register it. The first password comes from TESTER_PASSWORD."""
     row = db.execute("SELECT id FROM users WHERE email = ?", (TESTER_LOGIN,)).fetchone()
     if row:
-        db.execute("UPDATE users SET is_tester = 1 WHERE id = ?", (row["id"],))
+        db.execute("UPDATE users SET is_tester = 1, is_paid = 1 WHERE id = ?", (row["id"],))
         return
     password = os.environ.get("TESTER_PASSWORD") or "admin"
     if password not in _tester_hashes:  # hashing is slow on purpose; do it once
         _tester_hashes[password] = generate_password_hash(password, method="pbkdf2:sha256")
     db.execute(
-        """INSERT INTO users (id, email, password_hash, email_verified, name, avatar_type, avatar_value, is_tester)
-           VALUES (?, ?, ?, 1, 'Админ', 'emoji', '🛠️', 1)""",
+        """INSERT INTO users (id, email, password_hash, email_verified, name, avatar_type, avatar_value, is_tester, is_paid)
+           VALUES (?, ?, ?, 1, 'Админ', 'emoji', '🛠️', 1, 1)""",
         (str(uuid.uuid4()), TESTER_LOGIN, _tester_hashes[password]),
     )
 
