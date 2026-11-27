@@ -2,13 +2,18 @@
 //
 //  - Opened as an installed app (standalone): certainly installed.
 //  - Android/desktop Chrome fires `appinstalled` after installing: remembered.
-//  - iPhone never says anything: the person confirms with "Я добавил(а)".
+//  - iPhone says nothing outside the app: the mark appears once the game is
+//    opened from the home-screen icon.
 // The answer is remembered in this browser; everything that shows install
 // UI listens for "plynger:install-changed" and redraws.
 
 import { isRunningStandalone } from "./pwaInstall.js";
 
-const INSTALLED_KEY = "plynger-installed";
+// The first versions had an "I added it" button that wrote the mark by hand;
+// those old marks (key without the suffix) are dropped, since nothing proves
+// they are true.
+const OLD_INSTALLED_KEY = "plynger-installed";
+const INSTALLED_KEY = "plynger-installed-v2";
 const DISMISS_KEY = "plynger-install-banner-dismissed";
 const BANNER_PAUSE_DAYS = 14;
 
@@ -62,5 +67,6 @@ export function dismissBanner() {
   changed();
 }
 
+write(OLD_INSTALLED_KEY, null);
 window.addEventListener("appinstalled", markInstalled);
 if (isRunningStandalone()) write(INSTALLED_KEY, "1");

@@ -1,5 +1,5 @@
 import { canPromptInstall, detectPlatform, promptInstall } from "./pwaInstall.js";
-import { isInstalled, isOpenedAsApp, markInstalled } from "./installState.js";
+import { isInstalled, isOpenedAsApp, markInstalled, clearInstalled } from "./installState.js";
 import { enableSwipeDown } from "./swipeSheet.js";
 
 const TABS = [
@@ -161,9 +161,11 @@ export function openInstallSheet() {
       const again = document.createElement("button");
       again.type = "button";
       again.className = "inst-link";
-      again.textContent = "Не появилась иконка? Показать шаги ещё раз";
+      again.textContent = "Приложения нет на телефоне? Сбросить отметку";
       again.addEventListener("click", () => {
+        // the mark was wrong (or the app was removed): forget it and show the steps
         showSteps = true;
+        clearInstalled();
         draw();
       });
       sheet.appendChild(again);
