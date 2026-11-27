@@ -4931,3 +4931,112 @@ h2, h3 {
   background: rgba(255, 93, 162, 0.14);
   box-shadow: 0 0 0 3px rgba(255, 93, 162, 0.2);
 }
+
+/* ---------- Generic bottom sheet ---------- */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(8, 5, 24, 0.62);
+}
+
+.sheet-panel {
+  width: min(480px, 100vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 10px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-radius: 26px 26px 0 0;
+  background: #15112e;
+  border-top: 1px solid #352d63;
+  color: #f6f2ff;
+  font-family: var(--font-body);
+  overscroll-behavior: contain;
+}
+
+.sheet-handle {
+  width: 38px;
+  height: 4px;
+  margin: 0 auto 10px;
+  border-radius: 4px;
+  background: #352d63;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sheet-head b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.sheet-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #352d63;
+  background: #221b45;
+  color: #f6f2ff;
+  cursor: pointer;
+}
+
+.sheet-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sheet-content .wz-field {
+  margin: 0;
+}
+
+.sheet-content .text-input {
+  background: #221b45;
+  border: 1.5px solid #352d63;
+  border-radius: 14px;
+  color: #f6f2ff;
+}
+
+.sheet-content .text-input:focus {
+  outline: none;
+  border-color: #36d1dc;
+}
+
+.sheet-content .avatar-picker {
+  --hub-bg: #15112e;
+  --hub-surface: #221b45;
+  --hub-line: #352d63;
+  --hub-text: #f6f2ff;
+  --hub-dim: #b3a9de;
+}
+
+.sheet-content .gender-picker,
+.sheet-content .avatar-picker {
+  color: #f6f2ff;
+}
+
+.wz-seat.add {
+  width: 100%;
+  border-style: dashed;
+  background: transparent;
+  color: var(--hub-cyan);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wz-seat.add .wz-seat-avatar {
+  background: none;
+  border: 1.5px dashed var(--hub-cyan);
+  color: var(--hub-cyan);
+}

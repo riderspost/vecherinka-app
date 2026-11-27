@@ -1,5 +1,6 @@
 import { canPromptInstall, detectPlatform, promptInstall } from "./pwaInstall.js";
 import { clearInstalled, isInstalled, isOpenedAsApp, markInstalled } from "./installState.js";
+import { enableSwipeDown } from "./swipeSheet.js";
 
 const TABS = [
   { id: "ios", label: "iPhone" },
@@ -36,7 +37,8 @@ export function openInstallSheet() {
   draw();
 
   function frame(inner) {
-    sheetEl.innerHTML = `<div class="inst-sheet"><div class="inst-grab"></div>${inner}</div>`;
+    sheetEl.innerHTML = `<div class="inst-sheet"><div class="inst-grab sheet-handle"></div>${inner}</div>`;
+    enableSwipeDown(sheetEl.firstChild, closeInstallSheet);
     return sheetEl.firstChild;
   }
 

@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { avatarHtml } from "./avatarPicker.js";
 import { escapeHtml } from "./utils.js";
 import { playersWord } from "./games.js";
+import { enableSwipeDown } from "./swipeSheet.js";
 
 // ---- requests to take a seat back ----
 
@@ -86,7 +87,8 @@ export function openPlayersPanel({ code, token, getState, onChanged }) {
 }
 
 export function refreshPlayersPanel() {
-  if (panelEl) drawPanel();
+  // not while it is being dragged away: redrawing would drop the sheet from under the finger
+  if (panelEl && !panelEl.querySelector(".players-panel")?.__dragging) drawPanel();
 }
 
 function drawPanel() {
@@ -100,7 +102,7 @@ function drawPanel() {
   const sheet = document.createElement("div");
   sheet.className = "players-panel";
   sheet.innerHTML = `
-    <div class="players-panel-grab"></div>
+    <div class="players-panel-grab sheet-handle"></div>
     <div class="players-panel-head"><b>Игроки · ${players.length}</b><button type="button" class="players-panel-close" aria-label="Закрыть">✕</button></div>
     ${
       canRemove
@@ -109,6 +111,7 @@ function drawPanel() {
     }
   `;
   sheet.querySelector(".players-panel-close").addEventListener("click", closePlayersPanel);
+  enableSwipeDown(sheet, closePlayersPanel);
 
   const list = document.createElement("div");
   list.className = "players-panel-list";

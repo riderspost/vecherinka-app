@@ -8,6 +8,7 @@ import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
+import { openBottomSheet } from "../../swipeSheet.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
@@ -440,7 +441,7 @@ export function mountFantyRoomPage(container, code, opts) {
   }
 }
 
-function playersList(players, onRemove) {
+function playersList(players, onRemove, removeBlockedReason) {
   const list = document.createElement("div");
   list.className = "wz-seats";
   players.forEach((p) => {
@@ -454,6 +455,10 @@ function playersList(players, onRemove) {
       removeBtn.type = "button";
       removeBtn.className = "wz-seat-kick";
       removeBtn.textContent = "Убрать";
+      if (removeBlockedReason) {
+        removeBtn.disabled = true;
+        removeBtn.title = removeBlockedReason;
+      }
       removeBtn.addEventListener("click", () => onRemove(p, removeBtn));
       item.appendChild(removeBtn);
     }
@@ -462,14 +467,20 @@ function playersList(players, onRemove) {
   return list;
 }
 
+// The form of the "Новый игрок" sheet: name, avatar, gender (pairs only).
 async function buildAddPlayerForm(code, token, needsGender, onAdded) {
-  const addCard = document.createElement("div");
-  addCard.className = "card-inline";
+  const form = document.createElement("div");
+  form.className = "wz-form add-player-form";
 
+  const nameField = document.createElement("label");
+  nameField.className = "wz-field";
+  nameField.innerHTML = `<span>Имя</span>`;
   const nameInput = document.createElement("input");
   nameInput.className = "text-input";
-  nameInput.placeholder = "Имя игрока";
+  nameInput.placeholder = "Как зовут игрока?";
   nameInput.maxLength = 20;
+  nameInput.autocomplete = "off";
+  nameField.appendChild(nameInput);
 
   let takenEmojis = [];
   try {
@@ -479,21 +490,29 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
     takenEmojis = [];
   }
   const picker = createAvatarPicker(null, takenEmojis);
+  const avatarField = document.createElement("div");
+  avatarField.className = "wz-field";
+  avatarField.innerHTML = `<span>Аватар</span>`;
+  avatarField.appendChild(picker.element);
 
-  const genderLabel = document.createElement("label");
-  genderLabel.textContent = "Пол";
+  const genderField = document.createElement("div");
+  genderField.className = "wz-field";
+  genderField.innerHTML = `<span>Пол</span>`;
   const genderGroup = createGenderPicker(null);
+  genderField.appendChild(genderGroup.element);
 
-  const addBtn = document.createElement("button");
-  addBtn.className = "btn";
-  addBtn.textContent = "Добавить";
   const addErr = document.createElement("div");
   addErr.className = "error-msg";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "wz-cta";
+  addBtn.textContent = "Добавить игрока";
 
-  addBtn.addEventListener("click", async () => {
+  async function submit() {
     const name = nameInput.value.trim();
     if (!name) {
       addErr.textContent = "Введите имя";
+      nameInput.focus();
       return;
     }
     const gender = needsGender ? genderGroup.getValue() : null;
@@ -515,17 +534,17 @@ async function buildAddPlayerForm(code, token, needsGender, onAdded) {
       addErr.textContent = e.message;
       addBtn.disabled = false;
     }
-  });
-
-  addCard.appendChild(nameInput);
-  addCard.appendChild(picker.element);
-  if (needsGender) {
-    addCard.appendChild(genderLabel);
-    addCard.appendChild(genderGroup.element);
   }
-  addCard.appendChild(addErr);
-  addCard.appendChild(addBtn);
-  return addCard;
+  addBtn.addEventListener("click", submit);
+  nameInput.addEventListener("keydown", (e) => e.key === "Enter" && submit());
+  genderField.addEventListener("click", () => (addErr.textContent = ""));
+
+  form.appendChild(nameField);
+  form.appendChild(avatarField);
+  if (needsGender) form.appendChild(genderField);
+  form.appendChild(addErr);
+  form.appendChild(addBtn);
+  return form;
 }
 
 async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
@@ -558,106 +577,61 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
       }</small>
     </div>
   `;
-  wrap.appendChild(playersList(players));
-
-  if (state.me.isDisplay) return;
+  if (state.me.isDisplay) {
+    wrap.appendChild(playersList(players));
+    return;
+  }
 
   const isLocalHost = state.room.deviceMode === "local" && state.me.isHost;
-  // Once the host *could* start, show an explicit choice between adding
-  // another player and starting, instead of leaving the add-player form
-  // sitting right above "Начать игру" — that's exactly where hosts were
-  // losing a half-typed player by mis-tapping start instead of add.
-  const showChoiceScreen = isLocalHost && state.canStart && lobbyUi.view !== "addForm";
-  const showAddForm = isLocalHost && !showChoiceScreen;
+  const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
 
-  if (showAddForm) {
-    const label = document.createElement("p");
-    label.className = "wz-note wz-note-left";
-    label.textContent = "Добавьте игрока за этим устройством:";
-    wrap.appendChild(label);
-
-    const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
-    const addCard = await buildAddPlayerForm(code, token, needsGender, async () => {
-      lobbyUi.view = "choice";
-      const fresh = await fantyApi.getState(code, token);
-      await renderLobby(wrap, fresh, token, code, switchPlayer, lobbyUi);
-    });
-    wrap.appendChild(addCard);
-
-    // Only offer a way back to the choice screen when the form is showing
-    // because the host chose "Добавить ещё" — not when it's showing because
-    // there simply aren't enough players yet (nothing to go back to there).
-    if (state.canStart && lobbyUi.view === "addForm") {
-      const backBtn = document.createElement("button");
-      backBtn.className = "link-btn";
-      backBtn.textContent = "← Назад, не добавлять";
-      backBtn.addEventListener("click", () => {
-        lobbyUi.view = "choice";
-        renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
-      });
-      wrap.appendChild(backBtn);
-    }
+  // On one phone the host adds everyone: the list ends with an empty seat
+  // that opens the "new player" sheet, like the empty seat of the other game.
+  async function refresh() {
+    const fresh = await fantyApi.getState(code, token);
+    await renderLobby(wrap, fresh, token, code, switchPlayer, lobbyUi);
   }
-
-  if (state.room.deviceMode === "remote") {
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "btn";
-    copyBtn.textContent = "Скопировать ссылку";
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(shareUrl).catch(() => {});
-      copyBtn.textContent = "Скопировано!";
-      setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
-    });
-    wrap.appendChild(copyBtn);
-  }
-
-  if (showChoiceScreen) {
-    const choiceRow = document.createElement("div");
-    choiceRow.className = "row-actions";
-
-    const addMoreBtn = document.createElement("button");
-    addMoreBtn.className = "btn";
-    addMoreBtn.textContent = "Добавить ещё игрока";
-    addMoreBtn.addEventListener("click", () => {
-      lobbyUi.view = "addForm";
-      renderLobby(wrap, state, token, code, switchPlayer, lobbyUi);
-    });
-
-    const startBtn = document.createElement("button");
-    startBtn.className = "btn btn-primary";
-    startBtn.textContent = "Начать игру";
-    startBtn.addEventListener("click", async () => {
-      startBtn.disabled = true;
-      addMoreBtn.disabled = true;
-      try {
-        await fantyApi.start(code, token);
-      } catch (e) {
-        alert(e.message);
-        startBtn.disabled = false;
-        addMoreBtn.disabled = false;
+  const removeFromLobby = isLocalHost
+    ? async (player, btn) => {
+        btn.disabled = true;
+        try {
+          await fantyApi.removePlayer(code, token, player.id);
+          await refresh();
+        } catch (e) {
+          alert(e.message);
+          btn.disabled = false;
+        }
       }
-    });
+    : null;
+  // the game's minimum holds in the lobby too: nobody can be removed below it
+  const blocked = players.length <= state.minPlayers ? `Нужно минимум ${state.minPlayers} игрока` : "";
+  const seatsEl = playersList(players, removeFromLobby, blocked);
+  if (isLocalHost) {
+    const addSeat = document.createElement("button");
+    addSeat.type = "button";
+    addSeat.className = "wz-seat add";
+    addSeat.innerHTML = `<span class="wz-seat-avatar" aria-hidden="true">＋</span><span class="wz-seat-name">Добавить игрока</span>`;
+    addSeat.addEventListener("click", () =>
+      openBottomSheet({
+        title: "Новый игрок",
+        build: async (content, close) => {
+          const form = await buildAddPlayerForm(code, token, needsGender, async () => {
+            close();
+            await refresh();
+          });
+          content.appendChild(form);
+          form.querySelector("input.text-input")?.focus();
+        },
+      })
+    );
+    seatsEl.appendChild(addSeat);
+  }
+  wrap.appendChild(seatsEl);
 
-    choiceRow.appendChild(addMoreBtn);
-    choiceRow.appendChild(startBtn);
-    wrap.appendChild(choiceRow);
-  } else if (isLocalHost && !state.canStart) {
-    // Not enough players yet (or missing a gender) — show why, disabled,
-    // right under the add-player form. If canStart is already true, the
-    // host explicitly chose "Добавить ещё" from the choice screen — no
-    // start button at all until they come back from the form.
+  if (state.me.isHost) {
     const startBtn = document.createElement("button");
-    startBtn.className = "btn btn-primary";
-    startBtn.textContent = "Ждём игроков";
-    startBtn.disabled = true;
-    wrap.appendChild(startBtn);
-  } else if (isLocalHost) {
-    // canStart is true and the host is mid-way through "Добавить ещё" —
-    // the add-form (with its own "← Назад" link) already says everything
-    // that needs saying here; no button, nothing else to show.
-  } else if (!isLocalHost && state.me.isHost) {
-    const startBtn = document.createElement("button");
-    startBtn.className = "btn btn-primary";
+    startBtn.type = "button";
+    startBtn.className = "wz-cta";
     startBtn.textContent = state.canStart ? "Начать игру" : "Ждём игроков";
     startBtn.disabled = !state.canStart;
     startBtn.addEventListener("click", async () => {
@@ -672,9 +646,22 @@ async function renderLobby(wrap, state, token, code, switchPlayer, lobbyUi) {
     wrap.appendChild(startBtn);
   } else {
     const waitMsg = document.createElement("p");
-    waitMsg.className = "tagline";
-    waitMsg.textContent = "Ждём, пока хост начнёт игру...";
+    waitMsg.className = "wz-note";
+    waitMsg.textContent = "Ждём, пока хост начнёт игру…";
     wrap.appendChild(waitMsg);
+  }
+
+  if (state.room.deviceMode === "remote") {
+    const copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "wz-link";
+    copyBtn.textContent = "Скопировать ссылку";
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(shareUrl).catch(() => {});
+      copyBtn.textContent = "Ссылка скопирована";
+      setTimeout(() => (copyBtn.textContent = "Скопировать ссылку"), 1500);
+    });
+    wrap.appendChild(copyBtn);
   }
 
   if (state.room.deviceMode === "remote") {
