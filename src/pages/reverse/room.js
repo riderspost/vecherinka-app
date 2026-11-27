@@ -23,6 +23,22 @@ const RANK_MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 // Same rules as the other games' leave button: a guest's room can't be
 // found again once they're gone, so the host gets a warning and the room is
 // discarded; a logged-in host's room stays resumable.
+// The game is over and its results have been seen: the host leaving closes the
+// room for good (so it never lingers in anybody's list); anyone else just goes.
+async function leaveFinishedRoom(state, token, code) {
+  if (state.me.isHost) {
+    try {
+      await api.discardRoom(code, token);
+    } catch (e) {
+      // best effort: the sweep removes it shortly anyway
+    }
+  }
+  clearSession(code);
+  navigate("/");
+  return true;
+}
+
+
 async function leaveRoom(state, token, code) {
   let authenticated = false;
   try {
@@ -120,6 +136,7 @@ export function mountReverseRoomPage(container, code) {
   let pollTimer = null;
   let stopped = false;
   let lastState = null;
+  let lastStatus = null;
   let sessionToken = null;
   let menuOpen = false;
   let closeArmedUntil = 0; // "close the room for everyone" needs a second tap
@@ -292,6 +309,7 @@ export function mountReverseRoomPage(container, code) {
       try {
         const state = await reverseApi.getState(code, token);
         lastState = state;
+        lastStatus = state.room.status;
         if (state.me.isHost) {
           syncClaimRequests({ code, token, claims: state.pendingClaims });
           refreshPlayersPanel();
@@ -310,7 +328,7 @@ export function mountReverseRoomPage(container, code) {
           clearSession(code);
           teardownView();
           container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${escapeHtml(
-            e.message
+            lastStatus === "finished" ? "Игра завершена, комната закрыта" : e.message
           )}</p><button class="btn" id="back-home">На главную</button></div>`;
           const backBtn = document.getElementById("back-home");
           if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
@@ -800,7 +818,7 @@ export function mountReverseRoomPage(container, code) {
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;
-      const left = await leaveRoom(state, token, code);
+      const left = await leaveFinishedRoom(state, token, code);
       if (!left) homeBtn.disabled = false;
     });
     wrap.appendChild(homeBtn);

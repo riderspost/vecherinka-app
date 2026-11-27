@@ -736,41 +736,6 @@ label {
   letter-spacing: 1px;
 }
 
-.fire-btn {
-  margin: 4px 0 10px;
-  background: rgba(255, 140, 0, 0.12);
-  border: 2px solid rgba(255, 140, 0, 0.4);
-  color: #ffb066;
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  animation: fire-btn-pulse 1.6s ease-in-out infinite;
-}
-
-.fire-btn:active {
-  transform: scale(0.96);
-}
-
-.fire-btn-liked {
-  background: rgba(255, 140, 0, 0.9);
-  border-color: rgba(255, 140, 0, 0.9);
-  color: #2a1400;
-  animation: none;
-}
-
-@keyframes fire-btn-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 140, 0, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(255, 140, 0, 0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fire-btn {
-    animation: none;
-  }
-}
-
 .prompt-text {
   text-align: center;
   font-size: 22px;
@@ -5132,3 +5097,113 @@ h2, h3 {
   --hub-cyan: #36d1dc;
   --hub-live: #5dffa7;
 }
+
+
+/* ---------- Like a dare: a double tap, a burst of fire ---------- */
+
+.like-card {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: pointer;
+}
+
+.like-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--hub-dim, #b3a9de);
+  transition: color 0.2s;
+}
+
+.like-hint.liked {
+  color: #ff9a3c;
+  font-weight: 600;
+}
+
+.like-burst {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.like-burst-fire {
+  font-size: 90px;
+  filter: drop-shadow(0 10px 20px rgba(255, 93, 162, 0.7));
+  animation: like-pop 1s ease-out forwards;
+}
+
+.like-spark {
+  position: absolute;
+  font-size: 22px;
+  opacity: 0;
+  animation: like-spark 1s ease-out forwards;
+}
+
+.like-spark.s1 {
+  left: 14px;
+  top: 6px;
+}
+
+.like-spark.s2 {
+  right: 18px;
+  top: 12px;
+  animation-delay: 0.08s;
+}
+
+.like-spark.s3 {
+  left: 40px;
+  bottom: 6px;
+  animation-delay: 0.16s;
+}
+
+@keyframes like-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5) translateY(-30px);
+    opacity: 0;
+  }
+}
+
+@keyframes like-spark {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4) translateY(-14px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .like-burst-fire,
+  .like-spark {
+    animation-duration: 0.01s;
+  }
+}
+
+/* Fanty TV: the one-tap "turn the sound on" button */
+.tv-sound-btn {
+  position: fixed; top: 16px; right: 16px; z-index: 5;
+  padding: 10px 16px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.28); background: rgba(20,20,30,.55);
+  color: #fff; font: inherit; font-size: 15px; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.tv-sound-btn.on { opacity: .55; }
+.tv-sound-btn:hover { opacity: 1; }

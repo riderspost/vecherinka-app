@@ -73,10 +73,19 @@ def test_abandoned_sentence_room_is_deleted(client, raw_db):
     assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
 
 
-def test_stale_lobby_room_is_left_alone(client, raw_db):
+def test_stale_lobby_room_is_deleted_after_an_hour(client, raw_db):
     resp = create_fanty_room(client, game_mode="solo")
     code = resp.get_json()["code"]
     _mark_stale(raw_db, code)
+
+    client.get("/admin/api/fanty/dares")
+
+    assert raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is None
+
+
+def test_fresh_lobby_room_is_kept(client, raw_db):
+    resp = create_fanty_room(client, game_mode="solo")
+    code = resp.get_json()["code"]
 
     client.get("/admin/api/fanty/dares")
 
@@ -94,3 +103,44 @@ def test_recently_active_room_is_not_swept(client, raw_db):
     client.get("/admin/api/fanty/dares")
 
     assert raw_db.execute("SELECT status FROM rooms WHERE code = ?", (code,)).fetchone()[0] == "playing"
+
+
+def _set(raw_db, code, status, minutes_ago):
+    raw_db.execute(
+        "UPDATE rooms SET status = ?, last_active_at = datetime('now', ?) WHERE code = ?",
+        (status, f"-{minutes_ago} minutes", code),
+    )
+    raw_db.commit()
+
+
+def test_finished_rooms_close_after_five_quiet_minutes_but_running_ones_wait_an_hour(client, raw_db):
+    finished = create_fanty_room(client, game_mode="solo").get_json()["code"]
+    finished_sentence = create_host(client)["code"]
+    running = create_fanty_room(client, game_mode="solo").get_json()["code"]
+    just_finished = create_fanty_room(client, game_mode="solo").get_json()["code"]
+
+    _set(raw_db, finished, "finished", 10)
+    _set(raw_db, finished_sentence, "final_results", 10)
+    _set(raw_db, running, "playing", 10)
+    _set(raw_db, just_finished, "finished", 1)
+
+    client.get("/api/my-rooms")  # any API request sweeps
+
+    def exists(code):
+        return raw_db.execute("SELECT 1 FROM rooms WHERE code = ?", (code,)).fetchone() is not None
+
+    assert not exists(finished)
+    assert not exists(finished_sentence)
+    assert exists(running)
+    assert exists(just_finished)
+
+
+def test_my_rooms_does_not_list_finished_games(client, raw_db):
+    from tests.test_auth import get_code, register
+
+    register(client, email="fin@example.com")
+    client.post("/api/auth/verify-email", json={"email": "fin@example.com", "code": get_code(raw_db, "fin@example.com")})
+    code = client.post("/api/rooms", json={"name": "Хост", "avatarType": "emoji", "avatarValue": "🦊"}).get_json()["code"]
+    assert [r["code"] for r in client.get("/api/my-rooms").get_json()] == [code]
+    _set(raw_db, code, "final_results", 0)
+    assert client.get("/api/my-rooms").get_json() == []

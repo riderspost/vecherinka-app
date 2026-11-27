@@ -26,6 +26,22 @@ const POLL_MS = 1500;
 // "Вернуться в комнату" — so no prompt and no discard call for them.
 // Returns whether the user actually left (so a caller can re-enable its
 // button on cancel).
+// The game is over and its results have been seen: the host leaving closes the
+// room for good (so it never lingers in anybody's list); anyone else just goes.
+async function leaveFinishedRoom(state, token, code) {
+  if (state.me.isHost) {
+    try {
+      await api.discardRoom(code, token);
+    } catch (e) {
+      // best effort: the sweep removes it shortly anyway
+    }
+  }
+  clearSession(code);
+  navigate("/");
+  return true;
+}
+
+
 async function leaveRoom(state, token, code) {
   let authenticated = false;
   try {
@@ -56,6 +72,7 @@ export function mountRoomPage(container, code, opts) {
   let pollTimer = null;
   let lastAnsweringKey = null;
   let stopped = false;
+  let lastStatus = null;
   let menuOpen = false;
   let closeArmedUntil = 0; // "close the room for everyone" needs a second tap
   let lastState = null;
@@ -235,6 +252,7 @@ export function mountRoomPage(container, code, opts) {
       try {
         const state = await api.getState(code, token);
         lastState = state;
+        lastStatus = state.room.status;
         if (state.me.isHost) {
           syncClaimRequests({ code, token, claims: state.pendingClaims });
           refreshPlayersPanel();
@@ -248,7 +266,7 @@ export function mountRoomPage(container, code, opts) {
         // of wiping a perfectly fine session.
         if (e.status === 401 || e.status === 403 || e.status === 404) {
           clearSession(code);
-          container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
+          container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${lastStatus === "final_results" ? "Игра завершена, комната закрыта" : e.message}</p><button class="btn" id="back-home">На главную</button></div>`;
           const backBtn = document.getElementById("back-home");
           if (backBtn) backBtn.addEventListener("click", () => navigate("/"));
           return;
@@ -721,7 +739,7 @@ function renderFinalResults(wrap, state, token, code) {
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;
-      const left = await leaveRoom(state, token, code);
+      const left = await leaveFinishedRoom(state, token, code);
       if (!left) homeBtn.disabled = false;
     });
     wrap.appendChild(homeBtn);

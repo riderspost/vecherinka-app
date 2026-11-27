@@ -32,6 +32,25 @@ def test_my_rooms_tells_host_and_player_count(client, raw_db):
     assert room["playerCount"] == 2
 
 
+def test_room_with_two_players_of_one_account_is_listed_once_as_host(client, raw_db):
+    login(client, raw_db)
+    created = client.post(
+        "/api/reverse/rooms", json={"name": "Хост", "avatarType": "emoji", "avatarValue": "🦊"}
+    ).get_json()
+    # the same account also joins its own room as a second player
+    resp = client.post(
+        f"/api/rooms/{created['code']}/join", json={"name": "Я же", "avatarType": "emoji", "avatarValue": "🐸"}
+    )
+    assert resp.status_code == 200
+
+    rooms = client.get("/api/my-rooms").get_json()
+    assert len(rooms) == 1
+    assert rooms[0]["isHost"] is True
+
+    resumed = client.post(f"/api/rooms/{created['code']}/resume").get_json()
+    assert resumed["token"] == created["token"]
+
+
 def test_avatar_colour_is_kept_only_from_the_palette(client):
     from server.rooms_common import validate_avatar
 

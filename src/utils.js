@@ -32,41 +32,20 @@ export function thumbUrl(fullUrl) {
   return `${match[1]}_thumb${match[2]}`;
 }
 
-// A tappable 🔥 reaction for a dare, so the admin can later see which ones
-// players actually enjoyed. Toggles on/off — `onToggle(nextLiked)` is
-// called with the new state and must call the matching like/unlike API;
-// the button reverts its visual state if that call fails. Not tracked
-// per-player server-side — a lightweight "people in the room liked this"
-// signal, not a strict one-vote-per-person tally.
-export function createFireButton(initiallyLiked, onToggle) {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn fire-btn";
-
-  const label = document.createElement("span");
-  label.textContent = "🔥 Классный фант!";
-  btn.appendChild(label);
-
-  let liked = Boolean(initiallyLiked);
-  btn.classList.toggle("fire-btn-liked", liked);
-  btn.setAttribute("aria-pressed", String(liked));
-
-  btn.addEventListener("click", async () => {
-    if (btn.disabled) return;
-    const next = !liked;
-    btn.disabled = true;
-    btn.classList.toggle("fire-btn-liked", next);
-    btn.setAttribute("aria-pressed", String(next));
-    try {
-      await onToggle(next);
-      liked = next;
-    } catch (e) {
-      // Revert the visual state — the toggle didn't actually take.
-      btn.classList.toggle("fire-btn-liked", liked);
-      btn.setAttribute("aria-pressed", String(liked));
-    } finally {
-      btn.disabled = false;
+// A double tap (two quick taps in the same place, or a double click) on `el`.
+// iOS Safari does not send "dblclick" reliably, so the taps are timed by hand.
+export function enableDoubleTap(el, onDoubleTap) {
+  const MAX_GAP_MS = 350;
+  const MAX_MOVE_PX = 30;
+  let last = null;
+  el.style.touchAction = "manipulation";
+  el.addEventListener("pointerup", (e) => {
+    const now = Date.now();
+    if (last && now - last.t <= MAX_GAP_MS && Math.hypot(e.clientX - last.x, e.clientY - last.y) <= MAX_MOVE_PX) {
+      last = null;
+      onDoubleTap(e);
+    } else {
+      last = { t: now, x: e.clientX, y: e.clientY };
     }
   });
-  return btn;
 }

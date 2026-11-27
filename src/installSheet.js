@@ -1,5 +1,5 @@
 import { canPromptInstall, detectPlatform, promptInstall } from "./pwaInstall.js";
-import { clearInstalled, isInstalled, isOpenedAsApp, markInstalled } from "./installState.js";
+import { isInstalled, isOpenedAsApp, markInstalled } from "./installState.js";
 import { enableSwipeDown } from "./swipeSheet.js";
 
 const TABS = [
@@ -35,6 +35,15 @@ export function openInstallSheet() {
   });
   document.body.appendChild(sheetEl);
   draw();
+  const onChange = () => {
+    if (!sheetEl || !sheetEl.isConnected) {
+      window.removeEventListener("plynger:install-changed", onChange);
+      return;
+    }
+    showSteps = false;
+    draw();
+  };
+  window.addEventListener("plynger:install-changed", onChange);
 
   function frame(inner) {
     sheetEl.innerHTML = `<div class="inst-sheet"><div class="inst-grab sheet-handle"></div>${inner}</div>`;
@@ -64,17 +73,14 @@ export function openInstallSheet() {
     else drawDesktop(body);
   }
 
-  function confirmButton(body, label) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "inst-cta";
-    btn.textContent = label;
-    btn.addEventListener("click", () => {
-      showSteps = false;
-      markInstalled();
-      draw();
-    });
-    body.appendChild(btn);
+  // There is no "I did it" button: the app finds out by itself. The browser
+  // announces an install on Android and desktop, and from the icon the game
+  // opens as an app, which it can recognise (see installState.js).
+  function autoNote(body) {
+    const note = document.createElement("p");
+    note.className = "inst-hint";
+    note.textContent = "Когда игра появится на экране и вы откроете её с иконки, здесь появится отметка «Установлено».";
+    body.appendChild(note);
   }
 
   function drawIos(body) {
@@ -84,7 +90,7 @@ export function openInstallSheet() {
         { text: "Выберите «На экран «Домой»»", icon: "➕" },
         { text: "Нажмите «Добавить»", icon: "✅" },
       ]) + `<p class="inst-hint">Установить можно только из Safari: в других браузерах на iPhone такого пункта нет.</p>`;
-    confirmButton(body, "Я добавил(а) на экран");
+    autoNote(body);
   }
 
   function drawAndroid(body) {
@@ -111,7 +117,7 @@ export function openInstallSheet() {
       { text: "Откройте меню браузера (три точки в углу)", icon: "⋮" },
       { text: "Выберите «Установить приложение» или «Добавить на главный экран»", icon: "📲" },
     ]);
-    confirmButton(body, "Я добавил(а) на экран");
+    autoNote(body);
   }
 
   function drawDesktop(body) {
@@ -158,7 +164,6 @@ export function openInstallSheet() {
       again.textContent = "Не появилась иконка? Показать шаги ещё раз";
       again.addEventListener("click", () => {
         showSteps = true;
-        clearInstalled();
         draw();
       });
       sheet.appendChild(again);

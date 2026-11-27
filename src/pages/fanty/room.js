@@ -2,13 +2,14 @@ import { api, fantyApi, authApi } from "../../api.js";
 import { loadSession, saveSession, clearSession } from "../../storage.js";
 import { navigate } from "../../router.js";
 import { createAvatarPicker, avatarHtml, createAvatarElement } from "../../avatarPicker.js";
-import { escapeHtml, thumbUrl, createFireButton, truncatedNameHtml } from "../../utils.js";
+import { escapeHtml, thumbUrl, enableDoubleTap, truncatedNameHtml } from "../../utils.js";
 import { openLightbox, shareAllImages } from "../../lightbox.js";
 import { createPhotoThumb, createPendingPhotoThumb } from "../../photoThumb.js";
 import { GAME_MODES, locationLabel, categoryLabel, pickModeLabel } from "./constants.js";
 import { createGenderPicker } from "./genderPicker.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { openBottomSheet } from "../../swipeSheet.js";
+import { enableSound, isSoundOn, playSpin, playChime, playBuzzer } from "./tvSound.js";
 
 const POLL_MS = 1500;
 const SPIN_ANIMATION_MS = 9000;
@@ -25,6 +26,31 @@ const BOTTLE_IMG = `<img src="/src/assets/bottle.png" alt="" class="bottle-img" 
 // "Вернуться в комнату" — so no prompt and no discard call for them.
 // Returns whether the user actually left (so a caller can re-enable its
 // button on cancel).
+// A burst of fire over a card, and a few sparks.
+function burstFire(card) {
+  const burst = document.createElement("div");
+  burst.className = "like-burst";
+  burst.innerHTML = `<span class="like-burst-fire">🔥</span><span class="like-spark s1">✨</span><span class="like-spark s2">✨</span><span class="like-spark s3">✨</span>`;
+  card.appendChild(burst);
+  setTimeout(() => burst.remove(), 1100);
+}
+
+// The game is over and its results have been seen: the host leaving closes the
+// room for good (so it never lingers in anybody's list); anyone else just goes.
+async function leaveFinishedRoom(state, token, code) {
+  if (state.me.isHost) {
+    try {
+      await fantyApi.discard(code, token);
+    } catch (e) {
+      // best effort: the sweep removes it shortly anyway
+    }
+  }
+  clearSession(code);
+  navigate("/");
+  return true;
+}
+
+
 async function leaveRoom(state, token, code) {
   let authenticated = false;
   try {
@@ -70,6 +96,7 @@ export function mountFantyRoomPage(container, code, opts) {
   let menuOpen = false;
   let closeArmedUntil = 0;
   let lastState = null;
+  let prevFantyPick = null;
   let redrawTopBar = null; // set once the bar exists (it is defined while polling)
   let persistentCircleWrap = null;
   let persistentPage = null;
@@ -122,7 +149,7 @@ export function mountFantyRoomPage(container, code, opts) {
       saveSession(code, { token: res.token, playerId: res.playerId });
       startPolling(res.token);
     } catch (e) {
-      container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${e.message}</p></div>`;
+      container.innerHTML = `<div class="screen center-screen"><p class="error-msg">${lastState && lastState.room.status === "finished" ? "Игра завершена, комната закрыта" : e.message}</p></div>`;
     }
   }
 
@@ -448,6 +475,24 @@ export function mountFantyRoomPage(container, code, opts) {
           drawTopBar(barHost, state, token);
         }
 
+        if (state.me.isDisplay) {
+          // A browser lets a page make sound only after a tap, so the TV
+          // asks for one tap, once.
+          const soundBtn = document.createElement("button");
+          soundBtn.type = "button";
+          soundBtn.className = "tv-sound-btn";
+          const paint = () => {
+            soundBtn.textContent = isSoundOn() ? "🔊 Звук включён" : "🔇 Включить звук";
+            soundBtn.classList.toggle("on", isSoundOn());
+          };
+          soundBtn.addEventListener("click", () => {
+            if (!isSoundOn()) enableSound();
+            paint();
+          });
+          paint();
+          page.appendChild(soundBtn);
+        }
+
         const wrap = document.createElement("div");
         wrap.className = "screen room-screen" + (state.me.isDisplay ? " display-mode" : "");
         page.appendChild(wrap);
@@ -460,6 +505,19 @@ export function mountFantyRoomPage(container, code, opts) {
       const wrap = persistentWrap;
 
       const ctrl = {
+        // true once for a state in which somebody has just been picked: the TV
+        // then plays the spin itself instead of snapping to the result
+        consumeSpin: (fanty) => {
+          const prev = prevFantyPick;
+          prevFantyPick = { phase: fanty.phase, picked: fanty.pickedPlayerId, partner: fanty.partnerPlayerId };
+          if (!prev) return false;
+          const wasWaiting = prev.phase === "ready_to_spin" || prev.phase === "awaiting_partner_spin";
+          const changed =
+            (fanty.pickedPlayerId && fanty.pickedPlayerId !== prev.picked) ||
+            (fanty.partnerPlayerId && fanty.partnerPlayerId !== prev.partner);
+          return Boolean(wasWaiting && changed);
+        },
+        getAudio: () => currentAudio,
         showGender: state.settings.gameMode === "team" && state.settings.pairMode === "mixed",
         setAnimating: (v) => (animating = v),
         rerender: (s) => render(s, token),
@@ -910,15 +968,17 @@ function renderBottleCircle(players, fanty, ctrl) {
   return { circleWrap, bottle };
 }
 
-async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, freshState) {
+async function animateSpinAndRerender(bottle, players, targetPlayerId, ctrl, freshState, sound) {
   const idx = players.findIndex((p) => p.id === targetPlayerId);
   const targetAngle = (idx >= 0 ? seatAngle(idx, players.length) : 0) + 90;
   ctrl.setAnimating(true);
+  if (sound) playSpin(SPIN_ANIMATION_MS, 2160 + (((targetAngle - sound.fromAngle) % 360) + 360) % 360);
   bottle.style.transition = `transform ${SPIN_ANIMATION_MS}ms cubic-bezier(0.1,0.85,0.15,1)`;
   bottle.style.transform = `translate(-50%, -50%) rotate(${targetAngle + 2160}deg)`;
   await new Promise((resolve) => setTimeout(resolve, SPIN_ANIMATION_MS));
   ctrl.setAnimating(false);
   ctrl.setLastAngle(targetAngle);
+  if (sound) playChime();
   ctrl.rerender(freshState);
 }
 
@@ -942,6 +1002,11 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   }
   roundLabel.textContent = `Раунд ${displayRound}`;
 
+  // On the TV nobody presses "spin": when the picked player changes it plays
+  // the spin itself (bottle turns, ticks, a chime at the end) instead of
+  // jumping straight to the result.
+  const tvSpin = state.me.isDisplay && ctrl.consumeSpin(fanty);
+  const spinFromAngle = ctrl.getLastAngle();
   const { circleWrap, bottle } = renderBottleCircle(players, fanty, ctrl);
   if (circleWrap.parentNode !== wrap) {
     // renderBottleCircle only returns a *new* element when the player list
@@ -962,6 +1027,26 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
   if (oldManageBtn) oldManageBtn.remove();
   const oldManageCard = wrap.querySelector(".manage-players-card");
   if (oldManageCard) oldManageCard.remove();
+
+  if (tvSpin) {
+    const targetId =
+      fanty.partnerPlayerId && fanty.phase !== "awaiting_choice" ? fanty.partnerPlayerId : fanty.pickedPlayerId;
+    // renderBottleCircle already put the bottle on the new player; put it
+    // back where it was and let the spin carry it there.
+    circleWrap.querySelectorAll(".circle-seat").forEach((seatEl) => {
+      seatEl.classList.remove("circle-seat-picked", "circle-seat-partner");
+    });
+    bottle.style.transition = "none";
+    bottle.style.transform = `translate(-50%, -50%) rotate(${spinFromAngle}deg)`;
+    void bottle.offsetWidth;
+    const spinPanel = document.createElement("div");
+    spinPanel.className = "fanty-panel";
+    spinPanel.innerHTML = `<p class="tagline">Бутылка крутится…</p>`;
+    wrap.appendChild(spinPanel);
+    ctrl.setAnimating(true);
+    animateSpinAndRerender(bottle, players, targetId, ctrl, state, { fromAngle: spinFromAngle });
+    return;
+  }
 
   const panel = document.createElement("div");
   panel.className = "fanty-panel";
@@ -1170,6 +1255,7 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       function tick() {
         const remaining = startedAt + totalMs - Date.now();
         if (remaining <= 0) {
+          if (!timerEl.classList.contains("big-timer-stop") && state.me.isDisplay) playBuzzer();
           timerEl.textContent = "Стооооп!";
           timerEl.classList.add("big-timer-stop");
           if (ctrl) ctrl.stopAudio();
@@ -1290,18 +1376,45 @@ function renderAwaitingAction(panel, state, token, code, players, ctrl) {
       updateUploadButtonState();
     }
 
+    // A like is a double tap on the dare itself: a burst of fire over the
+    // card, and the hint below tells what happened. Tapping twice again
+    // takes it back.
     if (fanty.contentType === "dare" && fanty.contentId) {
       const likeKey = `dare:${fanty.contentId}`;
-      const fireBtn = createFireButton(ctrl.likedContentIds.has(likeKey), async (nextLiked) => {
-        if (nextLiked) {
-          await fantyApi.likeDare(fanty.contentId);
-          ctrl.likedContentIds.add(likeKey);
-        } else {
-          await fantyApi.unlikeDare(fanty.contentId);
-          ctrl.likedContentIds.delete(likeKey);
-        }
-      });
-      panel.appendChild(fireBtn);
+      const card = panel.querySelector(".prompt-text");
+      const hint = document.createElement("p");
+      hint.className = "like-hint";
+      let busy = false;
+      function drawHint() {
+        const liked = ctrl.likedContentIds.has(likeKey);
+        hint.classList.toggle("liked", liked);
+        hint.textContent = liked ? "🔥 Вам понравился этот фант" : "Двойной тап по заданию, если фант понравился";
+      }
+      drawHint();
+      if (card) {
+        card.classList.add("like-card");
+        enableDoubleTap(card, async () => {
+          if (busy) return;
+          busy = true;
+          const nextLiked = !ctrl.likedContentIds.has(likeKey);
+          try {
+            if (nextLiked) {
+              await fantyApi.likeDare(fanty.contentId);
+              ctrl.likedContentIds.add(likeKey);
+              burstFire(card);
+            } else {
+              await fantyApi.unlikeDare(fanty.contentId);
+              ctrl.likedContentIds.delete(likeKey);
+            }
+            drawHint();
+          } catch (e) {
+            // the like did not go through: leave everything as it was
+          } finally {
+            busy = false;
+          }
+        });
+      }
+      panel.appendChild(hint);
     }
 
     const row = document.createElement("div");
@@ -1388,7 +1501,7 @@ function renderFinished(wrap, state, token, code) {
     homeBtn.textContent = "На главную";
     homeBtn.addEventListener("click", async () => {
       homeBtn.disabled = true;
-      const left = await leaveRoom(state, token, code);
+      const left = await leaveFinishedRoom(state, token, code);
       if (!left) homeBtn.disabled = false;
     });
     wrap.appendChild(homeBtn);

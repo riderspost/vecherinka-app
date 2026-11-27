@@ -93,6 +93,9 @@ def error(message, status=400):
 
 
 ABANDONED_ROOM_CUTOFF = "-1 hour"
+# A finished game has nothing left to do: its room closes when the host leaves
+# the results, and otherwise soon after the last player stopped looking.
+FINISHED_ROOM_CUTOFF = "-5 minutes"
 
 
 def _sweep_abandoned_rooms(db):
@@ -105,11 +108,14 @@ def _sweep_abandoned_rooms(db):
     # relying on every host to explicitly close the loop. The storage
     # itself (fanty_rounds, round_prompts, submissions, votes, photos
     # tables) stays fully intact for when game-history viewing is worth
-    # building — this only ever removes *rows*, never the schema. Lobby
-    # rooms are left alone: nothing's been played in them yet.
+    # building — this only ever removes *rows*, never the schema. Rooms
+    # still in the lobby go the same way: every open page polls the room,
+    # which counts as activity, so an hour of silence means nobody is there.
     stale_rooms = db.execute(
-        "SELECT * FROM rooms WHERE status != 'lobby' AND last_active_at < datetime('now', ?)",
-        (ABANDONED_ROOM_CUTOFF,),
+        """SELECT * FROM rooms
+           WHERE (status NOT IN ('finished', 'final_results') AND last_active_at < datetime('now', ?))
+              OR (status IN ('finished', 'final_results') AND last_active_at < datetime('now', ?))""",
+        (ABANDONED_ROOM_CUTOFF, FINISHED_ROOM_CUTOFF),
     ).fetchall()
     for room in stale_rooms:
         delete_room_and_files(db, room)
@@ -189,13 +195,15 @@ def my_rooms():
         return jsonify([])
     db = get_db()
     rows = db.execute(
-        """SELECT DISTINCT r.code AS code, r.game_type AS gameType, r.status AS status,
-                  p.is_host AS isHost,
+        """SELECT r.code AS code, r.game_type AS gameType, r.status AS status,
+                  MAX(p.is_host) AS isHost,
                   (SELECT COUNT(*) FROM players q
                     WHERE q.room_id = r.id AND q.is_display = 0 AND q.left_at IS NULL) AS playerCount
            FROM players p
            JOIN rooms r ON r.id = p.room_id
            WHERE p.user_id = ? AND p.is_display = 0 AND p.left_at IS NULL
+             AND r.status NOT IN ('finished', 'final_results')
+           GROUP BY r.id
            ORDER BY r.created_at DESC""",
         (user_id,),
     ).fetchall()
@@ -215,7 +223,8 @@ def resume_room(code):
     if not room:
         return error("Комната не найдена", 404)
     player = db.execute(
-        "SELECT * FROM players WHERE room_id = ? AND user_id = ? AND is_display = 0 AND left_at IS NULL",
+        "SELECT * FROM players WHERE room_id = ? AND user_id = ? AND is_display = 0 AND left_at IS NULL"
+        " ORDER BY is_host DESC",
         (room["id"], user_id),
     ).fetchone()
     if not player:
