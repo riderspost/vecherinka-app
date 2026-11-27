@@ -4588,13 +4588,3 @@ h2, h3 {
   line-height: 1.35;
   opacity: 0.93;
 }
-
-.mode-pill {
-  align-self: flex-start;
-  margin-top: 6px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: rgba(15, 10, 40, 0.38);
-  font-size: 11px;
-  font-weight: 600;
-}

@@ -143,7 +143,6 @@ export function renderFantyHome(container) {
         <span class="mode-art" aria-hidden="true">${mode.art}</span>
         <b>${mode.title}</b>
         <p>${mode.text}</p>
-        <span class="mode-pill">от ${MIN_PLAYERS_BY_MODE[mode.value] || 2} игроков</span>
       `;
       card.addEventListener("click", () => showCreateForm(mode.value));
       body.appendChild(card);
