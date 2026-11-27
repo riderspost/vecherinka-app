@@ -1,6 +1,7 @@
 import { fantyApi } from "../../api.js";
 import { mountWizardFrame } from "../../wizard.js";
 import { escapeHtml } from "../../utils.js";
+import { openBottomSheet } from "../../swipeSheet.js";
 import { LOCATIONS, MOOD_CATEGORIES, ATTRIBUTES, locationLabel, categoryLabel } from "../fanty/constants.js";
 
 // "Предложить идею" as a wizard with one question per screen. Which screens
@@ -60,6 +61,8 @@ export function openIdeaWizard(container, { onExit }) {
     seconds: 60,
     hasRecording: false,
     music: null, // { filename, originalName }
+    confirmedText: null, // the text for which "это другое" was said
+    notice: null, // a similar-ideas result to show on the text screen once
   };
   let current = "type";
 
@@ -140,6 +143,23 @@ export function openIdeaWizard(container, { onExit }) {
     body.appendChild(row);
   }
 
+  // ---- similar ideas ----
+
+  const SOURCE_LABEL = { game: "В игре", pending: "На проверке", own: "Ваша идея на проверке", rejected: "Отклонена раньше" };
+
+  function similarList(items) {
+    const list = document.createElement("div");
+    list.className = "idea-sim-list";
+    items.forEach((it) => {
+      const row = document.createElement("div");
+      row.className = "idea-sim-item";
+      const text = it.parts.map((p) => (p.match ? `<em>${escapeHtml(p.text)}</em>` : escapeHtml(p.text))).join("");
+      row.innerHTML = `${text}<small>${SOURCE_LABEL[it.source] || ""} · сходство ${it.score}%</small>`;
+      list.appendChild(row);
+    });
+    return list;
+  }
+
   // ---- the screens ----
 
   const STEP = {
@@ -178,19 +198,129 @@ export function openIdeaWizard(container, { onExit }) {
       counter.className = "idea-counter";
       body.appendChild(counter);
       const sync = () => (counter.textContent = `${area.value.length} / ${MAX_TEXT}`);
-      area.addEventListener("input", sync);
       sync();
+
+      // what the base says about this text: nothing alike, alike, or a copy
+      const box = document.createElement("div");
+      box.className = "idea-sim";
+      box.hidden = true;
+      body.appendChild(box);
       const err = errorLine(body);
-      nextButton(body, "Дальше", () => {
+
+      const cache = new Map();
+      let timer = null;
+
+      async function check(text) {
+        if (cache.has(text)) return cache.get(text);
+        try {
+          const res = await fantyApi.checkSimilar(state.type, text);
+          cache.set(text, res);
+          return res;
+        } catch (e) {
+          return null; // the server checks again when the idea is sent
+        }
+      }
+
+      function paint(res, text) {
+        box.className = "idea-sim";
+        box.innerHTML = "";
+        area.classList.remove("warn", "bad");
+        if (!res) {
+          box.hidden = true;
+          return;
+        }
+        box.hidden = false;
+        const noun = isDare ? "фант" : "вопрос";
+        if (res.level === "none") {
+          box.classList.add("ok");
+          box.textContent = "✓ Похожих идей не нашли";
+          return;
+        }
+        if (res.level === "duplicate") {
+          box.classList.add("bad");
+          area.classList.add("bad");
+          const h = document.createElement("b");
+          h.textContent = res.message || `Такой ${noun} уже есть`;
+          box.appendChild(h);
+          box.appendChild(similarList(res.items.slice(0, 1)));
+          const hint = document.createElement("div");
+          hint.className = "idea-sim-hint";
+          hint.textContent = `Придумайте другой ${noun}: такого в игре ещё нет.`;
+          box.appendChild(hint);
+          return;
+        }
+        // alike, but not a copy
+        box.classList.add("warn");
+        area.classList.add("warn");
+        const confirmed = state.confirmedText === text;
+        const h = document.createElement("b");
+        h.textContent = confirmed ? "Похожие есть, вы подтвердили, что ваш другой" : `Есть похожие ${isDare ? "фанты" : "вопросы"}`;
+        box.appendChild(h);
+        box.appendChild(similarList(res.items));
+        if (!confirmed) {
+          const actions = document.createElement("div");
+          actions.className = "idea-sim-actions";
+          const go = document.createElement("button");
+          go.type = "button";
+          go.className = "idea-sim-primary";
+          go.textContent = "Это другое, продолжить";
+          go.addEventListener("click", () => {
+            state.confirmedText = text;
+            state.text = text;
+            next();
+          });
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.textContent = "Изменить текст";
+          edit.addEventListener("click", () => area.focus());
+          actions.append(go, edit);
+          box.appendChild(actions);
+        }
+      }
+
+      area.addEventListener("input", () => {
+        sync();
+        err.textContent = "";
+        clearTimeout(timer);
+        const text = area.value.trim();
+        if (text.length < 8) {
+          paint(null, text);
+          return;
+        }
+        timer = setTimeout(async () => {
+          const res = await check(text);
+          if (area.value.trim() === text) paint(res, text);
+        }, 600);
+      });
+
+      nextButton(body, "Дальше", async () => {
         const text = area.value.trim();
         if (!text) {
           err.textContent = "Введите текст";
           area.focus();
           return;
         }
+        const res = await check(text);
+        paint(res, text);
+        if (res && res.level === "duplicate") {
+          box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          return;
+        }
+        if (res && res.level === "similar" && state.confirmedText !== text) {
+          box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          return;
+        }
         state.text = text;
         next();
       });
+
+      // coming back from a refused sending: show what was found
+      if (state.notice) {
+        paint(state.notice, area.value.trim());
+        state.notice = null;
+      } else if (area.value.trim().length >= 8) {
+        check(area.value.trim()).then((res) => paint(res, area.value.trim()));
+      }
       area.focus();
     },
 
@@ -478,13 +608,16 @@ export function openIdeaWizard(container, { onExit }) {
       body.appendChild(list);
 
       const err = errorLine(body);
-      const send = nextButton(body, "Отправить на проверку", async () => {
+      const send = nextButton(body, "Отправить на проверку", () => submit());
+
+      async function submit() {
         send.disabled = true;
         err.textContent = "";
         const payload = {
           type: state.type,
           text: state.text,
           categories: [...state.moods, ...state.attrs],
+          confirmedSimilar: state.confirmedText === state.text,
         };
         if (isDare) {
           payload.kind = state.kind;
@@ -503,10 +636,51 @@ export function openIdeaWizard(container, { onExit }) {
           await fantyApi.submit(payload);
           onExit("Спасибо! Предложение отправлено на проверку.");
         } catch (e) {
-          err.textContent = e.message;
           send.disabled = false;
+          if (e.status === 409 && (e.level === "duplicate" || e.level === "similar")) {
+            refused(e);
+            return;
+          }
+          err.textContent = e.message;
         }
-      });
+      }
+
+      // The base got an idea like this one while the form was being filled in.
+      function refused(e) {
+        const result = { level: e.level, items: e.similar || [], message: e.error };
+        openBottomSheet({
+          title: e.level === "duplicate" ? e.error : "Пока вы заполняли форму, появился похожий",
+          build: (content, close) => {
+            content.classList.add("idea-refused");
+            content.appendChild(similarList(result.items.slice(0, e.level === "duplicate" ? 1 : 3)));
+            const actions = document.createElement("div");
+            actions.className = "idea-refused-actions";
+            if (e.level === "similar") {
+              const anyway = document.createElement("button");
+              anyway.type = "button";
+              anyway.className = "wz-cta";
+              anyway.textContent = "Всё равно отправить";
+              anyway.addEventListener("click", () => {
+                state.confirmedText = state.text;
+                close();
+                submit();
+              });
+              actions.appendChild(anyway);
+            }
+            const back = document.createElement("button");
+            back.type = "button";
+            back.className = e.level === "similar" ? "wz-link" : "wz-cta";
+            back.textContent = "Вернуться к тексту";
+            back.addEventListener("click", () => {
+              state.notice = result;
+              close();
+              go("text");
+            });
+            actions.appendChild(back);
+            content.appendChild(actions);
+          },
+        });
+      }
     },
   };
 

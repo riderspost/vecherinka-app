@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 
 from .db import get_db, TESTER_LOGIN
 from . import ai_prompts
+from . import similarity
 from . import fanty_game
 from . import reverse_game
 from .rooms_common import UPLOAD_DIR, ALLOWED_AUDIO_EXT, delete_room_and_files
@@ -492,6 +493,26 @@ def _fanty_content_locked_for_edit(db, state_column, rounds_column, content_id):
 @admin_bp.route("/api/fanty/dares")
 @admin_required
 def admin_list_dares():
+    return _with_similar(_admin_list_dares())
+
+
+def _with_similar(response):
+    """For ideas waiting for review: which other ideas in the base are like them."""
+    result = response.get_json()
+    for item in result:
+        if item["status"] != "pending":
+            continue
+        others = [
+            {"id": o["id"], "text": o["text"], "status": o["status"]} for o in result if o["id"] != item["id"]
+        ]
+        item["similar"] = [
+            {"id": s["id"], "text": s["text"], "status": s["status"], "score": int(s["score"] * 100)}
+            for s in similarity.find_similar(item["text"], others, limit=3)
+        ]
+    return jsonify(result)
+
+
+def _admin_list_dares():
     db = get_db()
     rows = db.execute(
         """SELECT d.id, d.text, d.kind, d.status, d.mixed_pair, d.likes,
@@ -790,6 +811,10 @@ def admin_bulk_delete_dares():
 @admin_bp.route("/api/fanty/truths")
 @admin_required
 def admin_list_truths():
+    return _with_similar(_admin_list_truths())
+
+
+def _admin_list_truths():
     db = get_db()
     rows = db.execute(
         """SELECT t.id, t.text, t.status, t.likes,

@@ -1,13 +1,22 @@
 import io
 import os
+import random
 
 from tests.test_my_rooms import login
+
+
+def _unique_text():
+    """Words made up on the spot, so the duplicate check never sees a likeness to other tests' ideas."""
+    letters = "бвгджзклмнпрстфхцчш"
+    vowels = "аеиоу"
+    word = lambda: "".join(random.choice(letters) + random.choice(vowels) for _ in range(4))
+    return " ".join(word() for _ in range(5))
 
 
 def _dare(**extra):
     payload = {
         "type": "dare",
-        "text": "Зачитай реп про соседа " + os.urandom(3).hex(),
+        "text": _unique_text(),
         "kind": "solo",
         "locations": ["apartment"],
         "categories": ["basic"],

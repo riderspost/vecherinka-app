@@ -5383,3 +5383,27 @@ h2, h3 {
 .idea-review b { flex: none; width: 82px; font-weight: 400; color: var(--hub-dim); }
 .idea-review span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .idea-review em { flex: none; font-style: normal; color: var(--hub-cyan); font-size: 12px; }
+
+/* Similar ideas under the text field */
+.idea-sim { margin: 10px 0; padding: 12px; border-radius: 18px; font-size: 13px; line-height: 1.4; color: var(--hub-text); }
+.idea-sim[hidden] { display: none; }
+.idea-sim.ok { background: rgba(93, 255, 167, .08); border: 1.5px solid rgba(93, 255, 167, .4); color: var(--hub-dim); }
+.idea-sim.warn { background: rgba(255, 181, 74, .1); border: 1.5px solid rgba(255, 181, 74, .55); }
+.idea-sim.bad { background: rgba(255, 122, 122, .1); border: 1.5px solid rgba(255, 122, 122, .6); }
+.idea-sim > b { display: block; margin-bottom: 8px; font-size: 14px; }
+.idea-sim.warn > b { color: #ffb54a; }
+.idea-sim.bad > b { color: #ff7a7a; }
+.idea-sim-list { display: flex; flex-direction: column; gap: 6px; }
+.idea-sim-item { padding: 9px 11px; border-radius: 12px; background: rgba(255, 255, 255, .06); font-size: 13px; overflow-wrap: anywhere; }
+.idea-sim-item em { font-style: normal; background: rgba(255, 181, 74, .3); border-radius: 4px; padding: 0 2px; }
+.idea-sim-item small { display: block; margin-top: 3px; font-size: 11px; color: var(--hub-dim); }
+.idea-sim-hint { margin-top: 8px; color: var(--hub-dim); }
+.idea-sim-actions { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.idea-sim-actions button {
+  padding: 11px; border-radius: 13px; border: 1.5px solid var(--hub-line); background: transparent;
+  color: var(--hub-text); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.idea-sim-actions .idea-sim-primary { border: 0; background: linear-gradient(90deg, var(--hub-pink), var(--hub-orange)); color: #2a1030; }
+.wz-textarea.warn { border-color: rgba(255, 181, 74, .8); }
+.wz-textarea.bad { border-color: rgba(255, 122, 122, .85); }
+.idea-refused-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }

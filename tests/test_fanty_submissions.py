@@ -104,7 +104,7 @@ def admin_session(client):
 def test_history_shows_pending_approved_and_rejected_with_dates_and_reason(client, raw_db):
     register_and_verify(client, raw_db, email="hist@example.com")
     assert submit(client, "История: фант на проверке").status_code == 200
-    assert submit(client, "История: фант одобрят").status_code == 200
+    assert submit(client, "История: покажи балет лебедей").status_code == 200
     assert submit(client, "История: вопрос отклонят", kind="truth").status_code == 200
     ids = {
         r["text"]: r["id"]
@@ -114,14 +114,14 @@ def test_history_shows_pending_approved_and_rejected_with_dates_and_reason(clien
 
     admin = client.application.test_client()
     admin_session(admin)
-    assert admin.post(f"/admin/api/fanty/dares/{ids['История: фант одобрят']}/activate").status_code == 200
+    assert admin.post(f"/admin/api/fanty/dares/{ids['История: покажи балет лебедей']}/activate").status_code == 200
     assert admin.post(f"/admin/api/fanty/truths/{truth_id}/reject", json={"reason": "Слишком личный"}).status_code == 200
 
     body = client.get("/api/fanty/my-submissions").get_json()
     assert body["counts"] == {"pending": 1, "approved": 1, "rejected": 1}
     by_text = {i["text"]: i for i in body["items"]}
     pending = by_text["История: фант на проверке"]
-    approved = by_text["История: фант одобрят"]
+    approved = by_text["История: покажи балет лебедей"]
     rejected = by_text["История: вопрос отклонят"]
     assert pending["status"] == "pending" and pending["reviewedAt"] is None
     assert approved["status"] == "approved" and approved["reviewedAt"] and approved["plays"] == 0 and approved["likes"] == 0

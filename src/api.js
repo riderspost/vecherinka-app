@@ -149,6 +149,7 @@ export const fantyApi = {
   likeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/like`),
   unlikeDare: (dareId) => request("POST", `/api/fanty/dares/${dareId}/unlike`),
   submit: (payload) => request("POST", "/api/fanty/submit", payload),
+  checkSimilar: (type, text) => request("POST", "/api/fanty/check-similar", { type, text }),
   uploadIdeaAudio: (file) => {
     const form = new FormData();
     form.append("file", file);

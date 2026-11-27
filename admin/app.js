@@ -1090,11 +1090,16 @@ function renderPendingSection(idPrefix, apiBase, pending, all, onEdit, refreshFn
       (p) => `
       <tr data-id="${p.id}">
         <td><input type="checkbox" class="pending-check" data-id="${p.id}" /></td>
-        <td>${escapeHtml(p.text)}${pendingTagsHtml(p) ? `<br/>${pendingTagsHtml(p)}` : ""}</td>
+        <td>${escapeHtml(p.text)}${pendingTagsHtml(p) ? `<br/>${pendingTagsHtml(p)}` : ""}${similarBlockHtml(p)}</td>
         <td>
           <div class="row-actions">
             <button class="btn" data-activate="${p.id}">Активировать</button>
             ${p.createdBy && p.createdBy !== "admin" ? `<button class="btn secondary" data-reject="${p.id}">Отклонить</button>` : ""}
+            ${
+              p.createdBy && p.createdBy !== "admin" && p.similar && p.similar.length
+                ? `<button class="btn secondary" data-reject-dup="${p.id}">Отклонить как дубль</button>`
+                : ""
+            }
             ${iconActionsHtml(p.id, onEdit)}
           </div>
         </td>
@@ -1153,8 +1158,37 @@ function renderPendingSection(idPrefix, apiBase, pending, all, onEdit, refreshFn
       }
     });
   });
+  // The usual case of a duplicate: one tap, the reason is filled in.
+  pendingHost.querySelectorAll("[data-reject-dup]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await api(`${apiBase}/${btn.dataset.rejectDup}/reject`, {
+          method: "POST",
+          body: JSON.stringify({ reason: "Такая идея уже есть в игре" }),
+        });
+        await refreshFn();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+  });
   wireDeleteButtons(pendingHost, apiBase, refreshFn);
   wireEditButtons(pendingHost, all, onEdit);
+}
+
+// "Похожие в базе" under an idea waiting for review.
+function similarBlockHtml(p) {
+  if (!p.similar || !p.similar.length) return "";
+  const where = { active: "в игре", pending: "на проверке" };
+  const rows = p.similar
+    .map(
+      (s) =>
+        `<li><b>${s.score}%</b> ${escapeHtml(s.text)} <span class="hint">(${where[s.status] || s.status})</span></li>`
+    )
+    .join("");
+  return `<div class="similar-box"><span class="hint">Похожие в базе:</span><ul>${rows}</ul></div>`;
 }
 
 function renderColumnTable(host, apiBase, items, columns, onEdit, refreshFn) {

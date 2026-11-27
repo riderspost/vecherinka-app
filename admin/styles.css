@@ -352,3 +352,7 @@ input.filter-input[type=text] { width: 220px; }
   font-size: 14px;
   line-height: 1.6;
 }
+
+.similar-box { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 181, 74, 0.12); border: 1px solid rgba(255, 181, 74, 0.45); }
+.similar-box ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.similar-box li { margin-bottom: 3px; }

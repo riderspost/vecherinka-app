@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import threading
 import uuid
 from datetime import datetime
 
@@ -8,6 +9,7 @@ from flask import Blueprint, request, jsonify, session
 from werkzeug.utils import secure_filename
 
 from . import fanty_game as fg
+from . import similarity
 from .auth import current_user_is_tester, current_user_is_paid
 from .db import get_db
 from .rooms_common import (
@@ -666,6 +668,86 @@ def _already_message(what, status):
     return f"{what} уже есть в игре"
 
 
+_submit_lock = threading.Lock()
+
+SOURCE_OF_STATUS = {"active": "game", "pending": "pending", "rejected": "rejected"}
+
+
+def _similar_check(db, content_type, text, user_id):
+    """Looks for ideas already in the game, waiting for review, or turned down
+    that are like this text. Returns {"level": "none" | "similar" | "duplicate",
+    "items": [...]} with at most three items to show."""
+    table = "fanty_dares" if content_type == "dare" else "fanty_truths"
+    rows = db.execute(
+        f"SELECT id, text, status, created_by_user_id FROM {table} WHERE status IN ('active', 'pending', 'rejected')"
+    ).fetchall()
+    candidates = []
+    for r in rows:
+        source = SOURCE_OF_STATUS[r["status"]]
+        if source == "pending" and r["created_by_user_id"] == user_id:
+            source = "own"
+        candidates.append({"text": r["text"], "source": source})
+    found = similarity.find_similar(text, candidates, limit=8)
+    # A turned-down idea only matters when it is practically the same
+    found = [f for f in found if f["source"] != "rejected" or f["score"] >= similarity.DUPLICATE][:3]
+    if not found:
+        return {"level": "none", "items": []}
+    stems = set(similarity.tokens(text))
+    items = [
+        {
+            "source": f["source"],
+            "score": int(f["score"] * 100),
+            "parts": similarity.marked_parts(f["text"], stems),
+        }
+        for f in found
+    ]
+    level = "duplicate" if found[0]["score"] >= similarity.DUPLICATE else "similar"
+    return {"level": level, "items": items}
+
+
+def _duplicate_message(content_type, source):
+    what = "фант" if content_type == "dare" else "вопрос"
+    if source == "game":
+        return f"Такой {what} уже есть"
+    if source == "own":
+        return "Вы уже предлагали это"
+    if source == "pending":
+        return "Такую идею уже предложили, она ждёт проверки"
+    return "Такую идею уже предлагали, её отклонили"
+
+
+def _similarity_gate(db, content_type, text, user_id, data):
+    """An error response when the idea may not be sent as it is, else None."""
+    check = _similar_check(db, content_type, text, user_id)
+    if check["level"] == "duplicate":
+        return error(
+            _duplicate_message(content_type, check["items"][0]["source"]),
+            409,
+            level="duplicate",
+            similar=check["items"],
+        )
+    if check["level"] == "similar" and not data.get("confirmedSimilar"):
+        return error("Есть похожие идеи", 409, level="similar", similar=check["items"])
+    return None
+
+
+@fanty_bp.route("/check-similar", methods=["POST"])
+def check_similar():
+    if not session.get("user_id"):
+        return error("Нужно войти в аккаунт", 401)
+    data = request.get_json(silent=True) or {}
+    content_type = data.get("type")
+    if content_type not in ("dare", "truth"):
+        return error("Некорректный тип")
+    text = clean_str(data.get("text"), MAX_TEXT_LEN)
+    if not text:
+        return jsonify({"level": "none", "items": []})
+    check = _similar_check(get_db(), content_type, text, session.get("user_id"))
+    if check["level"] == "duplicate":
+        check["message"] = _duplicate_message(content_type, check["items"][0]["source"])
+    return jsonify(check)
+
+
 MAX_IDEA_AUDIO_BYTES = 8 * 1024 * 1024
 # Music files that players attach to their suggestions are named like this, so
 # that a suggestion can only point at a file made by this upload (not at some
@@ -708,6 +790,13 @@ def submit_content():
 
     user_id = session.get("user_id")
     db = get_db()
+    # The look for similar ideas and the saving are one step: two nearly
+    # identical ideas sent at the same moment cannot both get through.
+    with _submit_lock:
+        return _store_submission(db, user_id, data, content_type, text, categories)
+
+
+def _store_submission(db, user_id, data, content_type, text, categories):
     if content_type == "dare":
         kind = data.get("kind") if data.get("kind") in ("solo", "team") else "solo"
         locations = [loc for loc in (data.get("locations") or []) if loc in fg.LOCATIONS]
@@ -716,6 +805,9 @@ def submit_content():
         same = db.execute("SELECT status FROM fanty_dares WHERE text = ?", (text,)).fetchone()
         if same:
             return error(_already_message("Такой фант", same["status"]))
+        blocked = _similarity_gate(db, "dare", text, user_id, data)
+        if blocked:
+            return blocked
 
         # Timer, voice recording and music are all optional extras of a dare.
         # Recording and music ride on the timer, so they need one.
@@ -765,6 +857,9 @@ def submit_content():
         same = db.execute("SELECT status FROM fanty_truths WHERE text = ?", (text,)).fetchone()
         if same:
             return error(_already_message("Такой вопрос", same["status"]))
+        blocked = _similarity_gate(db, "truth", text, user_id, data)
+        if blocked:
+            return blocked
         cur = db.execute(
             "INSERT INTO fanty_truths (text, status, created_by_user_id) VALUES (?, 'pending', ?)",
             (text, user_id),
