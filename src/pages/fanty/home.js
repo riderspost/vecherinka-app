@@ -317,6 +317,21 @@ export function renderFantyHome(container) {
       const extras = new Set(formState.attributes);
       let errorEl = null; // cleared as soon as something is chosen
 
+      // The account may have been made paid (or not) since this page loaded,
+      // so ask the server again; if the answer differs, draw the step anew
+      // (keeping what is already chosen).
+      const paidWhenDrawn = isPaid();
+      const thisStep = stepIndex;
+      authApi
+        .session()
+        .catch(() => {})
+        .then(() => {
+          if (isPaid() === paidWhenDrawn || stepIndex !== thisStep) return;
+          formState.categories = [...moods];
+          formState.attributes = [...extras];
+          renderStep();
+        });
+
       // "Флирт+" is only for paid accounts: others see it locked, and the
       // server refuses it anyway.
       const locked = (value) => value === "flirt_plus" && !isPaid();
