@@ -4511,3 +4511,90 @@ h2, h3 {
 .wz .wz-link:disabled {
   opacity: 0.5;
 }
+
+/* ---------- Fanty: choosing the mode (step zero) ---------- */
+
+.mode-intro h2 {
+  margin: 0 0 4px;
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 17px;
+}
+
+.mode-intro p {
+  margin: 0;
+  color: var(--hub-dim);
+  font-size: 13.5px;
+}
+
+.mode-card {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 150px;
+  padding: 16px;
+  border: 0;
+  border-radius: 24px;
+  color: #fff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s;
+}
+
+.mode-card:active {
+  transform: scale(0.98);
+}
+
+.mode-card.g1 {
+  background: linear-gradient(135deg, #8a5cff, #d946ef);
+}
+
+.mode-card.g2 {
+  background: linear-gradient(135deg, #ff5da2, #ff9a3c);
+}
+
+.mode-card.g3 {
+  background: linear-gradient(135deg, #2dd4d4, #4f6bff);
+}
+
+.mode-art {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 58px;
+  line-height: 1;
+  letter-spacing: -8px;
+  transform: rotate(-6deg);
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.25));
+}
+
+.mode-card b {
+  max-width: 68%;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.mode-card p {
+  max-width: 72%;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  opacity: 0.93;
+}
+
+.mode-pill {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 10, 40, 0.38);
+  font-size: 11px;
+  font-weight: 600;
+}

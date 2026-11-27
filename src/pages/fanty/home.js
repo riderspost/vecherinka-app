@@ -15,7 +15,33 @@ import {
 } from "./constants.js";
 
 const TOTAL_STEPS = 4;
-const STEP_TITLES = ["Тип игры", "Где играем", "Как играем", "Игроки"];
+const STEP_TITLES = ["Как играем", "Где играем", "Настройки", "Кто вы"];
+
+// Step zero: which game to play. The rest of the setup follows from this.
+const MODE_CARDS = [
+  { value: "truth_or_dare", tone: "g1", art: "🍾🎭", title: "Правда или действие", text: "Выпавший сам выбирает: ответить на вопрос или выполнить задание." },
+  { value: "solo", tone: "g2", art: "🍾🎯", title: "Просто фанты", text: "Бутылка сразу даёт задание тому, на кого указала." },
+  { value: "team", tone: "g3", art: "🍾👯", title: "Командные фанты", text: "Бутылка крутится дважды и выбирает пару для общего задания." },
+];
+
+// The rules cards of step one: each mode explains itself in three cards.
+const RULES = {
+  truth_or_dare: [
+    { emoji: "🍾", title: "Крутим бутылку", text: "Бутылка выбирает игрока. Все видят, на кого она указала." },
+    { emoji: "🎭", title: "Правда или действие", text: "Выпавший сам решает: ответить на вопрос о себе или выполнить задание.", demo: { q: "Антон, правда или действие?", a: "Действие: зачитай рэп про то, как вы кайфово сидите" } },
+    { emoji: "🎉", title: "Выполнили, крутим снова", text: "Задание нужно сделать по-настоящему. Хост завершает игру, когда пора." },
+  ],
+  solo: [
+    { emoji: "🍾", title: "Крутим бутылку", text: "Бутылка выбирает игрока. Все видят, на кого она указала." },
+    { emoji: "🎯", title: "Сразу задание", text: "Никакого выбора: выпавший получает фант и выполняет его.", demo: { q: "Антон", a: "Зачитай рэп про то, как вы кайфово сидите" } },
+    { emoji: "🎉", title: "Выполнили, крутим снова", text: "Задание нужно сделать по-настоящему. Хост завершает игру, когда пора." },
+  ],
+  team: [
+    { emoji: "🍾", title: "Первый спин", text: "Бутылка выбирает первого игрока." },
+    { emoji: "👯", title: "Второй спин: напарник", text: "Бутылка крутится ещё раз и выбирает пару. Задание вы выполняете вместе.", demo: { q: "Антон и Маша", a: "Станцуйте медленный танец без музыки" } },
+    { emoji: "🎉", title: "Выполнили, крутим снова", text: "Задание нужно сделать по-настоящему. Хост завершает игру, когда пора." },
+  ],
+};
 
 function optionRow(labelEl, hint) {
   const row = document.createElement("div");
@@ -97,9 +123,36 @@ export function renderFantyHome(container) {
   let formHost = null;
   let backHook = null;
 
-  function showCreateForm() {
+  // ---- step zero: the mode ----
+  function showModeStep() {
+    const body = mountWizardFrame(container, {
+      current: 1,
+      total: 0,
+      title: "Фанты",
+      onBack: () => navigate("/"),
+    });
+    const intro = document.createElement("div");
+    intro.className = "mode-intro";
+    intro.innerHTML = `<h2>Как будем играть?</h2><p>Выберите режим. Бутылка у всех одна, отличается то, что она решает.</p>`;
+    body.appendChild(intro);
+    MODE_CARDS.forEach((mode) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = `mode-card ${mode.tone}`;
+      card.innerHTML = `
+        <span class="mode-art" aria-hidden="true">${mode.art}</span>
+        <b>${mode.title}</b>
+        <p>${mode.text}</p>
+        <span class="mode-pill">от ${MIN_PLAYERS_BY_MODE[mode.value] || 2} игроков</span>
+      `;
+      card.addEventListener("click", () => showCreateForm(mode.value));
+      body.appendChild(card);
+    });
+  }
+
+  function showCreateForm(chosenMode) {
     const formState = {
-      gameMode: "truth_or_dare",
+      gameMode: chosenMode || "truth_or_dare",
       location: LOCATIONS[0].value,
       categories: ["basic"],
       attributes: [],
@@ -129,34 +182,69 @@ export function renderFantyHome(container) {
       return nextBtn;
     }
 
-    function renderGameModeStep() {
-      stepHeading(
-        "Тип игры",
-        "«Правда или действие» — бутылка выбирает игрока, который сам решает, сказать правду или выполнить действие. «Просто фанты» — бутылка сразу даёт задание одному игроку. «Командные фанты» — бутылка крутится дважды и выбирает пару для совместного задания."
-      );
-      const modeGroup = radioGroup("gameMode", GAME_MODES, formState.gameMode);
-      formHost.appendChild(modeGroup.element);
-
-      const pairModeWrap = document.createElement("div");
-      const pairModeLabelEl = document.createElement("label");
-      pairModeLabelEl.textContent = "Кто может быть в паре";
-      const pairModeGroup = radioGroup("pairMode", PAIR_MODES, formState.pairMode);
-      pairModeWrap.appendChild(pairModeLabelEl);
-      pairModeWrap.appendChild(pairModeGroup.element);
-      pairModeWrap.hidden = formState.gameMode !== "team";
-      formHost.appendChild(pairModeWrap);
-
-      modeGroup.element.addEventListener("change", () => {
-        pairModeWrap.hidden = modeGroup.getValue() !== "team";
+    function renderRulesStep() {
+      const slides = RULES[formState.gameMode] || RULES.truth_or_dare;
+      const track = document.createElement("div");
+      track.className = "wz-slides";
+      slides.forEach((slide) => {
+        const el = document.createElement("section");
+        el.className = "wz-slide";
+        el.innerHTML = `
+          <div class="wz-slide-art" aria-hidden="true">${slide.emoji}</div>
+          <h2></h2>
+          <p></p>
+          ${slide.demo ? `<div class="wz-demo"><span class="wz-demo-q"></span><span class="wz-demo-a"><em></em></span></div>` : ""}
+        `;
+        el.querySelector("h2").textContent = slide.title;
+        el.querySelector("p").textContent = slide.text;
+        if (slide.demo) {
+          el.querySelector(".wz-demo-q").textContent = slide.demo.q;
+          el.querySelector("em").textContent = slide.demo.a;
+        }
+        track.appendChild(el);
       });
 
-      const nextBtn = navButtons();
-      nextBtn.addEventListener("click", () => {
-        formState.gameMode = modeGroup.getValue();
-        formState.pairMode = formState.gameMode === "team" ? pairModeGroup.getValue() : "any";
+      const dots = document.createElement("div");
+      dots.className = "wz-dots";
+      slides.forEach(() => dots.appendChild(document.createElement("i")));
+      let index = 0;
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "wz-cta";
+      function setIndex(i) {
+        index = i;
+        [...dots.children].forEach((d, n) => d.classList.toggle("on", n === i));
+        next.textContent = i === slides.length - 1 ? "Понятно, дальше" : "Дальше";
+      }
+      track.addEventListener("scroll", () => {
+        const i = Math.round(track.scrollLeft / track.clientWidth);
+        if (i !== index) setIndex(Math.max(0, Math.min(slides.length - 1, i)));
+      });
+      function goOn() {
         stepIndex += 1;
         renderStep();
+      }
+      next.addEventListener("click", () => {
+        if (index < slides.length - 1) {
+          const target = index + 1;
+          setIndex(target);
+          track.scrollTo({ left: track.clientWidth * target, behavior: "smooth" });
+        } else {
+          goOn();
+        }
       });
+      const skip = document.createElement("button");
+      skip.type = "button";
+      skip.className = "wz-link";
+      skip.textContent = "Пропустить правила";
+      skip.addEventListener("click", goOn);
+
+      formHost.classList.remove("wz-form");
+      formHost.appendChild(track);
+      formHost.appendChild(dots);
+      formHost.appendChild(next);
+      formHost.appendChild(skip);
+      setIndex(0);
     }
 
     function renderLocationStep() {
@@ -178,7 +266,7 @@ export function renderFantyHome(container) {
     function renderSettingsStep() {
       stepHeading(
         "Как играем",
-        "Выберите типы фантов, атрибуты, которые реально есть под рукой (если их нет — не отмечайте), и то, как бутылка выбирает игрока."
+        "Выберите типы фантов, атрибуты, которые реально есть под рукой (если их нет, не отмечайте), и то, как бутылка выбирает игрока."
       );
 
       const categoriesLabel = document.createElement("label");
@@ -195,6 +283,14 @@ export function renderFantyHome(container) {
 
       const errorEl = document.createElement("div");
       errorEl.className = "error-msg";
+
+      const pairModeLabelEl = document.createElement("label");
+      pairModeLabelEl.textContent = "Кто может быть в паре";
+      const pairModeGroup = radioGroup("pairMode", PAIR_MODES, formState.pairMode);
+      if (formState.gameMode === "team") {
+        formHost.appendChild(pairModeLabelEl);
+        formHost.appendChild(pairModeGroup.element);
+      }
 
       formHost.appendChild(categoriesLabel);
       formHost.appendChild(categoriesGroup.element);
@@ -215,6 +311,7 @@ export function renderFantyHome(container) {
         formState.categories = categories;
         formState.attributes = attributes;
         formState.pickMode = pickModeGroup.getValue();
+        formState.pairMode = formState.gameMode === "team" ? pairModeGroup.getValue() : "any";
         stepIndex += 1;
         renderStep();
       });
@@ -363,13 +460,13 @@ export function renderFantyHome(container) {
             stepIndex -= 1;
             renderStep();
           } else {
-            navigate("/");
+            showModeStep();
           }
         },
       });
       formHost.classList.add("wz-form");
 
-      if (stepIndex === 0) renderGameModeStep();
+      if (stepIndex === 0) renderRulesStep();
       else if (stepIndex === 1) renderLocationStep();
       else if (stepIndex === 2) renderSettingsStep();
       else renderPlayerStep();
@@ -378,5 +475,5 @@ export function renderFantyHome(container) {
     renderStep();
   }
 
-  showCreateForm();
+  showModeStep();
 }
