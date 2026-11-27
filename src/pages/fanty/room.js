@@ -286,6 +286,17 @@ export function mountFantyRoomPage(container, code, opts) {
           drawTopBar(host, state, token);
         }, 900);
       });
+      if (state.me.isHost && state.room.status === "playing") {
+        const playersBtn = document.createElement("button");
+        playersBtn.type = "button";
+        playersBtn.textContent = "👥 Игроки";
+        playersBtn.addEventListener("click", () => {
+          menuOpen = false;
+          drawTopBar(host, state, token);
+          openPlayersSheet(token);
+        });
+        menu.appendChild(playersBtn);
+      }
       menu.appendChild(tvBtn);
 
       const leaveBtn = document.createElement("button");
@@ -327,6 +338,69 @@ export function mountFantyRoomPage(container, code, opts) {
     }
 
     redrawTopBar = drawTopBar;
+
+    // The host's list of players during the game: remove someone, add a new
+    // one. Lives in a bottom sheet opened from the gear menu.
+    function openPlayersSheet(token) {
+      openBottomSheet({
+        title: "Игроки",
+        build: (content) => {
+          function draw(st) {
+            content.innerHTML = "";
+            const players = st.players.filter((p) => !p.isDisplay);
+            const mixed = st.settings.gameMode === "team" && st.settings.pairMode === "mixed";
+            content.appendChild(
+              playersList(
+                players,
+                async (p, removeBtn) => {
+                  if (!confirm(`Удалить ${p.name} из игры?`)) return;
+                  removeBtn.disabled = true;
+                  try {
+                    await fantyApi.removePlayer(code, token, p.id);
+                    const fresh = await fantyApi.getState(code, token);
+                    render(fresh, token);
+                    draw(fresh);
+                  } catch (e) {
+                    alert(e.message);
+                    removeBtn.disabled = false;
+                  }
+                },
+                "",
+                mixed
+              )
+            );
+            const note = document.createElement("p");
+            note.className = "wz-note wz-note-left";
+            note.textContent = "Убрать игрока можно между раундами.";
+            content.appendChild(note);
+
+            if (st.room.deviceMode === "local") {
+              const addSeat = document.createElement("button");
+              addSeat.type = "button";
+              addSeat.className = "wz-seat add";
+              addSeat.innerHTML = `<span class="wz-seat-avatar" aria-hidden="true">＋</span><span class="wz-seat-name">Добавить игрока</span>`;
+              addSeat.addEventListener("click", () =>
+                openBottomSheet({
+                  title: "Новый игрок",
+                  build: async (inner, closeInner) => {
+                    const form = await buildAddPlayerForm(code, token, mixed, async () => {
+                      closeInner();
+                      const fresh = await fantyApi.getState(code, token);
+                      render(fresh, token);
+                      draw(fresh);
+                    });
+                    inner.appendChild(form);
+                    form.querySelector("input.text-input")?.focus();
+                  },
+                })
+              );
+              content.appendChild(addSeat);
+            }
+          }
+          draw(lastState);
+        },
+      });
+    }
 
     function render(state, token) {
       lastState = state;
@@ -1022,74 +1096,6 @@ async function renderPlaying(wrap, state, token, code, ctrl, manageUi) {
       }
     });
     wrap.appendChild(endBtn);
-  }
-
-  if (state.me.isHost && fanty.phase === "ready_to_spin") {
-    const manageBtn = document.createElement("button");
-    manageBtn.className = "btn manage-players-btn";
-    manageBtn.style.marginTop = "16px";
-    manageBtn.textContent = manageUi.open ? "Скрыть управление игроками" : "👥 Управление игроками";
-    manageBtn.addEventListener("click", () => {
-      manageUi.open = !manageUi.open;
-      renderPlaying(wrap, state, token, code, ctrl, manageUi);
-    });
-    wrap.appendChild(manageBtn);
-
-    if (manageUi.open) {
-      const manageCard = document.createElement("div");
-      manageCard.className = "card-inline manage-players-card";
-
-      manageCard.appendChild(
-        playersList(players, async (p, removeBtn) => {
-          if (!confirm(`Удалить ${p.name} из игры?`)) return;
-          removeBtn.disabled = true;
-          try {
-            await fantyApi.removePlayer(code, token, p.id);
-            const fresh = await fantyApi.getState(code, token);
-            ctrl.rerender(fresh);
-          } catch (e) {
-            alert(e.message);
-            removeBtn.disabled = false;
-          }
-        }, "", state.settings.gameMode === "team" && state.settings.pairMode === "mixed")
-      );
-
-      if (state.room.deviceMode === "local") {
-        const needsGender = state.settings.gameMode === "team" && state.settings.pairMode === "mixed";
-        const addSeat = document.createElement("button");
-        addSeat.type = "button";
-        addSeat.className = "wz-seat add";
-        addSeat.innerHTML = `<span class="wz-seat-avatar" aria-hidden="true">＋</span><span class="wz-seat-name">Добавить игрока</span>`;
-        addSeat.addEventListener("click", () =>
-          openBottomSheet({
-            title: "Новый игрок",
-            build: async (content, close) => {
-              const form = await buildAddPlayerForm(code, token, needsGender, async () => {
-                close();
-                const fresh = await fantyApi.getState(code, token);
-                ctrl.rerender(fresh);
-              });
-              content.appendChild(form);
-              form.querySelector("input.text-input")?.focus();
-            },
-          })
-        );
-        manageCard.appendChild(addSeat);
-      } else {
-        const shareUrl = `${window.location.origin}/fanty/r/${code}`;
-        const copyBtn = document.createElement("button");
-        copyBtn.className = "btn";
-        copyBtn.textContent = "Скопировать ссылку для нового игрока";
-        copyBtn.addEventListener("click", () => {
-          navigator.clipboard.writeText(shareUrl).catch(() => {});
-          copyBtn.textContent = "Скопировано!";
-          setTimeout(() => (copyBtn.textContent = "Скопировать ссылку для нового игрока"), 1500);
-        });
-        manageCard.appendChild(copyBtn);
-      }
-
-      wrap.appendChild(manageCard);
-    }
   }
 }
 
